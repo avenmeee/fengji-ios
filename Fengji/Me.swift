@@ -31,7 +31,7 @@ struct MeView: View {
         .onDisappear { state.onMe = false }
         .task(id: LoadKey(version: state.version, loggedIn: state.isLoggedIn)) { await load() }
         .task {
-            if Demo.scene == "settings" { path.append("settings") }
+            if Demo.scene == "settings" || Demo.scene == "settings-contact" { path.append("settings") }
         }
         .onChange(of: items) { _, list in
             if Demo.scene == "mine-actions", acting == nil { acting = list.first }

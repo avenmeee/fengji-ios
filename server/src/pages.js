@@ -69,7 +69,7 @@ export function privacyPage(env) {
 // 点开才显示邮箱：字在页面里，不开 JS 也能点开、能选中；开了 JS 多一个复制按钮
 const revealedContact = env => env.CONTACT_EMAIL ? `<details><summary>点这里看邮箱 Show email</summary>
   <p>${contactLine(env)} <button id="copy" hidden>复制</button></p></details>
-  <script>const b=document.getElementById("copy");if(navigator.clipboard){b.hidden=false;b.onclick=async()=>{await navigator.clipboard.writeText(${JSON.stringify(env.CONTACT_EMAIL).replace(/</g, "\u003c")});b.textContent="已复制"}}</script>` : `<p>${contactLine(env)}</p>`;
+  <script>const b=document.getElementById("copy");if(navigator.clipboard){b.hidden=false;b.onclick=async()=>{await navigator.clipboard.writeText(${JSON.stringify(env.CONTACT_EMAIL)});b.textContent="已复制"}}</script>` : `<p>${contactLine(env)}</p>`;
 
 export function supportPage(env) {
   return page("蜂集帮助", `<h1>蜂集帮助</h1>

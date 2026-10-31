@@ -117,6 +117,7 @@ jobs:
           shot "11-房源详情" rentdetail light
           shot "12-出租房子-深色" rentform dark
           shot "13-设置-浅色" settings light
+          shot "37-设置-邮箱" settings-contact light
 
       - name: 商店截图
         if: inputs.mode == 'sim' && inputs.store
