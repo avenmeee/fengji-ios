@@ -850,7 +850,7 @@ struct PostForm: View {
                 title = guess.name
                 aiGuessed = true
             }
-            if cat == nil { cat = guess.cat }
+            if cat == nil, guess.cat != "other" { cat = guess.cat }
             if cond == nil { cond = guess.cond }
             if !priceTouched, price.isEmpty, let suggested = guess.price {
                 price = String(suggested)

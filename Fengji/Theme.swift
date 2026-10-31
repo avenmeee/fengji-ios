@@ -223,7 +223,7 @@ struct FlowLayout: Layout {
 /// 六边形细节（尖朝上）
 struct Hexagon: Shape {
     func path(in rect: CGRect) -> Path {
-        let cx = rect.midX, cy = rect.midY, r = min(rect.width, rect.height) / 2
+        let cx = rect.midX, cy = rect.midY, r = min(rect.width / 3.0.squareRoot(), rect.height / 2)
         var p = Path()
         for i in 0..<6 {
             let a = Double(i) * .pi / 3 - .pi / 2

@@ -79,13 +79,13 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.18), value: state.plusOpen)
         .overlay(alignment: .bottom) {
-            if !state.pushed.contains(state.tab), !keyboardUp {
+            if !state.pushed.contains(state.tab) || state.onMe, !keyboardUp {
                 FloatingBar()
                     .ignoresSafeArea(.keyboard)
                     .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.15), value: state.pushed.contains(state.tab))
+        .animation(.easeOut(duration: 0.15), value: state.pushed.contains(state.tab) && !state.onMe)
         .animation(.easeOut(duration: 0.15), value: keyboardUp)
         // 键盘弹起时藏底栏。切表情、语音时会先收后弹，所以显示要等一下，藏是马上
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
@@ -109,7 +109,7 @@ struct RootView: View {
                 .padding(.horizontal, 16)
                 .frame(height: 44)
                 .background(Theme.ink, in: RoundedRectangle(cornerRadius: 12))
-                .padding(.bottom, 24)
+                .padding(.bottom, 96)
                 .transition(.opacity)
             }
         }
@@ -166,22 +166,7 @@ struct FloatingBar: View {
     var body: some View {
         HStack(spacing: 0) {
             tab(.buy, "bag", "买东西")
-            Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                withAnimation(.snappy(duration: 0.2)) { state.plusOpen.toggle() }
-            } label: {
-                ZStack {
-                    Hexagon().fill(Theme.accent).frame(width: 66, height: 66)
-                    Image(systemName: "plus")
-                        .font(.system(size: 26, weight: .medium))
-                        .foregroundStyle(Theme.onBuy)
-                        .rotationEffect(.degrees(state.plusOpen ? 45 : 0))
-                }
-                .frame(width: 70, height: 60)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(state.plusOpen ? "收起" : "发布和我")
+            plusButton
             tab(.rent, "house", "租房子")
         }
         .padding(.horizontal, 8)
@@ -192,11 +177,66 @@ struct FloatingBar: View {
         .padding(.bottom, 6)
     }
 
+    /// 点一下弹出；按住 0.25 秒弹出，不松手拖到某一项上松开就进去，拖回来或拖到空白松开取消
+    private var plusButton: some View {
+        ZStack {
+            Hexagon().fill(Theme.accent).frame(width: 66, height: 66)
+            Image(systemName: "plus")
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(Theme.onBuy)
+                .rotationEffect(.degrees(state.plusOpen ? 45 : 0))
+        }
+        .frame(width: 70, height: 60)
+        .contentShape(Rectangle())
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { state.plusCenter = CGPoint(x: g.frame(in: .global).midX, y: g.frame(in: .global).midY) }
+                .onChange(of: g.frame(in: .global)) { _, f in state.plusCenter = CGPoint(x: f.midX, y: f.midY) }
+        })
+        .onTapGesture {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.snappy(duration: 0.2)) { state.plusOpen.toggle() }
+        }
+        .gesture(
+            LongPressGesture(minimumDuration: 0.25)
+                .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
+                .onChanged { value in
+                    guard case .second(true, let drag) = value else { return }
+                    if !state.plusOpen {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        withAnimation(.snappy(duration: 0.2)) { state.plusOpen = true }
+                    }
+                    guard let drag else { return }
+                    let hit = PlusLayout.hit(drag.location, plus: state.plusCenter)
+                    if hit != state.plusHover {
+                        if hit != nil { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+                        state.plusHover = hit
+                    }
+                }
+                .onEnded { _ in
+                    let hit = state.plusHover
+                    state.plusHover = nil
+                    if let hit {
+                        state.plusAction(hit)
+                    } else {
+                        withAnimation(.snappy(duration: 0.2)) { state.plusOpen = false }
+                    }
+                }
+        )
+        .accessibilityElement()
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(state.plusOpen ? "收起" : "发布和我")
+        .accessibilityAction { state.plusOpen.toggle() }
+    }
+
     private func tab(_ which: AppTab, _ symbol: String, _ label: String) -> some View {
-        let on = state.tab == which
+        let on = state.tab == which && !state.onMe
         return Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            if on {
+            if state.onMe {
+                state.popToRoot()
+                state.tab = which
+            } else if on {
                 state.scrollToTop(which)
             } else {
                 withAnimation(.snappy(duration: 0.22)) { state.tab = which }
@@ -222,29 +262,67 @@ struct FloatingBar: View {
     }
 }
 
-/// 点加号弹出的三格蜂巢：上面我，左下发布东西，右下发布房子
+/// 加号上方的弧形：相对加号中心的位置，判定区比图形大
+enum PlusLayout {
+    static let width: CGFloat = 96
+    static var height: CGFloat { width * 2 / 3.0.squareRoot() }
+    static let hitRadius: CGFloat = 66
+    static let side = CGPoint(x: 112, y: 108)
+    static let top: CGFloat = 176
+
+    static func hit(_ point: CGPoint, plus: CGPoint) -> PlusAction? {
+        let spots: [(PlusAction, CGPoint)] = [
+            (.goods, CGPoint(x: plus.x - side.x, y: plus.y - side.y)),
+            (.me, CGPoint(x: plus.x, y: plus.y - top)),
+            (.rent, CGPoint(x: plus.x + side.x, y: plus.y - side.y))
+        ]
+        var best: (PlusAction, CGFloat)?
+        for spot in spots {
+            let d = hypot(point.x - spot.1.x, point.y - spot.1.y)
+            if d <= hitRadius, d < (best?.1 ?? .infinity) { best = (spot.0, d) }
+        }
+        return best?.0
+    }
+}
+
+/// 点加号弹出的三项。从加号的位置弹出来；减弱动态效果时直接显示。
 struct PlusSheet: View {
     @EnvironmentObject var state: AppState
-    private let size: CGFloat = 112
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var sides = false
+    @State private var top = false
+
+    private let barCenter: CGFloat = 36  // 加号中心离安全区底的高度（底栏 60，离底 6）
 
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.black.opacity(0.14)
                 .ignoresSafeArea()
                 .onTapGesture { state.plusOpen = false }
-            VStack(spacing: -size * 0.18) {
+            ZStack {
+                cell("发布东西", "bag", fill: Theme.accent, on: Theme.onBuy, action: .goods)
+                    .modifier(PopOut(shown: sides, x: -PlusLayout.side.x, y: PlusLayout.height / 2 - PlusLayout.side.y, start: PlusLayout.height / 2))
+                cell("发布房子", "house", fill: Theme.accent, on: Theme.onBuy, action: .rent)
+                    .modifier(PopOut(shown: sides, x: PlusLayout.side.x, y: PlusLayout.height / 2 - PlusLayout.side.y, start: PlusLayout.height / 2))
                 cell("我", "person", fill: Theme.ink, on: Theme.bg, action: .me)
-                HStack(spacing: 4) {
-                    cell("发布东西", "bag", fill: Theme.accent, on: Theme.onBuy, action: .goods)
-                    cell("发布房子", "house", fill: Theme.accent, on: Theme.onBuy, action: .rent)
-                }
+                    .modifier(PopOut(shown: top, x: 0, y: PlusLayout.height / 2 - PlusLayout.top, start: PlusLayout.height / 2))
             }
-            .padding(.bottom, 74)
+            .padding(.bottom, barCenter)
+        }
+        .onAppear {
+            if reduceMotion || Demo.scene == "plus-open" {
+                sides = true
+                top = true
+            } else {
+                withAnimation(.spring(duration: 0.18, bounce: 0.2)) { sides = true }
+                withAnimation(.spring(duration: 0.18, bounce: 0.2).delay(0.04)) { top = true }
+            }
         }
     }
 
     private func cell(_ label: String, _ symbol: String, fill: Color, on: Color, action: PlusAction) -> some View {
-        Button {
+        let hovered = state.plusHover == action
+        return Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             state.plusAction(action)
         } label: {
@@ -256,9 +334,26 @@ struct PlusSheet: View {
                 }
                 .foregroundStyle(on)
             }
-            .frame(width: size, height: size)
+            .frame(width: PlusLayout.width, height: PlusLayout.height)
             .contentShape(Hexagon())
+            .scaleEffect(hovered ? 1.14 : 1)
+            .shadow(color: .black.opacity(hovered ? 0.25 : 0), radius: 10, y: 4)
+            .animation(.snappy(duration: 0.12), value: hovered)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct PopOut: ViewModifier {
+    let shown: Bool
+    let x: CGFloat
+    let y: CGFloat
+    let start: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(shown ? 1 : 0.3)
+            .opacity(shown ? 1 : 0)
+            .offset(x: shown ? x : 0, y: shown ? y : start)
     }
 }

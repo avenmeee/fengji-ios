@@ -2,7 +2,7 @@ import Foundation
 
 typealias Option = (key: String, label: String)
 
-let CATS: [Option] = [("furn", "家具"), ("elec", "电子"), ("kitchen", "厨具家电"), ("art", "画材"), ("other", "其他")]
+let CATS: [Option] = [("furn", "家具"), ("elec", "电子"), ("kitchen", "厨具家电"), ("art", "画材")]  // 后端还有 other，界面不显示
 let ALL_OPTION: Option = ("all", "全部")
 
 func plainOptions(_ list: [String]) -> [Option] {
@@ -83,7 +83,7 @@ struct Listing: Codable, Identifiable, Hashable {
         price == 0 ? "免费" : "$" + price.formatted(.number.grouping(.automatic).locale(Locale(identifier: "en_US")))
     }
 
-    var catLabel: String { CATS.first { $0.key == cat }?.label ?? "其他" }
+    var catLabel: String { CATS.first { $0.key == cat }?.label ?? "" }
 
     var statusText: String {
         switch status {

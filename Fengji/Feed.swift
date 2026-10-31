@@ -307,6 +307,7 @@ struct BuyView: View {
             .onChange(of: state.meRequests) { _, _ in
                 if state.tab == .buy { path.append("me") }
             }
+            .onChange(of: state.popRequests) { _, _ in path = NavigationPath() }
             .task {
                 if Demo.opensMe, path.isEmpty { path.append("me") }
             }
@@ -413,6 +414,7 @@ struct RentView: View {
             .onChange(of: state.meRequests) { _, _ in
                 if state.tab == .rent { path.append("me") }
             }
+            .onChange(of: state.popRequests) { _, _ in path = NavigationPath() }
         }
     }
 }

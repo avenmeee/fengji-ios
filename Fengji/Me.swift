@@ -24,6 +24,8 @@ struct MeView: View {
         }
         .background(Theme.bg)
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear { state.onMe = true }
+        .onDisappear { state.onMe = false }
         .task(id: LoadKey(version: state.version, loggedIn: state.isLoggedIn)) { await load() }
         .task {
             if Demo.scene == "settings" { path.append("settings") }
@@ -106,6 +108,7 @@ struct MeView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .safeAreaInset(edge: .bottom, spacing: 0) { Color.clear.frame(height: Theme.barSpace) }
         .honeyRefresh { await load() }
     }
 

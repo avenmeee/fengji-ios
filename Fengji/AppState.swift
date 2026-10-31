@@ -22,8 +22,16 @@ final class AppState: ObservableObject {
     private var deleteTask: Task<Void, Never>?
     /// 加号弹层开着
     @Published var plusOpen = Demo.scene == "plus-open"
+    /// 按住加号拖动时，手指在哪一项上
+    @Published var plusHover: PlusAction?
+    /// 加号中心在屏幕上的位置，拖动时判断手指落在哪一项
+    var plusCenter: CGPoint = .zero
     /// 正在发布什么，弹在最外层
     @Published var posting: PostKind? = Demo.initialPosting
+    /// “我”页露在最上面：底栏显示，但没有选中项
+    @Published var onMe = false
+    /// 在“我”页点底栏：回到列表
+    @Published private(set) var popRequests = 0
     /// 让当前页推到“我”
     @Published private(set) var meRequests = 0
     /// 登录之后接着做的事
@@ -70,6 +78,8 @@ final class AppState: ObservableObject {
         afterLogin = nil
         if isLoggedIn { next?() }
     }
+
+    func popToRoot() { popRequests += 1 }
 
     func scrollToTop(_ tab: AppTab) {
         topTicks[tab, default: 0] += 1
