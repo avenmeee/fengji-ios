@@ -70,9 +70,14 @@ private struct FeedReload: ViewModifier {
     @ObservedObject var model: FeedModel
     let version: Int
     @State private var lastQ = ""
+    @State private var loaded: FeedKey?
 
     func body(content: Content) -> some View {
-        content.task(id: FeedKey(q: model.q, filter: model.filter, version: version)) {
+        let key = FeedKey(q: model.q, filter: model.filter, version: version)
+        return content.task(id: key) {
+            // 列表页重新出现（往回滑一开始就会）也会走到这里，内容没变就别重新查，免得滑动时整页重绘
+            if key == loaded, model.phase == .ok { return }
+            loaded = key
             if model.q != lastQ {
                 lastQ = model.q
                 try? await Task.sleep(nanoseconds: 300_000_000)
@@ -291,6 +296,7 @@ struct BuyView: View {
                 }
             }
             .background(Theme.bg)
+            .background(PopGestureHook())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
             .navigationDestination(for: String.self) { route in
@@ -298,7 +304,7 @@ struct BuyView: View {
             }
             .reloads(model, version: state.version)
             .onChange(of: model.items) { _, items in
-                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "want-detail" || Demo.scene == "live-detail", !demoOpened, let first = items.first {
+                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "want-detail" || Demo.scene == "pop-check" || Demo.scene == "live-detail", !demoOpened, let first = items.first {
                     demoOpened = true
                     path.append(first)
                 }
@@ -331,7 +337,7 @@ struct GoodsCard: View {
                 .aspectRatio(aspect, contentMode: .fit)
                 .overlay { ListingImage(item: item, maxPixel: 900) }
                 .clipShape(RoundedRectangle(cornerRadius: 3))
-                .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
+                .background(CardShadow(radius: 10, y: 4))
             HStack(spacing: 6) {
                 Text(item.priceText)
                     .font(.system(size: 16, weight: .medium))
@@ -398,6 +404,7 @@ struct RentView: View {
                 }
             }
             .background(Theme.bg)
+            .background(PopGestureHook())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
             .navigationDestination(for: String.self) { route in
@@ -428,7 +435,7 @@ struct RentRow: View {
                 .aspectRatio(1.5, contentMode: .fit)
                 .overlay { ListingImage(item: item, maxPixel: 1200) }
                 .clipShape(RoundedRectangle(cornerRadius: 3))
-                .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
+                .background(CardShadow(radius: 10, y: 4))
                 .padding(.bottom, 6)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(item.priceText)

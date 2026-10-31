@@ -16,6 +16,7 @@ struct DetailView: View {
     @State private var claiming = false
     @State private var page = 0
     @State private var wanting = false
+    @State private var popCheck = ""
 
     /// 展签第二行：分类、成色或房子的情况
     private var line1: String {
@@ -46,6 +47,16 @@ struct DetailView: View {
             }
         }
         .background(Theme.bg)
+        .overlay {
+            if Demo.scene == "pop-check" { Text(popCheck).font(.title).background(Theme.bg) }
+        }
+        .task {
+            guard Demo.scene == "pop-check" else { return }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            let nav = PopGestureHook.lastNav
+            let g = nav?.interactivePopGestureRecognizer
+            popCheck = "nav \(nav != nil) on \(g?.isEnabled == true) vc \(nav?.viewControllers.count ?? 0) begin \(g.flatMap { $0.delegate?.gestureRecognizerShouldBegin?($0) } == true)"
+        }
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !gone { contactBar }
@@ -103,7 +114,7 @@ struct DetailView: View {
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 3))
-                .shadow(color: .black.opacity(0.14), radius: 14, y: 6)
+                .background(CardShadow(radius: 14, y: 6))
             if item.photos.count > 1 {
                 HStack(spacing: 6) {
                     ForEach(item.photos.indices, id: \.self) { i in
@@ -343,16 +354,50 @@ private struct NoScrollsToTop: UIViewRepresentable {
     func updateUIView(_ view: UIView, context: Context) {}
 }
 
-/// 导航栏藏了以后，边缘右滑返回还要能用
-extension UINavigationController: @retroactive UIGestureRecognizerDelegate {
-    override open func viewDidLoad() {
-        super.viewDidLoad()
-        interactivePopGestureRecognizer?.delegate = self
+/// 导航栏藏了以后系统会关掉边缘右滑返回。放在栈的第一页，接上这个手势，动画和跟手都还是系统的。
+struct PopGestureHook: UIViewRepresentable {
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        weak var nav: UINavigationController?
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let nav else { return false }
+            // 转场中再触发会卡住
+            return nav.viewControllers.count > 1 && nav.transitionCoordinator == nil
+        }
     }
 
-    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        viewControllers.count > 1
+    final class HookView: UIView {
+        var coordinator: Coordinator?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil, coordinator?.nav == nil else { return }
+            var r: UIResponder? = self
+            while let next = r?.next {
+                if let nav = next as? UINavigationController {
+                    coordinator?.nav = nav
+                    nav.interactivePopGestureRecognizer?.delegate = coordinator
+                    PopGestureHook.lastNav = nav
+                    return
+                }
+                r = next
+            }
+        }
     }
+
+    /// 只给模拟器自查用
+    static weak var lastNav: UINavigationController?
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> HookView {
+        let view = HookView()
+        view.coordinator = context.coordinator
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ view: HookView, context: Context) {}
 }
 
 /// 想要：一句话（可不写）和自己的联系方式。只有卖家能看到。

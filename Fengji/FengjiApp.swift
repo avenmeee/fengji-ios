@@ -120,20 +120,24 @@ struct RootView: View {
             BuyView().tag(AppTab.buy).toolbar(.hidden, for: .tabBar)
             RentView().tag(AppTab.rent).toolbar(.hidden, for: .tabBar)
         }
-        .blur(radius: state.plusOpen ? 10 : 0)
+        // 动画只给浮层。放在 TabView 外面的模糊和动画，平时也在拖累里面的滑动
         .overlay {
-            if state.plusOpen { PlusSheet().transition(.opacity) }
-        }
-        .animation(.easeOut(duration: 0.18), value: state.plusOpen)
-        .overlay(alignment: .bottom) {
-            if !state.pushed.contains(state.tab) || state.onMe, !keyboardUp {
-                FloatingBar()
-                    .ignoresSafeArea(.keyboard)
-                    .transition(.opacity)
+            ZStack {
+                if state.plusOpen { PlusSheet().transition(.opacity) }
             }
+            .animation(.easeOut(duration: 0.18), value: state.plusOpen)
         }
-        .animation(.easeOut(duration: 0.15), value: state.pushed.contains(state.tab) && !state.onMe)
-        .animation(.easeOut(duration: 0.15), value: keyboardUp)
+        .overlay(alignment: .bottom) {
+            ZStack {
+                if !state.pushed.contains(state.tab) || state.onMe, !keyboardUp {
+                    FloatingBar()
+                        .ignoresSafeArea(.keyboard)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.15), value: state.pushed.contains(state.tab) && !state.onMe)
+            .animation(.easeOut(duration: 0.15), value: keyboardUp)
+        }
         // 键盘弹起时藏底栏。切表情、语音时会先收后弹，所以显示要等一下，藏是马上
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
             let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
@@ -348,7 +352,9 @@ struct PlusSheet: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            Color.black.opacity(0.14)
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .overlay(Color.black.opacity(0.14))
                 .ignoresSafeArea()
                 .onTapGesture { state.plusOpen = false }
             ZStack {

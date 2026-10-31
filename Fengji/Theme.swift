@@ -284,6 +284,18 @@ final class ImageCache {
     func set(_ key: String, _ image: UIImage) { store.setObject(image, forKey: key as NSString) }
 }
 
+/// 卡片阴影：只给一个矩形画，滑动时不用每帧按图片算
+struct CardShadow: View {
+    let radius: CGFloat
+    let y: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 3)
+            .fill(Theme.bg)
+            .shadow(color: .black.opacity(0.14), radius: radius, y: y)
+    }
+}
+
 struct RemoteImage: View {
     let url: String
     var maxPixel: CGFloat = 600

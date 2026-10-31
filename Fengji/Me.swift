@@ -15,6 +15,7 @@ struct MeView: View {
     @State private var pricing: Listing?
     @State private var newPrice = ""
     @State private var wants: [Want] = []
+    @State private var loadedKey: LoadKey?
     @State private var reportingWant: Want?
     @State private var blockingWant: Want?
 
@@ -29,7 +30,13 @@ struct MeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { state.onMe = true }
         .onDisappear { state.onMe = false }
-        .task(id: LoadKey(version: state.version, loggedIn: state.isLoggedIn)) { await load() }
+        .task(id: LoadKey(version: state.version, loggedIn: state.isLoggedIn)) {
+            // 从设置滑回来时内容没变，不重新查
+            let key = LoadKey(version: state.version, loggedIn: state.isLoggedIn)
+            if key == loadedKey, phase == .ok { return }
+            loadedKey = key
+            await load()
+        }
         .task {
             if Demo.scene == "settings" || Demo.scene == "settings-contact" { path.append("settings") }
         }
