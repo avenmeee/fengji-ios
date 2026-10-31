@@ -132,7 +132,7 @@ struct DetailView: View {
     /// 只有一行，不做个人主页
     private var sellerRow: some View {
         HStack(spacing: 12) {
-            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.sellerNamed ?? false, size: 42)
+            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 42)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.sellerLabel)
                     .font(.system(size: 16, weight: .medium))

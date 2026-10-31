@@ -341,11 +341,12 @@ struct ProfileSheet: View {
         .contentShape(Rectangle())
         .onTapGesture { hideKeyboard() }
         .presentationDragIndicator(.visible)
-        .onAppear {
-            guard !loaded else { return }
+        .task(id: state.me?.id) {
+            // 资料可能晚一步到
+            guard !loaded, let me = state.me else { return }
             loaded = true
-            name = state.me?.name ?? ""
-            color = state.me?.color ?? 0
+            name = me.name ?? ""
+            color = me.color ?? 0
         }
     }
 

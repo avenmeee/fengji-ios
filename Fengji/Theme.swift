@@ -351,7 +351,7 @@ struct SellerLine: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.sellerNamed ?? false, size: 20)
+            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 20)
             Text(([item.sellerLabel] + (item.isGroup ? ["来自群"] : []) + extra).filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(.footnote)
                 .foregroundStyle(Theme.sub)
