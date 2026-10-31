@@ -30,6 +30,7 @@ enum Theme {
     static let onRent = dyn(0xFFFFFF, 0x17241B)
     static let rentSoft = dyn(0xE6EFE8, 0x344036)
     static let sellSoft = dyn(0xFAF0EB, 0x3D2C26)
+    static let accentSoft = dyn(0xFDF1C7, 0x4A3D14)
 
     static let accent = buy
     /// 系统控件的强调色：黄字在白底上看不清，浅色下压深。
