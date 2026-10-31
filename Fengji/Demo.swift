@@ -9,13 +9,14 @@ enum Demo {
     static let scene: String? = nil
     #endif
 
-    static var isOn: Bool { scene != nil }
+    /// live- 开头的是商店截图：走线上真实接口，只是自动翻到那一页
+    static var isOn: Bool { scene != nil && scene?.hasPrefix("live-") != true }
     static var initialToken: String? { scene == "guest" || scene == "guest-detail" || scene == "guest-me" ? nil : "demo" }
 
     static var initialTab: AppTab {
         switch scene {
         case "me", "guest-me", "mine-actions", "undo", "form", "posted", "rentform", "settings", "claim": return .me
-        case "rent", "rentdetail": return .rent
+        case "rent", "rentdetail", "live-rent", "live-rentdetail": return .rent
         default: return .buy
         }
     }

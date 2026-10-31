@@ -251,7 +251,7 @@ struct BuyView: View {
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
             .reloads(model, version: state.version)
             .onChange(of: model.items) { _, items in
-                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group", path.isEmpty, let first = items.first { path = [first] }
+                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "live-detail", path.isEmpty, let first = items.first { path = [first] }
             }
             .onChange(of: path) { _, p in state.setPushed(.buy, !p.isEmpty) }
         }
@@ -334,7 +334,7 @@ struct RentView: View {
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
             .reloads(model, version: state.version)
             .onChange(of: model.items) { _, items in
-                if Demo.scene == "rentdetail", path.isEmpty, let first = items.first { path = [first] }
+                if Demo.scene == "rentdetail" || Demo.scene == "live-rentdetail", path.isEmpty, let first = items.first { path = [first] }
             }
             .onChange(of: path) { _, p in state.setPushed(.rent, !p.isEmpty) }
         }

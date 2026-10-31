@@ -15,6 +15,10 @@ on:
         description: "sim 时截图"
         type: boolean
         default: true
+      store:
+        description: "sim 时再用 6.9 寸截商店图（线上真实页面）"
+        type: boolean
+        default: false
 
 concurrency:
   group: ios-${{ github.ref_name }}
@@ -89,6 +93,28 @@ jobs:
           shot "11-房源详情" rentdetail light
           shot "12-出租房子-深色" rentform dark
           shot "13-设置-浅色" settings light
+
+      - name: 商店截图
+        if: inputs.mode == 'sim' && inputs.store
+        run: |
+          UDID=$(python3 tools/pick-sim.py max)
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b > /dev/null
+          xcrun simctl status_bar "$UDID" override --time 9:41 || true
+          xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/Fengji.app
+          mkdir -p shots/store
+          store() {  # 名字 页面
+            xcrun simctl terminate "$UDID" com.avenmeee.fengji || true
+            xcrun simctl ui "$UDID" appearance light
+            SIMCTL_CHILD_SH_DEMO="$2" xcrun simctl launch "$UDID" com.avenmeee.fengji
+            sleep 8
+            xcrun simctl io "$UDID" screenshot "shots/store/$1.png"
+          }
+          store "1-买东西" live-buy
+          store "2-详情" live-detail
+          store "3-租房子" live-rent
+          store "4-房源详情" live-rentdetail
+          store "5-发布" form
 
       - name: 签名打包，传 TestFlight
         if: inputs.mode == 'testflight'
