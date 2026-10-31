@@ -230,9 +230,10 @@ struct MyInfoView: View {
                 .ignoresSafeArea()
         }
         .task(id: me?.id) {
-            guard !loaded else { return }
+            // 资料可能晚一步到，到了再填
+            guard !loaded, let me else { return }
             loaded = true
-            name = me?.name ?? ""
+            name = me.name ?? ""
             place = defaultPlace
             pickup = defaultDelivery == "pickup" || defaultDelivery == "both"
             deliver = defaultDelivery == "deliver" || defaultDelivery == "both"
