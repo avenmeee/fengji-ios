@@ -64,11 +64,11 @@ enum DemoServer {
     }
 
     static func goods(_ id: Int, _ title: String, _ price: Int, _ cat: String, _ cond: String, _ place: String, photos: [Photo] = [], mine: Bool = false, status: String = "on") -> Listing {
-        Listing(id: "g\(id)", uid: mine ? "me" : "u\(id)", kind: "goods", title: title, price: price, cat: cat, cond: cond, rtype: nil, from: nil, to: nil, place: place, desc: id == 1 ? "搬家出，桌面没有划痕。自己来拿。" : "", status: status, contact: "wx_demo\(id)", photos: photos, createdAt: now - Int64(id) * 3_400_000, mine: mine, delivery: id == 3 ? "both" : "pickup", deliveryFee: id == 3 ? 5 : nil, pickupBefore: id == 1 ? "2027-01-10" : nil, score: mine ? nil : [5, 4, 3, 5, 2, nil, 4, 1][(id - 1) % 8])
+        Listing(id: "g\(id)", uid: mine ? "me" : "u\(id)", kind: "goods", title: title, price: price, cat: cat, cond: cond, from: nil, to: nil, place: place, desc: id == 1 ? "搬家出，桌面没有划痕。自己来拿。" : "", status: status, contact: "wx_demo\(id)", photos: photos, createdAt: now - Int64(id) * 3_400_000, mine: mine, delivery: id == 3 ? "both" : "pickup", deliveryFee: id == 3 ? 5 : nil, pickupBefore: id == 1 ? "2027-01-10" : nil, score: mine ? nil : [5, 4, 3, 5, 2, nil, 4, 1][(id - 1) % 8])
     }
 
-    static func rent(_ id: Int, _ title: String, _ price: Int, _ type: String, _ place: String, photos: [Photo] = []) -> Listing {
-        Listing(id: "r\(id)", uid: "u\(id + 20)", kind: "rent", title: title, price: price, cat: nil, cond: nil, rtype: type, from: "2027-01-05", to: "2027-05-20", place: place, desc: "", status: "on", contact: "wx_rent\(id)", photos: photos, createdAt: now - Int64(id) * 7_000_000, mine: false, leaseEnd: "2027-05-31", utilities: id == 1, privateBath: id != 2, furnished: id == 1)
+    static func rent(_ id: Int, _ title: String, _ price: Int, _ place: String, photos: [Photo] = []) -> Listing {
+        Listing(id: "r\(id)", uid: "u\(id + 20)", kind: "rent", title: title, price: price, cat: nil, cond: nil, from: "2027-01-05", to: "2027-05-20", place: place, desc: "", status: "on", contact: "wx_rent\(id)", photos: photos, createdAt: now - Int64(id) * 7_000_000, mine: false, leaseEnd: "2027-05-31", utilities: id == 1, privateBath: id != 2, furnished: id == 1)
     }
 
     static let goodsList: [Listing] = [
@@ -83,12 +83,12 @@ enum DemoServer {
     ]
 
     /// 群里搬来的样子
-    static let groupItem = Listing(id: "g20", uid: "0", kind: "goods", title: "落地灯，搬家出", price: 15, cat: "furn", cond: nil, rtype: nil, from: nil, to: nil, place: "Monty", desc: "", status: "on", contact: nil, photos: [photo("c2")], createdAt: now - 900_000, mine: false, score: 4, sourceType: "group", sourceGroup: "二手群 3", sourcePoster: "小林", sourcePostedAt: now - 3 * 86_400_000)
+    static let groupItem = Listing(id: "g20", uid: "0", kind: "goods", title: "落地灯，搬家出", price: 15, cat: "furn", cond: nil, from: nil, to: nil, place: "Monty", desc: "", status: "on", contact: nil, photos: [photo("c2")], createdAt: now - 900_000, mine: false, score: 4, sourceType: "group", sourceGroup: "二手群 3", sourcePoster: "小林", sourcePostedAt: now - 3 * 86_400_000)
 
     static let rentList: [Listing] = [
-        rent(1, "一室一厅，走路到学校 10 分钟", 950, "转租", "Starland 附近", photos: [photo("d1")]),
-        rent(2, "单间，寒假可住", 620, "短租", "Victory Dr"),
-        rent(3, "独栋一层，带院子", 1400, "转租", "Ardsley Park")
+        rent(1, "一室一厅，走路到学校 10 分钟", 950, "Starland 附近", photos: [photo("d1")]),
+        rent(2, "单间，寒假可住", 620, "Victory Dr"),
+        rent(3, "独栋一层，带院子", 1400, "Ardsley Park")
     ]
 
     static let mineList: [Listing] = [
@@ -140,7 +140,6 @@ enum DemoServer {
         if method == "GET", path == "/v1/listings" {
             var list = param("kind") == "rent" ? rentList : (Demo.scene == "group" ? [groupItem] + goodsList : goodsList)
             if let c = param("cat") { list = list.filter { $0.cat == c } }
-            if let t = param("rtype") { list = list.filter { $0.rtype == t } }
             if let q = param("q") { list = list.filter { $0.title.contains(q) || $0.place.contains(q) } }
             return (200, encode(ListingPage(items: list, next: nil)), json)
         }

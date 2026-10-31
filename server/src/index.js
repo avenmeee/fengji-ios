@@ -5,10 +5,9 @@ import { listingPage, privacyPage, supportPage } from "./pages.js";
 
 const CATS = ["furn", "elec", "kitchen", "art", "other"];
 const CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"];
-const RTYPES = ["短租", "转租"];
 const BUMP_EVERY = 24 * 3600 * 1000;
 const REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"];
-const MAX_PHOTOS = 3, MAX_PHOTO_BYTES = 1_500_000;
+const MAX_PHOTOS = 3, MAX_RENT_PHOTOS = 9, MAX_RENT_DESC = 5000, MAX_PHOTO_BYTES = 1_500_000;
 const AUTO_HIDE_REPORTS = 3;
 const LIMITS = { post: 10, photo: 30 }, SITE_PHOTO_LIMIT = 2000;
 const MAX_LIVE_LISTINGS = 50;
@@ -117,7 +116,7 @@ function dayOf(v) {
 function checkListing(b, userId, existing = []) {
   const kind = b.kind;
   if (kind !== "goods" && kind !== "rent") throw new Fail(400, "bad_kind");
-  const title = clean(b.title, 40), place = clean(b.place, 40), descr = clean(b.desc, 500), contact = clean(b.contact, 40);
+  const title = clean(b.title, 40), place = clean(b.place, 40), descr = clean(b.desc, kind === "rent" ? MAX_RENT_DESC : 500), contact = clean(b.contact, 40);
   const price = Number(b.price);
   if (!title) throw new Fail(400, "need_title");
   if (!Number.isInteger(price) || price < 0 || price > 1_000_000) throw new Fail(400, "bad_price");
@@ -128,13 +127,13 @@ function checkListing(b, userId, existing = []) {
   if (BANNED.some(r => r.test(text))) throw new Fail(422, "not_allowed");
 
   const photos = Array.isArray(b.photos) ? b.photos : [];
-  if (photos.length > MAX_PHOTOS) throw new Fail(400, "too_many_photos");
+  if (photos.length > (kind === "rent" ? MAX_RENT_PHOTOS : MAX_PHOTOS)) throw new Fail(400, "too_many_photos");
   for (const k of photos) {
     if (existing.includes(k)) continue;
     if (typeof k !== "string" || !k.startsWith(userId + "/") || !/^[0-9a-f]+\/[0-9a-f]+\.jpg$/.test(k)) throw new Fail(400, "bad_photo");
   }
 
-  const out = { kind, title, price, place, descr, contact, photos: JSON.stringify(photos), cat: null, cond: null, rtype: null, from_date: null, to_date: null, lease_end: null, utilities: 0, private_bath: 0, delivery: null, delivery_fee: null, pickup_before: null, pickup_after: null, long_term: 0, furnished: 0 };
+  const out = { kind, title, price, place, descr, contact, photos: JSON.stringify(photos), cat: null, cond: null, from_date: null, to_date: null, lease_end: null, utilities: 0, private_bath: 0, delivery: null, delivery_fee: null, pickup_before: null, pickup_after: null, long_term: 0, furnished: 0, room_type: null, unit_type: null, internet: 0, deposit: null, app_fee: null, parking: null, pets: null, roommates: null };
   if (kind === "goods") {
     // 只有照片、名字、价格、微信号是必须的；分类没选归其他，其余没填就不显示
     const cat = b.cat == null || b.cat === "" ? "other" : b.cat;
@@ -152,9 +151,21 @@ function checkListing(b, userId, existing = []) {
     }
     out.pickup_before = dayOf(b.pickupBefore); out.pickup_after = dayOf(b.pickupAfter);
   } else {
-    if (!RTYPES.includes(b.rtype)) throw new Fail(400, "bad_rtype");
+    if (!photos.length) throw new Fail(400, "need_photo");
     if (typeof b.utilities !== "boolean") throw new Fail(400, "need_utilities");
-    out.rtype = b.rtype; out.from_date = dayOf(b.from); out.to_date = b.longTerm ? null : dayOf(b.to); out.lease_end = dayOf(b.leaseEnd);
+    if (b.unitType != null && b.unitType !== "" && !["whole", "room"].includes(b.unitType)) throw new Fail(400, "bad_unit");
+    const money = v => {
+      if (v == null || v === "") return null;
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0 || n > 1_000_000) throw new Fail(400, "bad_price");
+      return n;
+    };
+    out.room_type = clean(b.roomType, 40) || null; out.unit_type = b.unitType || null; out.internet = b.internet ? 1 : 0;
+    out.deposit = money(b.deposit); out.app_fee = money(b.appFee);
+    out.parking = clean(b.parking, 60) || null; out.pets = clean(b.pets, 60) || null; out.roommates = clean(b.roommates, 300) || null;
+    const roomText = [out.room_type, out.parking, out.pets, out.roommates].filter(Boolean).join(" ");
+    if (BANNED.some(r => r.test(roomText))) throw new Fail(422, "not_allowed");
+    out.from_date = dayOf(b.from); out.to_date = b.longTerm ? null : dayOf(b.to); out.lease_end = dayOf(b.leaseEnd);
     if (!out.from_date) throw new Fail(400, "need_dates");
     if (!b.longTerm && !out.to_date) throw new Fail(400, "need_dates");
     out.long_term = b.longTerm ? 1 : 0; out.furnished = b.furnished ? 1 : 0;
@@ -169,7 +180,9 @@ function view(row, origin, viewer) {
   const group = row.source_type === "group";
   return {
     id: row.id, uid: row.user_id, kind: row.kind, title: row.title, price: row.price,
-    cat: row.cat, cond: row.cond, rtype: row.rtype, from: row.from_date, to: row.to_date,
+    cat: row.cat, cond: row.cond, from: row.from_date,
+    roomType: row.room_type || null, unitType: row.unit_type || null, internet: !!row.internet, deposit: row.deposit ?? null, appFee: row.app_fee ?? null,
+    parking: row.parking || null, pets: row.pets || null, roommates: row.roommates || null, to: row.to_date,
     leaseEnd: row.lease_end, utilities: !!row.utilities, privateBath: !!row.private_bath, delivery: row.delivery,
     place: row.place, desc: row.descr, status: row.status,
     contact: group || !row.contact ? null : row.contact,
@@ -187,7 +200,6 @@ async function feed(req, env, url) {
   const p = url.searchParams, kind = p.get("kind") === "rent" ? "rent" : "goods";
   const where = ["l.kind = ?", "l.status IN ('on', 'reserved')", "(l.source_type != 'group' OR l.source_posted_at >= ?)"], args = [kind, Date.now() - GROUP_MAX_AGE];
   if (kind === "goods" && CATS.includes(p.get("cat"))) { where.push("l.cat = ?"); args.push(p.get("cat")); }
-  if (kind === "rent" && RTYPES.includes(p.get("rtype"))) { where.push("l.rtype = ?"); args.push(p.get("rtype")); }
   const q = clean(p.get("q"), 40);
   if (q) {
     const like = "%" + q.replace(/[\\%_]/g, c => "\\" + c) + "%";
@@ -230,8 +242,8 @@ async function createListing(req, env, url) {
   if (await bump(env, u.id, "post") > LIMITS.post) throw new Fail(429, "daily_limit");
   const id = newId(), now = Date.now();
   await bump(env, "*", "post");
-  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, rtype, from_date, to_date, lease_end, utilities, private_bath, delivery, delivery_fee, pickup_before, pickup_after, long_term, furnished, place, descr, contact, photos, status, created_at, updated_at, bumped_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?)")
-    .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.rtype, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.place, v.descr, v.contact, v.photos, now, now, now).run();
+  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, from_date, to_date, lease_end, utilities, private_bath, delivery, delivery_fee, pickup_before, pickup_after, long_term, furnished, room_type, unit_type, internet, deposit, app_fee, parking, pets, roommates, place, descr, contact, photos, status, created_at, updated_at, bumped_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?)")
+    .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, now, now, now).run();
   const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
   return json(view(row, url.origin, u), 201);
 }
@@ -249,8 +261,8 @@ async function updateListing(req, env, url, id) {
   if (row.status === "hidden") throw new Fail(403, "hidden");
   const v = checkListing(await bodyOf(req), u.id, JSON.parse(row.photos));
   if (v.kind !== row.kind) throw new Fail(400, "bad_kind");
-  await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, rtype=?, from_date=?, to_date=?, lease_end=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
-    .bind(v.title, v.price, v.cat, v.cond, v.rtype, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.place, v.descr, v.contact, v.photos, Date.now(), id).run();
+  await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, from_date=?, to_date=?, lease_end=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, room_type=?, unit_type=?, internet=?, deposit=?, app_fee=?, parking=?, pets=?, roommates=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
+    .bind(v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, Date.now(), id).run();
   if (v.price !== row.price) await clearScore(env, id);
   const kept = new Set(JSON.parse(v.photos));
   await removePhotos(env, JSON.parse(row.photos).filter(k => !kept.has(k)));
@@ -418,7 +430,7 @@ async function logout(req, env) {
 // ---- 管理 ----
 async function adminReports(req, env, url) {
   await needAdmin(req, env);
-  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.rtype, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
+  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.room_type, l.unit_type, l.internet, l.deposit, l.app_fee, l.parking, l.pets, l.roommates, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
     FROM reports r JOIN listings l ON l.id = r.listing_id WHERE r.status = 'open' ORDER BY r.created_at DESC LIMIT 100`).all()).results;
   return json({ items: rows.map(r => ({ id: r.id, reason: r.reason, note: r.note, at: r.at, reporter: r.reporter, listing: view({ ...r, id: r.lid }, url.origin, { id: "admin" }) })) });
 }
@@ -550,7 +562,6 @@ async function importOne(env, b) {
   if (CONTACT_PATTERNS.some(r => r.test(text))) throw new Fail(422, "has_contact");
   if (kind === "rent" && ADDRESS_PATTERN.test(text)) throw new Fail(422, "has_address");
   if (kind === "goods" && !CATS.includes(b.cat)) throw new Fail(400, "bad_cat");
-  if (kind === "rent" && !RTYPES.includes(b.rtype)) throw new Fail(400, "bad_rtype");
 
   const senderHash = b.senderId ? await senderHashOf(env, b.senderId) : null;
   const mergeKey = mergeKeyOf(senderHash || poster, title);
@@ -566,7 +577,7 @@ async function importOne(env, b) {
   if (owner && owner.banned) return { status: 200, data: { skipped: "banned" } };
 
   const shots = Array.isArray(b.photos) ? b.photos : [];
-  if (shots.length > MAX_PHOTOS) throw new Fail(400, "too_many_photos");
+  if (shots.length > (kind === "rent" ? MAX_RENT_PHOTOS : MAX_PHOTOS)) throw new Fail(400, "too_many_photos");
   if (shots.length && b.photosChecked !== true) throw new Fail(400, "photos_not_checked");
   const decoded = shots.map(decodeJpeg);
   const keys = [];
@@ -587,8 +598,8 @@ async function importOne(env, b) {
   }
 
   const id = newId();
-  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, rtype, place, descr, contact, photos, status, created_at, updated_at, bumped_at, source_type, source_id, source_group, source_poster, source_posted_at, merge_key, sender_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, owner ? owner.id : GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, kind === "rent" ? b.rtype : null, place, descr, owner?.contact || "", JSON.stringify(keys), now, now, postedAt, owner ? "claimed" : "group", sourceId, group, poster, postedAt, mergeKey, senderHash).run();
+  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, place, descr, contact, photos, status, created_at, updated_at, bumped_at, source_type, source_id, source_group, source_poster, source_posted_at, merge_key, sender_hash) VALUES (?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, owner ? owner.id : GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, place, descr, owner?.contact || "", JSON.stringify(keys), now, now, postedAt, owner ? "claimed" : "group", sourceId, group, poster, postedAt, mergeKey, senderHash).run();
   return { status: 201, data: { id } };
 }
 

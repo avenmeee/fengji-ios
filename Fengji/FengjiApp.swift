@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum Config {
     static let host = "fengji.sinantrails.com"
@@ -51,6 +52,7 @@ enum AppTab: Hashable {
 struct RootView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.scenePhase) private var phase
+    @State private var keyboardUp = false
 
     var body: some View {
         TabView(selection: $state.tab) {
@@ -59,13 +61,17 @@ struct RootView: View {
             MeView().tag(AppTab.me).toolbar(.hidden, for: .tabBar)
         }
         .overlay(alignment: .bottom) {
-            if !state.pushed.contains(state.tab) {
+            if !state.pushed.contains(state.tab), !keyboardUp {
                 FloatingBar()
                     .ignoresSafeArea(.keyboard)
                     .transition(.opacity)
             }
         }
         .animation(.easeOut(duration: 0.15), value: state.pushed.contains(state.tab))
+        .animation(.easeOut(duration: 0.15), value: keyboardUp)
+        // 键盘弹起时藏底栏，收起后恢复
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardUp = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardUp = false }
         .overlay(alignment: .bottom) {
             if state.pendingDelete != nil {
                 HStack(spacing: 14) {

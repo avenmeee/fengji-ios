@@ -10,7 +10,6 @@ func plainOptions(_ list: [String]) -> [Option] {
 }
 
 let CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"]
-let RTYPES = ["短租", "转租"]
 let REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"]
 
 struct Photo: Codable, Hashable {
@@ -26,7 +25,6 @@ struct Listing: Codable, Identifiable, Hashable {
     var price: Int
     var cat: String?
     var cond: String?
-    var rtype: String?
     var from: String?
     var to: String?
     var place: String
@@ -52,6 +50,14 @@ struct Listing: Codable, Identifiable, Hashable {
     var sourceGroup: String?
     var sourcePoster: String?
     var sourcePostedAt: Int64?
+    var roomType: String?
+    var unitType: String?
+    var internet: Bool?
+    var deposit: Int?
+    var appFee: Int?
+    var parking: String?
+    var pets: String?
+    var roommates: String?
 
     var isRent: Bool { kind == "rent" }
     var isOn: Bool { status == "on" }
@@ -110,10 +116,19 @@ struct Listing: Codable, Identifiable, Hashable {
     /// 租房的条件：包水电、独卫、租约到期
     var rentFacts: String {
         var parts: [String] = []
+        if unitType == "whole" { parts.append("整套") }
+        if unitType == "room" { parts.append("单间") }
+        if let roomType { parts.append(roomType) }
         if let utilities { parts.append(utilities ? "包水电" : "不包水电") }
-        if furnished == true { parts.append("可拎包入住") }
+        if internet == true { parts.append("包网") }
+        if furnished == true { parts.append("带家具") }
         if privateBath == true { parts.append("独卫") }
         if let end = Self.day(leaseEnd) { parts.append("租约到 \(end)") }
+        if let deposit { parts.append("押金 $\(deposit)") }
+        if let appFee { parts.append("申请费 $\(appFee)") }
+        if let parking { parts.append("停车：\(parking)") }
+        if let pets { parts.append("宠物：\(pets)") }
+        if let roommates { parts.append("室友：\(roommates)") }
         return parts.joined(separator: " · ")
     }
 
@@ -184,7 +199,6 @@ struct ListingInput: Encodable {
     let price: Int
     var cat: String?
     var cond: String?
-    var rtype: String?
     var from: String?
     var to: String?
     let place: String
@@ -201,6 +215,14 @@ struct ListingInput: Encodable {
     var longTerm: Bool?
     var furnished: Bool?
     var aiConsent: Bool?
+    var roomType: String?
+    var unitType: String?
+    var internet: Bool?
+    var deposit: Int?
+    var appFee: Int?
+    var parking: String?
+    var pets: String?
+    var roommates: String?
 }
 
 struct Me: Codable {

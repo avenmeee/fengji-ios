@@ -64,7 +64,6 @@ struct PostForm: View {
     @State private var price: String
     @State private var cat: String?
     @State private var cond: String?
-    @State private var rtype: String
     @State private var aiConsent: Bool
     @State private var utilities: String?
     @State private var deliveryFee: String
@@ -114,7 +113,6 @@ struct PostForm: View {
         _price = State(initialValue: editing.map { String($0.price) } ?? "")
         _cat = State(initialValue: editing?.cat)
         _cond = State(initialValue: editing?.cond)
-        _rtype = State(initialValue: editing?.rtype ?? "转租")
         _aiConsent = State(initialValue: UserDefaults.standard.bool(forKey: "aiConsent") || Demo.isOn)
         let today = Date()
         _from = State(initialValue: editing?.from.flatMap { Self.dayFormat.date(from: $0) } ?? today)
@@ -374,7 +372,6 @@ struct PostForm: View {
 
     private var rentFields: some View {
         VStack(alignment: .leading, spacing: 14) {
-            options(plainOptions(RTYPES), $rtype)
             HStack(spacing: 12) {
                 labeledDate("起", $from)
                 if !longTerm { labeledDate("止", $to) }
@@ -431,9 +428,10 @@ struct PostForm: View {
     }
 
     private var photoSize: CGFloat { isRent ? 96 : 110 }
+    private var maxPhotos: Int { isRent ? 9 : 3 }
 
     private var photoRow: some View {
-        HStack(spacing: 8) {
+        FlowLayout(spacing: 8) {
             ForEach(photos) { photo in
                 ZStack(alignment: .topTrailing) {
                     Group {
@@ -461,8 +459,8 @@ struct PostForm: View {
                     .accessibilityLabel("去掉这张")
                 }
             }
-            if photos.count < 3 {
-                PhotosPicker(selection: $picked, maxSelectionCount: 3 - photos.count, matching: .images) {
+            if photos.count < maxPhotos {
+                PhotosPicker(selection: $picked, maxSelectionCount: maxPhotos - photos.count, matching: .images) {
                     Image(systemName: "camera")
                         .font(.system(size: 24))
                         .foregroundStyle(Theme.sub)
@@ -475,7 +473,7 @@ struct PostForm: View {
     }
 
     private func addPicked(_ items: [PhotosPickerItem]) async {
-        for item in items where photos.count < 3 {
+        for item in items where photos.count < maxPhotos {
             guard let data = try? await item.loadTransferable(type: Data.self) else {
                 state.toast("有张照片打不开")
                 continue
@@ -529,7 +527,7 @@ struct PostForm: View {
         guard !c.isEmpty else { error = "留个微信号。"; return }
         if isRent, !longTerm, from > to { error = "止要晚于起。"; return }
         if isRent, utilities == nil { error = "选一下包不包水电。"; return }
-        if !isRent, photos.isEmpty { error = "要一张实拍照。"; return }
+        if photos.isEmpty { error = "要一张实拍照。"; return }
         if !isRent, editing == nil, !aiConsent { error = "要同意发给 AI 打分才能发布。"; return }
         let fee = deliveryFee.trimmingCharacters(in: .whitespaces)
         if !isRent, delivery != nil, delivery != "pickup", !fee.isEmpty, Int(fee) == nil { error = "配送费要填整数。"; return }
@@ -546,7 +544,6 @@ struct PostForm: View {
             }
             var input = ListingInput(kind: kind, title: t, price: money, place: p, desc: desc.trimmingCharacters(in: .whitespacesAndNewlines), contact: c, photos: keys)
             if isRent {
-                input.rtype = rtype
                 input.from = Self.dayFormat.string(from: from)
                 input.to = longTerm ? nil : Self.dayFormat.string(from: to)
                 input.longTerm = longTerm

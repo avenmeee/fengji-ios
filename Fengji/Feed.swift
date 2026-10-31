@@ -163,44 +163,6 @@ struct CategoryBar: View {
     }
 }
 
-/// 租房只有两种，写字就够；“全部”用六边形
-struct RentTypeBar: View {
-    @Binding var selected: String
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Button {
-                pick("all")
-            } label: {
-                ZStack {
-                    if selected == "all" { Hexagon().fill(Theme.rent).frame(width: 36, height: 36) }
-                    CategoryIcon(key: "all", size: selected == "all" ? 20 : 24)
-                        .foregroundStyle(selected == "all" ? Theme.onRent : Theme.sub)
-                }
-                .frame(width: 36, height: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("全部")
-            ForEach(RTYPES, id: \.self) { type in
-                Button { pick(type) } label: {
-                    Text(type)
-                        .font(.system(size: 16, weight: selected == type ? .semibold : .regular))
-                        .foregroundStyle(selected == type ? Theme.ink : Theme.sub)
-                        .frame(height: 44)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selected == type ? .isSelected : [])
-            }
-            Spacer()
-        }
-    }
-
-    private func pick(_ key: String) {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withAnimation(.snappy(duration: 0.2)) { selected = key }
-    }
-}
-
 // MARK: - 买东西
 
 struct BuyView: View {
@@ -297,7 +259,7 @@ struct RentView: View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 TopBar(placeholder: "搜地段", query: $model.q) {
-                    RentTypeBar(selected: $model.filter)
+                    Spacer()
                 }
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -361,7 +323,7 @@ struct RentRow: View {
                     Text("已预订").font(.footnote).foregroundStyle(Theme.sell).padding(.leading, 6)
                 }
             }
-            Text([item.rtype ?? "", item.place, item.shortPeriod].filter { !$0.isEmpty }.joined(separator: " · "))
+            Text([item.place, item.shortPeriod].filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(.footnote)
                 .foregroundStyle(Theme.sub)
                 .lineLimit(1)

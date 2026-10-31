@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS listings (
   price INTEGER NOT NULL,        -- 美元，goods 填 0 是免费送；rent 是每月租金
   cat TEXT,                      -- goods：furn elec art book wear other
   cond TEXT,                     -- goods：成色
-  rtype TEXT,                    -- rent：短租 转租
+  rtype TEXT,                    -- 不再使用：租房不分类型
   from_date TEXT,                -- rent：YYYY-MM-DD
   to_date TEXT,
   lease_end TEXT,                -- rent：租约到期日
@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS listings (
   pickup_before TEXT,            -- goods：几号前取走，选填
   pickup_after TEXT,             -- goods：几号后可取，选填
   long_term INTEGER NOT NULL DEFAULT 0,     -- rent：长租，没有结束日期
+  room_type TEXT,                -- rent：房型，比如 2室1卫
+  unit_type TEXT,                -- rent：whole 整套；room 单间
+  internet INTEGER NOT NULL DEFAULT 0,      -- rent：包网
+  deposit INTEGER,               -- rent：押金
+  app_fee INTEGER,               -- rent：申请费
+  parking TEXT,                  -- rent：停车
+  pets TEXT,                     -- rent：宠物
+  roommates TEXT,                -- rent：室友情况
   furnished INTEGER NOT NULL DEFAULT 0,     -- rent：可拎包入住
   score INTEGER,                 -- AI 五档 1～5，后台打；没打是空。卖家看不到自己的
   scored_at INTEGER,

@@ -16,7 +16,7 @@ struct DetailView: View {
     @State private var heroBottom: CGFloat = 1000
 
     private var line: String {
-        let parts = item.isRent ? [item.rtype ?? "", item.place, item.period, item.rentFacts] : [item.catLabel, item.cond ?? "", item.place, item.pickupText]
+        let parts = item.isRent ? [item.place, item.period, item.rentFacts] : [item.catLabel, item.cond ?? "", item.place, item.pickupText]
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
