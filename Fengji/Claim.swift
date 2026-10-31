@@ -12,28 +12,22 @@ struct ClaimView: View {
     @State private var saving = false
 
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 14) {
-                if status?.claimed == true {
-                    claimedView
-                } else {
-                    codeView
-                }
-                if let error {
-                    Text(error).font(.subheadline).foregroundStyle(Theme.warn)
-                }
-                Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: 14) {
+            if status?.claimed == true {
+                claimedView
+            } else {
+                codeView
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.bg)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                }
+            if let error {
+                Text(error).font(.subheadline).foregroundStyle(Theme.warn)
             }
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 28)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.bg)
+        .presentationDragIndicator(.visible)
         .task { await start() }
         .task(id: code?.code) { await watch() }
     }
@@ -79,9 +73,8 @@ struct ClaimView: View {
             TextField("微信号", text: $contact)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .padding(.horizontal, 12)
-                .frame(minHeight: 44)
-                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 12))
+                .font(.system(size: 17))
+            Theme.line.frame(height: 0.5)
             Button(saving ? "正在存…" : "保存") { Task { await save() } }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(saving)

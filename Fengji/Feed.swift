@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @MainActor
 final class FeedModel: ObservableObject {
@@ -80,18 +81,15 @@ struct PhaseBlock: View {
     let phase: FeedModel.Phase
 
     var body: some View {
-        EmptyBlock(text: phase == .failed ? "没连上，下拉再试。" : "正在读取…")
+        EmptyBlock(text: phase == .failed ? "没连上，下拉再试" : "")
     }
 }
 
-/// 顶上一排：分类，右边圆形搜索。点搜索换成搜索框。
-struct TopBar<Extra: View>: View {
-    let options: [Option]
-    @Binding var selected: String
-    let act: Act
+/// 顶上固定一排：左边筛选，右边搜索。点搜索换成搜索框。
+struct TopBar<Filters: View>: View {
     let placeholder: String
     @Binding var query: String
-    @ViewBuilder var extra: () -> Extra
+    @ViewBuilder var filters: () -> Filters
     @State private var searching = false
     @FocusState private var focused: Bool
 
@@ -107,20 +105,99 @@ struct TopBar<Extra: View>: View {
                 .font(.subheadline)
                 .foregroundStyle(Theme.ink)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 2) {
-                        ForEach(options, id: \.key) { opt in
-                            Chip(text: opt.label, on: selected == opt.key, act: act, quiet: true) { selected = opt.key }
-                        }
-                    }
-                }
-                RoundButton(symbol: "magnifyingglass", label: "搜索") {
+                filters()
+                Button {
                     searching = true
                     focused = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Theme.ink)
+                        .frame(width: 36, height: 44)
                 }
-                extra()
+                .buttonStyle(.plain)
+                .accessibilityLabel("搜索")
             }
         }
+        .frame(height: 44)
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+    }
+}
+
+/// 分类：只有图标。选中的垫六边形，并展开写出名字，一屏放下。
+struct CategoryBar: View {
+    @Binding var selected: String
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach([ALL_OPTION] + CATS, id: \.key) { opt in
+                let on = selected == opt.key
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.snappy(duration: 0.2)) { selected = opt.key }
+                } label: {
+                    HStack(spacing: 4) {
+                        ZStack {
+                            if on { Hexagon().fill(Theme.buy).frame(width: 36, height: 36) }
+                            CategoryIcon(key: opt.key, size: on ? 20 : 24)
+                                .foregroundStyle(on ? Theme.onBuy : Theme.sub)
+                        }
+                        .frame(width: 36, height: 44)
+                        if on {
+                            Text(opt.label)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Theme.ink)
+                                .fixedSize()
+                        }
+                    }
+                    .frame(maxWidth: on ? nil : .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(opt.label)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+    }
+}
+
+/// 租房只有两种，写字就够；“全部”用六边形
+struct RentTypeBar: View {
+    @Binding var selected: String
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Button {
+                pick("all")
+            } label: {
+                ZStack {
+                    if selected == "all" { Hexagon().fill(Theme.rent).frame(width: 36, height: 36) }
+                    CategoryIcon(key: "all", size: selected == "all" ? 20 : 24)
+                        .foregroundStyle(selected == "all" ? Theme.onRent : Theme.sub)
+                }
+                .frame(width: 36, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("全部")
+            ForEach(RTYPES, id: \.self) { type in
+                Button { pick(type) } label: {
+                    Text(type)
+                        .font(.system(size: 16, weight: selected == type ? .semibold : .regular))
+                        .foregroundStyle(selected == type ? Theme.ink : Theme.sub)
+                        .frame(height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected == type ? .isSelected : [])
+            }
+            Spacer()
+        }
+    }
+
+    private func pick(_ key: String) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.snappy(duration: 0.2)) { selected = key }
     }
 }
 
@@ -135,33 +212,41 @@ struct BuyView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 14) {
-                    TopBar(options: [ALL_OPTION] + CATS, selected: $model.filter, act: .buy, placeholder: "搜东西", query: $model.q) { EmptyView() }
-                    if model.items.isEmpty {
-                        if model.phase == .ok {
-                            EmptyBlock(text: model.isFiltered ? "没找到。" : "还没人发。")
-                        } else {
-                            PhaseBlock(phase: model.phase)
-                        }
-                    } else {
-                        LazyVGrid(columns: columns, spacing: 18) {
-                            ForEach(model.items) { item in
-                                NavigationLink(value: item) { GoodsCard(item: item) }
-                                    .buttonStyle(.plain)
-                                    .task { await model.loadMoreIfNeeded(item) }
+            VStack(spacing: 0) {
+                TopBar(placeholder: "搜东西", query: $model.q) {
+                    CategoryBar(selected: $model.filter)
+                }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 18) {
+                            Color.clear.frame(height: 0).id("top")
+                            if model.items.isEmpty {
+                                if model.phase == .ok {
+                                    EmptyBlock(text: model.isFiltered ? "没找到" : "还没人发")
+                                } else {
+                                    PhaseBlock(phase: model.phase)
+                                }
+                            } else {
+                                LazyVGrid(columns: columns, spacing: 18) {
+                                    ForEach(model.items.filter { $0.id != state.pendingDelete?.id }) { item in
+                                        NavigationLink(value: item) { GoodsCard(item: item) }
+                                            .buttonStyle(.plain)
+                                            .task { await model.loadMoreIfNeeded(item) }
+                                    }
+                                }
                             }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, Theme.barSpace)
                     }
-                    FootNote(text: "同学自办，非学校官方。当面看货再付。")
+                    .scrollDismissesKeyboard(.immediately)
+                    .refreshable { await model.load() }
+                    .onChange(of: state.topTicks[.buy] ?? 0) { _, _ in
+                        withAnimation(.snappy) { proxy.scrollTo("top", anchor: .top) }
+                    }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, Theme.barSpace)
             }
             .background(Theme.bg)
-            .scrollDismissesKeyboard(.immediately)
-            .refreshable { await model.load() }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
             .reloads(model, version: state.version)
@@ -177,32 +262,31 @@ struct GoodsCard: View {
     let item: Listing
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 8) {
             Color.clear
                 .aspectRatio(0.87, contentMode: .fit)
                 .overlay { ListingImage(item: item, maxPixel: 800) }
                 .clipShape(RoundedRectangle(cornerRadius: 18))
-            HStack {
+            HStack(spacing: 6) {
                 Text(item.priceText)
                     .font(.system(size: 18, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(item.price == 0 ? Theme.sell : Theme.ink)
+                if item.isReserved {
+                    Text("已预订").font(.footnote).foregroundStyle(Theme.sell)
+                }
                 Spacer(minLength: 4)
                 ScoreBadge(score: item.score)
             }
-            .padding(.top, 8)
-            Text(item.title)
-                .font(.footnote)
-                .foregroundStyle(Theme.sub)
-                .lineLimit(1)
-                .padding(.top, 1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(item.title)
     }
 }
 
-// MARK: - 租房
+// MARK: - 租房子
 
 struct RentView: View {
     @EnvironmentObject var state: AppState
@@ -211,33 +295,41 @@ struct RentView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 14) {
-                    TopBar(options: [ALL_OPTION] + plainOptions(RTYPES), selected: $model.filter, act: .rent, placeholder: "搜地段、小区", query: $model.q) { EmptyView() }
-                    if model.items.isEmpty {
-                        if model.phase == .ok {
-                            EmptyBlock(text: model.isFiltered ? "没找到。" : "还没有房源。")
-                        } else {
-                            PhaseBlock(phase: model.phase)
-                        }
-                    } else {
-                        LazyVStack(spacing: 20) {
-                            ForEach(model.items) { item in
-                                NavigationLink(value: item) { RentRow(item: item) }
-                                    .buttonStyle(.plain)
-                                    .task { await model.loadMoreIfNeeded(item) }
+            VStack(spacing: 0) {
+                TopBar(placeholder: "搜地段", query: $model.q) {
+                    RentTypeBar(selected: $model.filter)
+                }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            Color.clear.frame(height: 0).id("top")
+                            if model.items.isEmpty {
+                                if model.phase == .ok {
+                                    EmptyBlock(text: model.isFiltered ? "没找到" : "还没有房源")
+                                } else {
+                                    PhaseBlock(phase: model.phase)
+                                }
+                            } else {
+                                LazyVStack(spacing: 20) {
+                                    ForEach(model.items.filter { $0.id != state.pendingDelete?.id }) { item in
+                                        NavigationLink(value: item) { RentRow(item: item) }
+                                            .buttonStyle(.plain)
+                                            .task { await model.loadMoreIfNeeded(item) }
+                                    }
+                                }
                             }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, Theme.barSpace)
                     }
-                    FootNote(text: "看房前别转押金。这里不核实房东身份。")
+                    .scrollDismissesKeyboard(.immediately)
+                    .refreshable { await model.load() }
+                    .onChange(of: state.topTicks[.rent] ?? 0) { _, _ in
+                        withAnimation(.snappy) { proxy.scrollTo("top", anchor: .top) }
+                    }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, Theme.barSpace)
             }
             .background(Theme.bg)
-            .scrollDismissesKeyboard(.immediately)
-            .refreshable { await model.load() }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
             .reloads(model, version: state.version)
@@ -253,44 +345,30 @@ struct RentRow: View {
     let item: Listing
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
             Color.clear
-                .aspectRatio(1.66, contentMode: .fit)
+                .aspectRatio(1.5, contentMode: .fit)
                 .overlay { ListingImage(item: item, maxPixel: 1200) }
                 .clipShape(RoundedRectangle(cornerRadius: 18))
-            HStack(alignment: .center) {
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(item.priceText)
-                        .font(.system(size: 21, weight: .bold))
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.ink)
-                    Text("/月").font(.footnote).foregroundStyle(Theme.sub)
-                }
-                Spacer()
-                Text(item.rtype ?? "")
-                    .font(.caption.weight(.medium))
+                .padding(.bottom, 4)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(item.priceText)
+                    .font(.system(size: 21, weight: .bold))
+                    .monospacedDigit()
                     .foregroundStyle(Theme.ink)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(Theme.rentSoft, in: RoundedRectangle(cornerRadius: 7))
+                Text("/月").font(.footnote).foregroundStyle(Theme.sub)
+                if item.isReserved {
+                    Text("已预订").font(.footnote).foregroundStyle(Theme.sell).padding(.leading, 6)
+                }
             }
-            .padding(.top, 9)
-            Text(item.title)
-                .font(.footnote)
-                .foregroundStyle(Theme.ink)
-                .lineLimit(1)
-            Text([item.place, item.period].filter { !$0.isEmpty }.joined(separator: " · "))
+            Text([item.rtype ?? "", item.place, item.shortPeriod].filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(.footnote)
                 .foregroundStyle(Theme.sub)
                 .lineLimit(1)
-            if !item.rentFacts.isEmpty {
-                Text(item.rentFacts)
-                    .font(.footnote)
-                    .foregroundStyle(Theme.sub)
-                    .lineLimit(1)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(item.title)
     }
 }

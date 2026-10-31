@@ -69,43 +69,41 @@ struct Tint {
 
 // MARK: - 小部件
 
+/// 发布表单里的选项：没有框也没有胶囊，选中的用这一页的颜色加粗；分类带图标
 struct Chip: View {
     let text: String
     let on: Bool
     var act: Act = .buy
-    /// 顶上那排：没选中时没有底
-    var quiet = false
+    var icon: String?
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(text)
-                .font(.system(size: 15, weight: on ? .semibold : .medium))
-                .foregroundStyle(on ? act.on : (quiet ? Theme.sub : Theme.ink))
-                .padding(.horizontal, quiet ? 9 : 13)
-                .frame(height: 34)
-                .background(on ? act.fill : (quiet ? Color.clear : Theme.fill), in: Capsule())
+            HStack(spacing: 4) {
+                if let icon { CategoryIcon(key: icon, size: 20) }
+                Text(text).font(.system(size: 16, weight: on ? .semibold : .regular))
+            }
+            .foregroundStyle(on ? act.fill : Theme.sub)
+            .frame(height: 36)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 
-struct RoundButton: View {
-    let symbol: String
-    let label: String
-    var act: Act?
-    let action: () -> Void
+/// 分类图标（视觉定稿的一套），模板色
+struct CategoryIcon: View {
+    let key: String
+    var size: CGFloat = 24
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(act?.on ?? Theme.ink)
-                .frame(width: 36, height: 36)
-                .background(act?.fill ?? Theme.fill, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
+        Image("cat-\(key)")
+            .renderingMode(.template)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
     }
 }
 
@@ -161,10 +159,11 @@ struct SearchBox: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 36)
-        .background(Theme.fill, in: Capsule())
+        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
+/// 空状态只写一行，不放框
 struct EmptyBlock: View {
     let text: String
 
@@ -172,24 +171,8 @@ struct EmptyBlock: View {
         Text(text)
             .font(.subheadline)
             .foregroundStyle(Theme.sub)
-            .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 44)
-            .padding(.horizontal, 16)
-            .background(Theme.fill, in: RoundedRectangle(cornerRadius: 18))
-    }
-}
-
-struct FootNote: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.caption)
-            .foregroundStyle(Theme.sub)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 4)
+            .padding(.vertical, 60)
     }
 }
 
@@ -292,21 +275,6 @@ struct ScoreBadge: View {
     }
 }
 
-/// 图上的小标：已预订、群里搬来
-struct PhotoTag: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-            .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 6))
-            .padding(8)
-    }
-}
-
 // MARK: - 图片
 
 @MainActor
@@ -360,7 +328,6 @@ struct ListingImage: View {
     let item: Listing
     var index = 0
     var maxPixel: CGFloat = 600
-    var showTag = true
 
     var body: some View {
         let tint = Tint.of(item)
@@ -374,15 +341,6 @@ struct ListingImage: View {
                 .foregroundStyle(tint.fg)
             if item.photos.indices.contains(index) {
                 RemoteImage(url: item.photos[index].url, maxPixel: maxPixel)
-            }
-        }
-        .overlay(alignment: .topLeading) {
-            if !showTag {
-                EmptyView()
-            } else if item.isReserved {
-                PhotoTag(text: "已预订")
-            } else if item.isGroup {
-                PhotoTag(text: "群里 · " + item.groupAge)
             }
         }
     }

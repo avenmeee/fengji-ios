@@ -51,11 +51,6 @@ struct PostForm: View {
     @State private var cat: String
     @State private var cond: String
     @State private var rtype: String
-    @State private var from: Date
-    @State private var to: Date
-    @State private var place: String
-    @State private var desc: String
-    @State private var delivery: String
     @State private var aiConsent: Bool
     @State private var aiConsentShown: Bool
     @State private var utilities: String?
@@ -66,9 +61,15 @@ struct PostForm: View {
     @State private var pickupAfter: Date
     @State private var longTerm: Bool
     @State private var furnished: Bool
+    @State private var from: Date
+    @State private var to: Date
+    @State private var place: String
+    @State private var desc: String
+    @State private var delivery: String
     @State private var privateBath: Bool
     @State private var hasLeaseEnd: Bool
     @State private var leaseEnd: Date
+    @State private var showMore = false
     @State private var posted = Demo.scene == "posted"
     @State private var contact: String
     @State private var photos: [FormPhoto]
@@ -123,13 +124,15 @@ struct PostForm: View {
     private var formAct: Act { isRent ? .rent : .sell }
 
     var body: some View {
-        NavigationStack {
+        Group {
             if posted {
                 postedView
             } else {
                 form
             }
         }
+        .background(Theme.bg)
+        .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(busy)
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }
@@ -162,72 +165,26 @@ struct PostForm: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(Theme.bg)
     }
 
     private var form: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                field(isRent ? "照片（最多 3 张）" : "实拍照（至少 1 张）") { photoRow }
-                field(isRent ? "房子" : "卖什么") {
-                    Input(placeholder: isRent ? "一室一厅，走路到学校 10 分钟" : "宜家书桌，九成新", text: $title)
-                }
-                field(isRent ? "每月租金（美元）" : "价格（美元，0 是免费送）") {
-                    Input(placeholder: "", text: $price).keyboardType(.numberPad)
-                }
-                if isRent {
-                    field("类型") { options(plainOptions(RTYPES), $rtype) }
-                    HStack(spacing: 10) {
-                        field("起") { dateBox($from) }
-                        if !longTerm { field("止") { dateBox($to) } }
-                    }
-                    Toggle("长租", isOn: $longTerm).tint(Theme.rent)
-                    field("水电") {
-                        FlowLayout {
-                            Chip(text: "包水电", on: utilities == "yes", act: formAct) { utilities = "yes" }
-                            Chip(text: "不包", on: utilities == "no", act: formAct) { utilities = "no" }
-                        }
-                    }
-                    Toggle("可拎包入住", isOn: $furnished).tint(Theme.rent)
-                    Toggle("独卫", isOn: $privateBath).tint(Theme.rent)
-                    Toggle("写租约到期日", isOn: $hasLeaseEnd).tint(Theme.rent)
-                    if hasLeaseEnd { dateBox($leaseEnd) }
-                } else {
-                    field("分类") { options(CATS, $cat) }
-                    field("成色") { options(plainOptions(CONDS), $cond) }
-                    field("怎么拿") { options([(key: "pickup", label: "自取"), (key: "deliver", label: "可配送"), (key: "both", label: "都可")], $delivery) }
-                    if delivery != "pickup" {
-                        field("配送费（美元，选填）") {
-                            Input(placeholder: "", text: $deliveryFee).keyboardType(.numberPad)
-                        }
-                    }
-                    Toggle("几号前取走", isOn: $hasPickupBefore).tint(formAct.fill)
-                    if hasPickupBefore { dateBox($pickupBefore) }
-                    Toggle("几号后可取", isOn: $hasPickupAfter).tint(formAct.fill)
-                    if hasPickupAfter { dateBox($pickupAfter) }
-                }
-                field(isRent ? "地段" : "在哪拿") {
-                    Input(placeholder: "monty、downtown、TP", text: $place)
-                }
-                field("备注（选填）") {
-                    TextEditor(text: $desc)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 88)
-                        .padding(6)
-                        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 12))
-                }
-                field("微信号（所有人能看到）") {
-                    Input(placeholder: "", text: $contact)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-                Text("限萨凡纳，当面交易。").font(.footnote).foregroundStyle(Theme.sub)
-                if !isRent {
-                    Text("名字、价格、分类、成色、地点和第一张照片会发给 AI（Anthropic 的 Claude）打分，买家能看到分。")
-                        .font(.footnote)
-                        .foregroundStyle(Theme.sub)
-                    if aiConsentShown, editing == nil {
-                        Toggle("同意发给 AI 打分", isOn: $aiConsent).tint(formAct.fill)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                photoRow
+                Input(placeholder: isRent ? "房子，比如一室一厅" : "卖什么", text: $title)
+                Input(placeholder: isRent ? "每月租金（美元）" : "价格（美元，0 是免费）", text: $price).keyboardType(.numberPad)
+                if isRent { rentFields } else { goodsFields }
+                Input(placeholder: "萨凡纳哪里？monty、downtown、TP", text: $place)
+                Input(placeholder: "微信号（所有人能看到）", text: $contact)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                moreFields
+                if !isRent, aiConsentShown, editing == nil {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("名字、价格、分类、成色、地点和第一张照片会发给 AI（Anthropic 的 Claude）打分，买家能看到分。")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.sub)
+                        Toggle("同意", isOn: $aiConsent).tint(formAct.fill)
                     }
                 }
                 if let error {
@@ -239,31 +196,84 @@ struct PostForm: View {
                 .buttonStyle(PrimaryButtonStyle(act: formAct))
                 .disabled(busy)
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
         }
-        .background(Theme.bg)
         .scrollDismissesKeyboard(.interactively)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }.disabled(busy)
+    }
+
+    private var goodsFields: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            FlowLayout(spacing: 14) {
+                ForEach(CATS, id: \.key) { opt in
+                    Chip(text: opt.label, on: cat == opt.key, act: formAct, icon: opt.key) { cat = opt.key }
+                }
+            }
+            options(plainOptions(CONDS), $cond)
+            options([(key: "pickup", label: "自取"), (key: "deliver", label: "可配送"), (key: "both", label: "都可")], $delivery)
+        }
+    }
+
+    private var rentFields: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            options(plainOptions(RTYPES), $rtype)
+            HStack(spacing: 12) {
+                labeledDate("起", $from)
+                if !longTerm { labeledDate("止", $to) }
+            }
+            Toggle("长租", isOn: $longTerm).tint(Theme.rent)
+            FlowLayout(spacing: 14) {
+                Chip(text: "包水电", on: utilities == "yes", act: formAct) { utilities = "yes" }
+                Chip(text: "不包水电", on: utilities == "no", act: formAct) { utilities = "no" }
             }
         }
     }
 
-    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label).font(.footnote).foregroundStyle(Theme.sub)
-            content()
+    /// 选填的都折叠起来
+    @ViewBuilder
+    private var moreFields: some View {
+        if showMore || !desc.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                if isRent {
+                    Toggle("可拎包入住", isOn: $furnished).tint(Theme.rent)
+                    Toggle("独卫", isOn: $privateBath).tint(Theme.rent)
+                    Toggle("写租约到期日", isOn: $hasLeaseEnd).tint(Theme.rent)
+                    if hasLeaseEnd { dateBox($leaseEnd) }
+                } else {
+                    if delivery != "pickup" {
+                        Input(placeholder: "配送费（美元）", text: $deliveryFee).keyboardType(.numberPad)
+                    }
+                    Toggle("几号前取走", isOn: $hasPickupBefore).tint(formAct.fill)
+                    if hasPickupBefore { dateBox($pickupBefore) }
+                    Toggle("几号后可取", isOn: $hasPickupAfter).tint(formAct.fill)
+                    if hasPickupAfter { dateBox($pickupAfter) }
+                }
+                TextField("备注", text: $desc, axis: .vertical)
+                    .lineLimit(2...6)
+                Theme.line.frame(height: 0.5)
+            }
+        } else {
+            Button("更多") { withAnimation(.snappy) { showMore = true } }
+                .font(.subheadline)
+                .foregroundStyle(Theme.sub)
+                .frame(height: 44)
+                .buttonStyle(.plain)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func options(_ list: [Option], _ binding: Binding<String>) -> some View {
-        FlowLayout {
+        FlowLayout(spacing: 14) {
             ForEach(list, id: \.key) { opt in
                 Chip(text: opt.label, on: binding.wrappedValue == opt.key, act: formAct) { binding.wrappedValue = opt.key }
             }
+        }
+    }
+
+    private func labeledDate(_ label: String, _ binding: Binding<Date>) -> some View {
+        HStack(spacing: 6) {
+            Text(label).font(.subheadline).foregroundStyle(Theme.sub)
+            dateBox(binding)
         }
     }
 
@@ -280,34 +290,35 @@ struct PostForm: View {
                     Group {
                         switch photo {
                         case .existing(let p):
-                            RemoteImage(url: p.url, maxPixel: 240)
+                            RemoteImage(url: p.url, maxPixel: 300)
                         case .fresh(_, _, let preview):
                             Image(uiImage: preview).resizable().aspectRatio(contentMode: .fill)
                         }
                     }
-                    .frame(width: 76, height: 76)
-                    .background(Theme.line)
-                    .clipShape(RoundedRectangle(cornerRadius: 11))
+                    .frame(width: 96, height: 96)
+                    .background(Theme.fill)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
                     Button {
                         photos.removeAll { $0.id == photo.id }
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(Theme.bg)
-                            .frame(width: 22, height: 22)
-                            .background(Theme.ink, in: Circle())
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 26, height: 26)
+                            .background(.black.opacity(0.5), in: Circle())
                     }
                     .buttonStyle(.plain)
-                    .padding(3)
+                    .padding(4)
                     .accessibilityLabel("去掉这张")
                 }
             }
             if photos.count < 3 {
                 PhotosPicker(selection: $picked, maxSelectionCount: 3 - photos.count, matching: .images) {
-                    Image(systemName: "plus")
+                    Image(systemName: "camera")
+                        .font(.system(size: 24))
                         .foregroundStyle(Theme.sub)
-                        .frame(width: 76, height: 76)
-                        .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(Theme.sub, style: StrokeStyle(lineWidth: 1, dash: [4])))
+                        .frame(width: 96, height: 96)
+                        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 14))
                 }
                 .accessibilityLabel("加照片")
             }
@@ -402,14 +413,16 @@ struct PostForm: View {
     }
 }
 
+/// 输入框：没有框，只有一条细线
 private struct Input: View {
     let placeholder: String
     @Binding var text: String
 
     var body: some View {
-        TextField(placeholder, text: $text)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 44)
-            .background(Theme.fill, in: RoundedRectangle(cornerRadius: 12))
+        VStack(spacing: 8) {
+            TextField(placeholder, text: $text)
+                .font(.system(size: 17))
+            Theme.line.frame(height: 0.5)
+        }
     }
 }

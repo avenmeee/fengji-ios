@@ -13,6 +13,7 @@ struct FengjiApp: App {
 
     init() {
         Demo.install()
+        UITabBar.appearance().isHidden = true
     }
 
     var body: some Scene {
@@ -26,6 +27,7 @@ struct FengjiApp: App {
             }
             .environmentObject(state)
             .tint(Theme.tint)
+            .scrollIndicators(.hidden)   // 全 App 不显示滚动条
         }
     }
 }
@@ -36,23 +38,42 @@ enum AppTab: Hashable {
 
 struct RootView: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.scenePhase) private var phase
 
     var body: some View {
-        // 三页都留着，切回来不丢滚动位置
-        ZStack {
-            page(.buy) { BuyView() }
-            page(.rent) { RentView() }
-            page(.me) { MeView() }
+        TabView(selection: $state.tab) {
+            BuyView().tag(AppTab.buy).toolbar(.hidden, for: .tabBar)
+            RentView().tag(AppTab.rent).toolbar(.hidden, for: .tabBar)
+            MeView().tag(AppTab.me).toolbar(.hidden, for: .tabBar)
         }
         .overlay(alignment: .bottom) {
             if !state.pushed.contains(state.tab) {
-                FloatingBar(tab: $state.tab)
+                FloatingBar()
                     .ignoresSafeArea(.keyboard)
+                    .transition(.opacity)
             }
         }
+        .animation(.easeOut(duration: 0.15), value: state.pushed.contains(state.tab))
+        .overlay(alignment: .bottom) {
+            if state.pendingDelete != nil {
+                HStack(spacing: 14) {
+                    Text("已删除").foregroundStyle(Theme.bg)
+                    Button("撤销") { state.undoDelete() }
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Theme.buy)
+                }
+                .font(.subheadline)
+                .padding(.horizontal, 16)
+                .frame(height: 44)
+                .background(Theme.ink, in: RoundedRectangle(cornerRadius: 12))
+                .padding(.bottom, 140)
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.18), value: state.pendingDelete?.id)
         .sheet(isPresented: $state.showLogin) {
             LoginSheet()
-                .presentationDetents([.height(340)])
+                .presentationDetents([.height(240)])
         }
         .overlay(alignment: .bottom) {
             if let text = state.toastText {
@@ -68,23 +89,20 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: state.toastText)
+        .onChange(of: phase) { _, p in
+            if p != .active { state.flushDelete() }
+        }
         .task {
             await state.loadConfig()
             await state.refreshMe()
         }
     }
-
-    private func page<Content: View>(_ tab: AppTab, @ViewBuilder content: () -> Content) -> some View {
-        content()
-            .opacity(state.tab == tab ? 1 : 0)
-            .allowsHitTesting(state.tab == tab)
-            .accessibilityHidden(state.tab != tab)
-    }
 }
 
-/// 浮起的胶囊底栏：只有图标，当前页是这一页的颜色
+/// 浮起的底栏：只有图标，当前页垫这一页颜色的六边形。再点当前图标回顶部。
 struct FloatingBar: View {
-    @Binding var tab: AppTab
+    @EnvironmentObject var state: AppState
+    @Namespace private var hex
 
     private let items: [(tab: AppTab, symbol: String, label: String, act: Act)] = [
         (.buy, "bag", "买东西", .buy),
@@ -95,28 +113,39 @@ struct FloatingBar: View {
     var body: some View {
         HStack(spacing: 0) {
             ForEach(items, id: \.label) { item in
+                let on = state.tab == item.tab
                 Button {
-                    tab = item.tab
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    if on {
+                        state.scrollToTop(item.tab)
+                    } else {
+                        withAnimation(.snappy(duration: 0.22)) { state.tab = item.tab }
+                    }
                 } label: {
-                    Image(systemName: item.symbol)
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(tab == item.tab ? item.act.on : Theme.sub)
-                        .frame(width: 72, height: 48)
-                        .background(tab == item.tab ? item.act.fill : Color.clear, in: Capsule())
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
+                    ZStack {
+                        if on {
+                            Hexagon()
+                                .fill(item.act.fill)
+                                .frame(width: 46, height: 46)
+                                .matchedGeometryEffect(id: "hex", in: hex)
+                        }
+                        Image(systemName: item.symbol)
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(on ? item.act.on : Theme.sub)
+                    }
+                    .frame(width: 60, height: 52)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(item.label)
-                .accessibilityAddTraits(tab == item.tab ? .isSelected : [])
+                .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
         .padding(.horizontal, 8)
-        .frame(height: 62)
+        .frame(height: 60)
         .background(Theme.bar, in: Capsule())
         .background(.ultraThinMaterial, in: Capsule())
         .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
-        .padding(.horizontal, 66)
         .padding(.bottom, 6)
     }
 }

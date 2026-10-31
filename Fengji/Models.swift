@@ -117,6 +117,19 @@ struct Listing: Codable, Identifiable, Hashable {
         return parts.joined(separator: " · ")
     }
 
+    /// 卡片上用的短日期：1/5–5/20
+    var shortPeriod: String {
+        let a = Self.slash(from), b = Self.slash(to)
+        if longTerm == true, let a { return "\(a) 起长租" }
+        if let a, let b { return "\(a)–\(b)" }
+        return a ?? b ?? ""
+    }
+
+    private static func slash(_ iso: String?) -> String? {
+        guard let parts = iso?.split(separator: "-"), parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]) else { return nil }
+        return "\(m)/\(d)"
+    }
+
     var ago: String {
         let minutes = Int((Date().timeIntervalSince1970 * 1000 - Double(createdAt)) / 60000)
         if minutes < 1 { return "刚刚" }

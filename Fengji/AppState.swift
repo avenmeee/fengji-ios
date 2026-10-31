@@ -1,5 +1,6 @@
 import AuthenticationServices
 import SwiftUI
+import UIKit
 
 @MainActor
 final class AppState: ObservableObject {
@@ -12,6 +13,11 @@ final class AppState: ObservableObject {
     @Published private(set) var version = 0
     /// 运营微信，后端配置；没配是空
     @Published private(set) var opsWechat: String?
+    /// 再点底栏当前图标：各页看到加一就回顶部
+    @Published private(set) var topTicks: [AppTab: Int] = [:]
+    /// 左滑删了、还能撤销的那条
+    @Published private(set) var pendingDelete: Listing?
+    private var deleteTask: Task<Void, Never>?
     /// 哪几页进了下一层（这时藏底栏）
     @Published private(set) var pushed: Set<AppTab> = []
 
@@ -28,6 +34,45 @@ final class AppState: ObservableObject {
     }
 
     func changed() { version += 1 }
+
+    func scrollToTop(_ tab: AppTab) {
+        topTicks[tab, default: 0] += 1
+    }
+
+    /// 先从界面上拿掉，5 秒内能撤销，过了才真删
+    func softDelete(_ item: Listing) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        flushDelete()
+        pendingDelete = item
+        deleteTask = Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            if Task.isCancelled { return }
+            flushDelete()
+        }
+    }
+
+    func undoDelete() {
+        deleteTask?.cancel()
+        deleteTask = nil
+        pendingDelete = nil
+    }
+
+    /// 真删。切后台也提前做完，不留半截。
+    func flushDelete() {
+        deleteTask?.cancel()
+        deleteTask = nil
+        guard let item = pendingDelete else { return }
+        pendingDelete = nil
+        Task {
+            do {
+                try await API.shared.delete(item.id)
+                changed()
+            } catch {
+                toast(error.localizedDescription)
+                changed()
+            }
+        }
+    }
 
     func setPushed(_ tab: AppTab, _ isPushed: Bool) {
         if isPushed { pushed.insert(tab) } else { pushed.remove(tab) }
@@ -96,53 +141,19 @@ final class AppState: ObservableObject {
 }
 
 struct LoginSheet: View {
-    @EnvironmentObject var state: AppState
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
-    @State private var error: String?
-    @State private var showTerms = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("发布要先登录")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Theme.ink)
-            SignInWithAppleButton(.signIn) { req in
-                req.requestedScopes = []
-            } onCompletion: { result in
-                Task { await finish(result) }
-            }
-            .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
-            .frame(height: 48)
-            if let error {
-                Text(error).font(.subheadline).foregroundStyle(Theme.warn)
-            }
-            Button { showTerms = true } label: {
-                Text("继续即同意用户协议：不许发违规内容、不许骚扰，违者删帖封号。")
-                    .font(.footnote)
-                    .foregroundStyle(Theme.sub)
-                    .underline()
-                    .multilineTextAlignment(.leading)
-            }
-            .buttonStyle(.plain)
+            SignInBlock { dismiss() }
             Spacer(minLength: 0)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.bg)
-        .sheet(isPresented: $showTerms) {
-            NavigationStack { TermsView() }
-        }
-    }
-
-    private func finish(_ result: Result<ASAuthorization, Error>) async {
-        do {
-            try await state.completeSignIn(result)
-            dismiss()
-        } catch let e as ASAuthorizationError where e.code == .canceled {
-            return
-        } catch {
-            self.error = (error as? APIError)?.errorDescription ?? "登录没成功，再试一次。"
-        }
+        .presentationDragIndicator(.visible)
     }
 }

@@ -10,11 +10,11 @@ enum Demo {
     #endif
 
     static var isOn: Bool { scene != nil }
-    static var initialToken: String? { scene == "guest" || scene == "guest-detail" ? nil : "demo" }
+    static var initialToken: String? { scene == "guest" || scene == "guest-detail" || scene == "guest-me" ? nil : "demo" }
 
     static var initialTab: AppTab {
         switch scene {
-        case "me", "form", "posted", "rentform", "settings", "claim": return .me
+        case "me", "guest-me", "mine-actions", "undo", "form", "posted", "rentform", "settings", "claim": return .me
         case "rent", "rentdetail": return .rent
         default: return .buy
         }

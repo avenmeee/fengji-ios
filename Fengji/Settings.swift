@@ -13,7 +13,6 @@ struct SettingsView: View {
                     NavigationLink("用户协议") { TermsView() }
                     if let url = URL(string: Config.base + "/privacy") { Link("隐私政策", destination: url) }
                     if let url = URL(string: Config.base + "/support") { Link("帮助与支持", destination: url) }
-                    Text("举报：在详情页右上角“…”。屏蔽的人在下面的屏蔽名单。").font(.footnote).foregroundStyle(Theme.sub)
                     if !Config.contactEmail.isEmpty, let url = URL(string: "mailto:\(Config.contactEmail)") {
                         Link("联系我们：\(Config.contactEmail)", destination: url)
                     }
@@ -45,11 +44,12 @@ struct SettingsView: View {
                     }
                 }
             }
-            .listRowBackground(Theme.fill)
+            .listRowBackground(Color.clear)
         }
+        .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Theme.bg)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .alert("删除账号？", isPresented: $confirmDelete) {
             Button("删除", role: .destructive) {
                 Task {
@@ -81,7 +81,13 @@ struct TermsView: View {
 
                 你可以举报内容、屏蔽用户。收到举报后 24 小时内处理，违规内容会删除，账号可能被封。
 
+                只限萨凡纳，当面交易。看货再付，看房前别转押金，合同和房东身份自己核对。
+
                 你发的微信号，所有人都能看到。
+
+                东西的名字、价格、分类、成色、地点和第一张照片会发给 AI（Anthropic 的 Claude）打分。
+
+                举报在详情页右上角“…”里。
 
                 发房源要遵守美国 Fair Housing 法：整套出租不能写种族、肤色、宗教、性别、残障、家庭状况、国籍方面的限制。
 
@@ -93,7 +99,7 @@ struct TermsView: View {
             .padding(16)
         }
         .background(Theme.bg)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 
@@ -106,11 +112,11 @@ struct BlockedView: View {
         List {
             Group {
                 if loaded, items.isEmpty {
-                    Text("没有屏蔽任何人。").foregroundStyle(Theme.sub)
+                    Text("没有").foregroundStyle(Theme.sub)
                 }
-                ForEach(items) { b in
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, b in
                     HStack {
-                        Text("用户 " + String(b.id.prefix(6))).foregroundStyle(Theme.ink)
+                        Text("已屏蔽 \(index + 1)").foregroundStyle(Theme.ink)
                         Spacer()
                         Button("解除") {
                             Task {
@@ -127,11 +133,12 @@ struct BlockedView: View {
                     }
                 }
             }
-            .listRowBackground(Theme.fill)
+            .listRowBackground(Color.clear)
         }
+        .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Theme.bg)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             items = (try? await API.shared.blocks()) ?? []
             loaded = true
@@ -154,7 +161,7 @@ struct AdminReportsView: View {
                         .foregroundStyle(Theme.sub)
                 }
                 if loaded, items.isEmpty {
-                    EmptyBlock(text: "没有待处理的。")
+                    EmptyBlock(text: "没有待处理的")
                 }
                 ForEach(items) { r in
                     VStack(alignment: .leading, spacing: 8) {
@@ -164,7 +171,7 @@ struct AdminReportsView: View {
                             Text(r.listing.title).font(.body.weight(.semibold)).foregroundStyle(Theme.ink)
                         }
                         Text(r.reason + (r.note.isEmpty ? "" : "：\(r.note)")).font(.subheadline).foregroundStyle(Theme.sub)
-                        Text(r.listing.statusText).font(.caption).foregroundStyle(Theme.sub)
+                        Text(r.listing.statusText).font(.footnote).foregroundStyle(Theme.sub)
                         HStack(spacing: 6) {
                             ActionChip(text: "没问题") { run { try await API.shared.adminRestore(r.listing.id) } }
                             ActionChip(text: "删除", danger: true) { run { try await API.shared.delete(r.listing.id) } }
@@ -175,13 +182,13 @@ struct AdminReportsView: View {
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 18))
+                    
                 }
             }
             .padding(16)
         }
         .background(Theme.bg)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .task { await load() }
     }
 

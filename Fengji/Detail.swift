@@ -7,32 +7,48 @@ struct DetailView: View {
     @State var item: Listing
     @State private var gone = false
     @State private var editing = false
-    @State private var confirmDelete = false
+    @State private var confirmAdminDelete = false
     @State private var confirmBlock = false
     @State private var choosingReason = false
     @State private var shareImage: ShareImage?
     @State private var confirmTakedown = false
     @State private var claiming = false
+    @State private var heroBottom: CGFloat = 1000
 
     private var line: String {
-        let parts = item.isRent ? [item.rtype ?? "", item.place, item.period, item.rentFacts] : [item.cond ?? "", item.catLabel, item.place, item.pickupText]
+        let parts = item.isRent ? [item.rtype ?? "", item.place, item.period, item.rentFacts] : [item.catLabel, item.cond ?? "", item.place, item.pickupText]
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    hero
-                    info
+        GeometryReader { geo in
+            ZStack(alignment: .top) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        hero
+                            .background(GeometryReader { g in
+                                Color.clear.preference(key: HeroBottomKey.self, value: g.frame(in: .global).maxY)
+                            })
+                        info
+                    }
                 }
+                .background(Theme.bg)
+                .ignoresSafeArea(edges: .top)
+                .onPreferenceChange(HeroBottomKey.self) { heroBottom = $0 }
+                // 文字滚到时钟那里时，垫上页面底色
+                if heroBottom < geo.safeAreaInsets.top {
+                    Theme.bg.frame(height: 0).background(Theme.bg.ignoresSafeArea(edges: .top))
+                }
+                HStack {
+                    Spacer()
+                    moreMenu
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
             }
-            .background(Theme.bg)
-            .ignoresSafeArea(edges: .top)
-            topButtons
         }
         .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .bottom) {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if !gone { contactBar }
         }
         .task(id: state.version) { await reload() }
@@ -43,13 +59,14 @@ struct DetailView: View {
         .sheet(isPresented: $editing) {
             PostForm(kind: item.kind, editing: item) { item = $0 }
         }
+        .sheet(isPresented: $claiming) { ClaimView() }
         .confirmationDialog("举报这条", isPresented: $choosingReason, titleVisibility: .visible) {
             ForEach(REASONS, id: \.self) { reason in
                 Button(reason) { Task { await report(reason) } }
             }
         }
-        .alert("删除这条？", isPresented: $confirmDelete) {
-            Button("删除", role: .destructive) { Task { await remove() } }
+        .alert("删除这条？", isPresented: $confirmAdminDelete) {
+            Button("删除", role: .destructive) { Task { await adminRemove() } }
             Button("取消", role: .cancel) {}
         }
         .alert("要求下架？", isPresented: $confirmTakedown) {
@@ -58,7 +75,6 @@ struct DetailView: View {
         } message: {
             Text("立刻下架，照片一起删除。")
         }
-        .sheet(isPresented: $claiming) { ClaimView() }
         .alert("屏蔽这个人？", isPresented: $confirmBlock) {
             Button("屏蔽", role: .destructive) { Task { await block() } }
             Button("取消", role: .cancel) {}
@@ -75,12 +91,13 @@ struct DetailView: View {
                 if item.photos.count > 1 {
                     TabView {
                         ForEach(item.photos.indices, id: \.self) { i in
-                            ListingImage(item: item, index: i, maxPixel: 1600, showTag: false).clipped()
+                            ListingImage(item: item, index: i, maxPixel: 1600).clipped()
+                                .background(NoScrollsToTop())
                         }
                     }
                     .tabViewStyle(.page)
                 } else {
-                    ListingImage(item: item, maxPixel: 1600, showTag: false)
+                    ListingImage(item: item, maxPixel: 1600)
                 }
             }
             .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28))
@@ -104,41 +121,21 @@ struct DetailView: View {
                 .font(.subheadline)
                 .foregroundStyle(Theme.sub)
             if gone {
-                Warn(text: "这条已经没有了。")
+                Text("这条已经没有了").font(.subheadline).foregroundStyle(Theme.warn)
             } else if !item.isOn {
-                Warn(text: item.statusText)
+                Text(item.statusText).font(.subheadline).foregroundStyle(Theme.warn)
             }
-            if item.findInGroup, !gone { groupBlock }
+            if item.isGroup, !gone {
+                Text("\(item.groupAge)发在群里 · 未确认")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.sub)
+            }
             if !item.desc.isEmpty {
                 Text(item.desc)
                     .foregroundStyle(Theme.ink)
                     .lineSpacing(4)
                     .padding(.top, 6)
                     .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if let contact = item.contact, !contact.isEmpty, !gone {
-                HStack(spacing: 8) {
-                    Hexagon().fill(Theme.accent).frame(width: 18, height: 18)
-                    Text("微信 " + contact)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Theme.ink)
-                        .textSelection(.enabled)
-                }
-                .padding(.top, 8)
-            }
-            if item.isRent, !gone { Warn(text: "看房前别转押金，合同和房东身份自己核对。").padding(.top, 6) }
-            if !item.isGroup {
-                Text("发布于 " + item.ago)
-                    .font(.caption)
-                    .foregroundStyle(Theme.sub)
-                    .padding(.top, 6)
-            }
-            if item.mine, !gone {
-                HStack(spacing: 6) {
-                    ActionChip(text: "改") { editing = true }
-                    ActionChip(text: "删除", danger: true) { confirmDelete = true }
-                }
-                .padding(.top, 8)
             }
         }
         .padding(.horizontal, 20)
@@ -147,77 +144,41 @@ struct DetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// 群里搬来的：不给微信号，告诉去哪找；发布者可以认领或下架
-    private var groupBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("去 \(item.sourceGroup ?? "") 群找 \(item.sourcePoster ?? "")")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Theme.ink)
-            if item.isGroup {
-                Text("\(item.groupAge)发在群里。来自微信群，未经发布者确认。")
-                    .font(.footnote)
-                    .foregroundStyle(Theme.sub)
+    /// 所有次要动作都收在这里
+    private var moreMenu: some View {
+        Menu {
+            if !gone {
+                Button("分享图片", systemImage: "photo") {
+                    Task { shareImage = await ShareImage.make(item) }
+                }
+                Button("复制链接", systemImage: "link") {
+                    UIPasteboard.general.string = item.shareURL
+                    state.toast("链接已复制")
+                }
+                if item.contact?.isEmpty == false {
+                    Button("打开微信", systemImage: "message") { openWeChat(copying: item.contact ?? "", click: "copy") }
+                }
             }
-            if let ops = state.opsWechat {
-                HStack(spacing: 8) {
-                    Text("还没进群？加运营微信拉你")
-                        .font(.footnote)
-                        .foregroundStyle(Theme.ink)
-                    Spacer(minLength: 4)
-                    ActionChip(text: "复制") {
-                        UIPasteboard.general.string = ops
+            if item.mine, !gone {
+                Button("改", systemImage: "pencil") { editing = true }
+                Button("删除", systemImage: "trash", role: .destructive) {
+                    state.softDelete(item)
+                    dismiss()
+                }
+            }
+            if item.isGroup, !gone {
+                if state.opsWechat != nil {
+                    Button("是我的，认领", systemImage: "person.badge.plus") {
+                        if state.needLogin() { claiming = true }
+                    }
+                    Button("没进群？复制运营微信", systemImage: "person.2") {
+                        UIPasteboard.general.string = state.opsWechat
                         state.toast("已复制")
                     }
                 }
+                Button("要求下架", systemImage: "trash", role: .destructive) { confirmTakedown = true }
             }
-            if item.isGroup {
-                HStack(spacing: 6) {
-                    if state.opsWechat != nil {
-                        ActionChip(text: "是我的，认领") {
-                            if state.needLogin() { claiming = true }
-                        }
-                    }
-                    ActionChip(text: "要求下架", danger: true) { confirmTakedown = true }
-                }
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 14))
-        .padding(.top, 8)
-    }
-
-    private var topButtons: some View {
-        HStack(spacing: 8) {
-            GlassButton(symbol: "chevron.left", label: "返回") { dismiss() }
-            Spacer()
-            if !gone {
-                shareMenu
-                if !item.mine || state.isAdmin { moreMenu }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
-    }
-
-    private var shareMenu: some View {
-        Menu {
-            Button("分享图片", systemImage: "photo") {
-                Task { shareImage = await ShareImage.make(item) }
-            }
-            Button("复制链接", systemImage: "link") {
-                UIPasteboard.general.string = item.shareURL
-                state.toast("链接已复制")
-            }
-        } label: {
-            GlassLabel(symbol: "square.and.arrow.up")
-        }
-        .accessibilityLabel("分享")
-    }
-
-    private var moreMenu: some View {
-        Menu {
-            if !item.mine {
+            if !item.mine, !gone {
                 Button("举报", systemImage: "flag") { choosingReason = true }
                 if !item.isGroup {
                     Button("屏蔽这个人", systemImage: "hand.raised") {
@@ -225,11 +186,15 @@ struct DetailView: View {
                     }
                 }
             }
-            if state.isAdmin {
-                Button("管理员删除", systemImage: "trash", role: .destructive) { confirmDelete = true }
+            if state.isAdmin, !item.mine, !gone {
+                Button("管理员删除", systemImage: "trash", role: .destructive) { confirmAdminDelete = true }
             }
         } label: {
-            GlassLabel(symbol: "ellipsis")
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 38, height: 38)
+                .background(.black.opacity(0.35), in: Circle())
         }
         .accessibilityLabel("更多")
     }
@@ -237,42 +202,45 @@ struct DetailView: View {
     @ViewBuilder
     private var contactBar: some View {
         if let contact = item.contact, !contact.isEmpty {
-            HStack(spacing: 10) {
-                Button("复制微信号") {
-                    UIPasteboard.general.string = contact
-                    state.toast("已复制，去微信加对方")
-                    Task { try? await API.shared.countClick(item.id, "copy") }
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                Button("打开微信") {
-                    UIPasteboard.general.string = contact
-                    Task { try? await API.shared.countClick(item.id, "copy") }
-                    if let url = URL(string: "weixin://") { UIApplication.shared.open(url) }
-                }
-                .font(.body.weight(.medium))
-                .foregroundStyle(Theme.ink)
-                .frame(width: 100, height: 54)
-                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 17))
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 8)
-            .background(Theme.bg)
-        } else if item.findInGroup {
-            Button("去群里找") {
-                UIPasteboard.general.string = "\(item.sourceGroup ?? "") \(item.sourcePoster ?? "")"
-                Task { try? await API.shared.countClick(item.id, "group") }
-                if let url = URL(string: "weixin://") {
-                    UIApplication.shared.open(url) { opened in
-                        if !opened { state.toast("已复制群名和昵称") }
-                    }
+            Button {
+                UIPasteboard.general.string = contact
+                state.toast("已复制，去微信加对方")
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                Task { try? await API.shared.countClick(item.id, "copy") }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(contact)
+                    Image(systemName: "doc.on.doc").font(.system(size: 15))
                 }
             }
             .buttonStyle(PrimaryButtonStyle())
+            .accessibilityLabel("复制微信号 " + contact)
             .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 8)
+            .padding(.vertical, 8)
             .background(Theme.bg)
+        } else if item.findInGroup {
+            Button {
+                openWeChat(copying: "\(item.sourceGroup ?? "") \(item.sourcePoster ?? "")", click: "group")
+            } label: {
+                HStack(spacing: 8) {
+                    Text("\(item.sourceGroup ?? "") · \(item.sourcePoster ?? "")")
+                    Image(systemName: "arrow.right").font(.system(size: 15))
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .accessibilityLabel("去 \(item.sourceGroup ?? "") 群找 \(item.sourcePoster ?? "")")
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Theme.bg)
+        }
+    }
+
+    private func openWeChat(copying text: String, click: String) {
+        UIPasteboard.general.string = text
+        Task { try? await API.shared.countClick(item.id, click) }
+        guard let url = URL(string: "weixin://") else { return }
+        UIApplication.shared.open(url) { opened in
+            if !opened { state.toast("已复制") }
         }
     }
 
@@ -315,7 +283,7 @@ struct DetailView: View {
         }
     }
 
-    private func remove() async {
+    private func adminRemove() async {
         do {
             try await API.shared.delete(item.id)
             state.changed()
@@ -327,43 +295,29 @@ struct DetailView: View {
     }
 }
 
-struct Warn: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.footnote)
-            .foregroundStyle(Theme.warn)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.warnSoft, in: RoundedRectangle(cornerRadius: 12))
-    }
+private struct HeroBottomKey: PreferenceKey {
+    static var defaultValue: CGFloat = 1000
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
-/// 压在照片上的圆按钮
-struct GlassLabel: View {
-    let symbol: String
-
-    var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 38, height: 38)
-            .background(.black.opacity(0.35), in: Circle())
+/// 翻照片那个横向滚动不抢点状态栏回顶部
+private struct NoScrollsToTop: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        DispatchQueue.main.async {
+            var v = view.superview
+            while let x = v {
+                if let scroll = x as? UIScrollView {
+                    scroll.scrollsToTop = false
+                    break
+                }
+                v = x.superview
+            }
+        }
+        return view
     }
-}
 
-struct GlassButton: View {
-    let symbol: String
-    let label: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) { GlassLabel(symbol: symbol) }
-            .buttonStyle(.plain)
-            .accessibilityLabel(label)
-    }
+    func updateUIView(_ view: UIView, context: Context) {}
 }
 
 /// 导航栏藏了以后，边缘右滑返回还要能用
