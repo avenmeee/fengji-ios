@@ -2,7 +2,7 @@ import Foundation
 
 typealias Option = (key: String, label: String)
 
-let CATS: [Option] = [("art", "画材"), ("furn", "家具"), ("elec", "电子"), ("book", "书"), ("wear", "衣物"), ("other", "其他")]
+let CATS: [Option] = [("furn", "家具"), ("kitchen", "厨具家电"), ("elec", "电子"), ("art", "画材"), ("book", "书"), ("wear", "衣物"), ("other", "其他")]
 let ALL_OPTION: Option = ("all", "全部")
 
 func plainOptions(_ list: [String]) -> [Option] {
@@ -10,7 +10,7 @@ func plainOptions(_ list: [String]) -> [Option] {
 }
 
 let CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"]
-let RTYPES = ["整租", "合租", "转租"]
+let RTYPES = ["整租", "单间", "寒假短租", "转租"]
 let REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"]
 
 struct Photo: Codable, Hashable {
@@ -36,6 +36,11 @@ struct Listing: Codable, Identifiable, Hashable {
     var photos: [Photo]
     let createdAt: Int64
     let mine: Bool
+    var leaseEnd: String?
+    var utilities: Bool?
+    var privateBath: Bool?
+    var delivery: String?
+    var bumpedAt: Int64 = 0
 
     var isRent: Bool { kind == "rent" }
     var isOn: Bool { status == "on" }
@@ -61,6 +66,17 @@ struct Listing: Codable, Identifiable, Hashable {
         if let a { return "\(a) 起" }
         if let b { return "到 \(b)" }
         return ""
+    }
+
+    var deliveryText: String { delivery == "deliver" ? "可配送" : "自取" }
+
+    /// 租房的条件：包水电、独卫、租约到期
+    var rentFacts: String {
+        var parts: [String] = []
+        if utilities == true { parts.append("包水电") }
+        if privateBath == true { parts.append("独卫") }
+        if let end = Self.day(leaseEnd) { parts.append("租约到 \(end)") }
+        return parts.joined(separator: " · ")
     }
 
     var ago: String {
@@ -101,6 +117,10 @@ struct ListingInput: Encodable {
     let desc: String
     let contact: String
     let photos: [String]
+    var delivery: String?
+    var leaseEnd: String?
+    var utilities: Bool?
+    var privateBath: Bool?
 }
 
 struct Me: Codable {

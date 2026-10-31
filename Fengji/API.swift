@@ -10,7 +10,8 @@ struct APIError: LocalizedError {
 
     var errorDescription: String? {
         switch code {
-        case "not_allowed": return "内容不合规，改一下再发。"
+        case "not_allowed": return "这类内容不能发。"
+        case "too_soon": return "一天只能擦亮一次。"
         case "daily_limit": return "今天发得太多了，明天再试。"
         case "site_limit": return "今天传照片的人太多，明天再试。"
         case "too_many_listings": return "在架的太多了，先下架几条。"
@@ -93,6 +94,7 @@ final class API: @unchecked Sendable {
     func setStatus(_ id: String, _ status: String) async throws -> Listing {
         try await post("POST", "/v1/listings/\(id)/status", ["status": status])
     }
+    func bump(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/bump") }
     func countView(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/view") }
     func delete(_ id: String) async throws { try await act("DELETE", "/v1/listings/\(id)") }
     func upload(jpeg: Data) async throws -> String {

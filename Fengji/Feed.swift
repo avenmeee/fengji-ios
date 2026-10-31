@@ -279,6 +279,12 @@ struct RentRow: View {
                 .font(.footnote)
                 .foregroundStyle(Theme.sub)
                 .lineLimit(1)
+            if !item.rentFacts.isEmpty {
+                Text(item.rentFacts)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.sub)
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())

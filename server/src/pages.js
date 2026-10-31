@@ -13,6 +13,11 @@ img{width:100%;border-radius:14px;display:block;margin-bottom:8px}
 
 const contactLine = env => env.CONTACT_EMAIL ? `<a href="mailto:${esc(env.CONTACT_EMAIL)}">${esc(env.CONTACT_EMAIL)}</a>` : "（待公布）";
 
+function facts(row) {
+  if (row.kind !== "rent") return [row.place, row.delivery === "deliver" ? "可配送" : "自取"].join(" · ");
+  return [row.rtype, row.place, row.utilities ? "包水电" : "", row.private_bath ? "独卫" : "", row.lease_end ? `租约到 ${row.lease_end}` : ""].filter(Boolean).join(" · ");
+}
+
 export async function listingPage(env, url, id) {
   const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ? AND status = 'on'").bind(id).first();
   if (!row) return new Response(page("蜂集", "<h1>这条已经没有了</h1>").body, { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
@@ -22,7 +27,7 @@ export async function listingPage(env, url, id) {
   const app = env.APPSTORE_URL ? `<a class="btn" href="${esc(env.APPSTORE_URL)}">下载蜂集</a>` : "";
   return page(`${row.title} - 蜂集`, `${photos.map(p => `<img src="${esc(p)}" alt="">`).join("")}
     <h1>${esc(row.title)}</h1><div class="price">${esc(price)}</div>
-    <p class="sub">${esc(row.place)}</p>
+    <p class="sub">${esc(facts(row))}</p>
     ${row.descr ? `<p>${esc(row.descr)}</p>` : ""}
     <p>微信号：<b>${esc(row.contact)}</b></p>
     <p class="sub">同学自办，非学校官方。不经手钱，当面看过再付。</p>${app}`, head);

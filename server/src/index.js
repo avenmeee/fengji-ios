@@ -2,9 +2,10 @@
 import { exchangeCode, fetchAppleKeys, revokeToken, verifyIdentityToken } from "./apple.js";
 import { listingPage, privacyPage, supportPage } from "./pages.js";
 
-const CATS = ["furn", "elec", "art", "book", "wear", "other"];
+const CATS = ["furn", "kitchen", "elec", "art", "book", "wear", "other"];
 const CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"];
-const RTYPES = ["整租", "合租", "转租"];
+const RTYPES = ["整租", "单间", "寒假短租", "转租"];
+const BUMP_EVERY = 24 * 3600 * 1000;
 const REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"];
 const MAX_PHOTOS = 3, MAX_PHOTO_BYTES = 1_500_000;
 const AUTO_HIDE_REPORTS = 3;
@@ -13,7 +14,7 @@ const MAX_LIVE_LISTINGS = 50;
 const PAGE = 40;
 
 // 发布前过滤。命中就不让发（规则 1.2：要有过滤）。
-const BANNED = [/约炮/, /裸聊/, /援交/, /代孕/, /枪支/, /冰毒/, /大麻/, /代写/, /代考/, /假证/, /办证/, /赌博/, /博彩/, /\bescort\b/i, /\bcocaine\b/i, /\bfentanyl\b/i];
+const BANNED = [/约炮/, /裸聊/, /援交/, /代孕/, /枪支/, /冰毒/, /大麻/, /代写/, /代考/, /假证/, /办证/, /毕业证/, /学位证/, /学历认证/, /学位认证/, /留服认证/, /代办/, /成绩单/, /换汇/, /代换/, /换美元/, /换美金/, /换人民币/, /美元换/, /美金换/, /人民币换/, /\bdiploma\b/i, /赌博/, /博彩/, /\bescort\b/i, /\bcocaine\b/i, /\bfentanyl\b/i];
 
 class Fail extends Error {
   constructor(status, code) { super(code); this.status = status; this.code = code; }
@@ -120,15 +121,17 @@ function checkListing(b, userId) {
     if (typeof k !== "string" || !k.startsWith(userId + "/") || !/^[0-9a-f]+\/[0-9a-f]+\.jpg$/.test(k)) throw new Fail(400, "bad_photo");
   }
 
-  const out = { kind, title, price, place, descr, contact, photos: JSON.stringify(photos), cat: null, cond: null, rtype: null, from_date: null, to_date: null };
+  const out = { kind, title, price, place, descr, contact, photos: JSON.stringify(photos), cat: null, cond: null, rtype: null, from_date: null, to_date: null, lease_end: null, utilities: 0, private_bath: 0, delivery: null };
   if (kind === "goods") {
     if (!CATS.includes(b.cat)) throw new Fail(400, "bad_cat");
     if (!CONDS.includes(b.cond)) throw new Fail(400, "bad_cond");
-    out.cat = b.cat; out.cond = b.cond;
+    if (b.delivery !== "pickup" && b.delivery !== "deliver") throw new Fail(400, "bad_delivery");
+    out.cat = b.cat; out.cond = b.cond; out.delivery = b.delivery;
   } else {
     if (!RTYPES.includes(b.rtype)) throw new Fail(400, "bad_rtype");
     const date = v => (v === "" || v == null) ? null : (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : (() => { throw new Fail(400, "bad_date"); })());
-    out.rtype = b.rtype; out.from_date = date(b.from); out.to_date = date(b.to);
+    out.rtype = b.rtype; out.from_date = date(b.from); out.to_date = date(b.to); out.lease_end = date(b.leaseEnd);
+    out.utilities = b.utilities ? 1 : 0; out.private_bath = b.privateBath ? 1 : 0;
     if (out.from_date && out.to_date && out.from_date > out.to_date) throw new Fail(400, "bad_date");
   }
   return out;
@@ -139,10 +142,11 @@ function view(row, origin, viewer) {
   return {
     id: row.id, uid: row.user_id, kind: row.kind, title: row.title, price: row.price,
     cat: row.cat, cond: row.cond, rtype: row.rtype, from: row.from_date, to: row.to_date,
+    leaseEnd: row.lease_end, utilities: !!row.utilities, privateBath: !!row.private_bath, delivery: row.delivery,
     place: row.place, desc: row.descr, status: row.status,
     contact: row.contact,
     photos: JSON.parse(row.photos).map(k => ({ key: k, url: `${origin}/p/${k}` })),
-    createdAt: row.created_at, mine
+    createdAt: row.created_at, bumpedAt: row.bumped_at, mine
   };
 }
 
@@ -159,10 +163,10 @@ async function feed(req, env, url) {
     args.push(like, like, like);
   }
   const before = Number(p.get("before"));
-  if (before > 0) { where.push("l.created_at < ?"); args.push(before); }
+  if (before > 0) { where.push("l.bumped_at < ?"); args.push(before); }
   if (viewer) { where.push("l.user_id NOT IN (SELECT blocked_id FROM blocks WHERE user_id = ?)"); args.push(viewer.id); }
-  const rows = (await env.DB.prepare(`SELECT l.* FROM listings l WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT ?`).bind(...args, PAGE).all()).results;
-  return json({ items: rows.map(r => view(r, url.origin, viewer)), next: rows.length === PAGE ? rows[rows.length - 1].created_at : null });
+  const rows = (await env.DB.prepare(`SELECT l.* FROM listings l WHERE ${where.join(" AND ")} ORDER BY l.bumped_at DESC LIMIT ?`).bind(...args, PAGE).all()).results;
+  return json({ items: rows.map(r => view(r, url.origin, viewer)), next: rows.length === PAGE ? rows[rows.length - 1].bumped_at : null });
 }
 
 async function oneListing(req, env, url, id) {
@@ -187,8 +191,8 @@ async function createListing(req, env, url) {
   if (await bump(env, u.id, "post") > LIMITS.post) throw new Fail(429, "daily_limit");
   const id = newId(), now = Date.now();
   await bump(env, "*", "post");
-  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, rtype, from_date, to_date, place, descr, contact, photos, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?)")
-    .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.rtype, v.from_date, v.to_date, v.place, v.descr, v.contact, v.photos, now, now).run();
+  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, rtype, from_date, to_date, lease_end, utilities, private_bath, delivery, place, descr, contact, photos, status, created_at, updated_at, bumped_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?)")
+    .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.rtype, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.place, v.descr, v.contact, v.photos, now, now, now).run();
   const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
   return json(view(row, url.origin, u), 201);
 }
@@ -206,8 +210,8 @@ async function updateListing(req, env, url, id) {
   if (row.status === "hidden") throw new Fail(403, "hidden");
   const v = checkListing(await bodyOf(req), u.id);
   if (v.kind !== row.kind) throw new Fail(400, "bad_kind");
-  await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, rtype=?, from_date=?, to_date=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
-    .bind(v.title, v.price, v.cat, v.cond, v.rtype, v.from_date, v.to_date, v.place, v.descr, v.contact, v.photos, Date.now(), id).run();
+  await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, rtype=?, from_date=?, to_date=?, lease_end=?, utilities=?, private_bath=?, delivery=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
+    .bind(v.title, v.price, v.cat, v.cond, v.rtype, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.place, v.descr, v.contact, v.photos, Date.now(), id).run();
   const kept = new Set(JSON.parse(v.photos));
   await removePhotos(env, JSON.parse(row.photos).filter(k => !kept.has(k)));
   const next = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
@@ -224,6 +228,17 @@ async function setStatus(req, env, url, id) {
   if (status === "off" && row.status === "on") await bump(env, "*", "sold");
   const next = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
   return json(view(next, url.origin, u));
+}
+
+// 擦亮：顶回最新，一条一天一次
+async function bumpListing(req, env, url, id) {
+  const u = await needUser(req, env);
+  const row = await ownedOrFail(env, id, u);
+  if (row.status !== "on") throw new Fail(400, "not_on");
+  const now = Date.now();
+  if (now - row.bumped_at < BUMP_EVERY) throw new Fail(429, "too_soon");
+  await env.DB.prepare("UPDATE listings SET bumped_at=? WHERE id=?").bind(now, id).run();
+  return json(view({ ...row, bumped_at: now }, url.origin, u));
 }
 
 async function removePhotos(env, keys) {
@@ -342,7 +357,7 @@ async function logout(req, env) {
 // ---- 管理 ----
 async function adminReports(req, env, url) {
   await needAdmin(req, env);
-  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.rtype, l.from_date, l.to_date, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
+  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.rtype, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
     FROM reports r JOIN listings l ON l.id = r.listing_id WHERE r.status = 'open' ORDER BY r.created_at DESC LIMIT 100`).all()).results;
   return json({ items: rows.map(r => ({ id: r.id, reason: r.reason, note: r.note, at: r.at, reporter: r.reporter, listing: view({ ...r, id: r.lid }, url.origin, { id: "admin" }) })) });
 }
@@ -413,6 +428,7 @@ async function route(req, env) {
     if (method === "DELETE") return deleteListing(req, env, m[1]);
   }
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/status$/.exec(path))) return setStatus(req, env, url, m[1]);
+  if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/bump$/.exec(path))) return bumpListing(req, env, url, m[1]);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/view$/.exec(path))) return countView(env, m[1]);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/report$/.exec(path))) return report(req, env, m[1]);
 

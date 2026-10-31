@@ -59,6 +59,7 @@ struct Tint {
         if item.kind == "rent" { return Tint(bg: dyn(0xE8EAE2, 0x383C33), fg: dyn(0x55624A, 0xB4C2A4), symbol: "house") }
         switch item.cat {
         case "furn": return Tint(bg: dyn(0xF1E8D8, 0x423A2C), fg: dyn(0x8A6A35, 0xD9BC85), symbol: "sofa")
+        case "kitchen": return Tint(bg: dyn(0xF3E9DC, 0x43382B), fg: dyn(0x9A6A3A, 0xDDB78C), symbol: "fork.knife")
         case "elec": return Tint(bg: dyn(0xDFE7F0, 0x2F3A47), fg: dyn(0x3F628A, 0x9DBBDD), symbol: "desktopcomputer")
         case "art": return Tint(bg: dyn(0xF6DFD7, 0x46322B), fg: dyn(0xB04E33, 0xE58A6D), symbol: "paintbrush.pointed")
         case "book": return Tint(bg: dyn(0xE2EDE4, 0x30402F), fg: dyn(0x4B7A55, 0x8FBE99), symbol: "book")

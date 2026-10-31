@@ -14,7 +14,7 @@ const call = async (method, path, { token, body, raw } = {}) => {
 const stamp = Date.now().toString(36);
 const login = async n => (await call("POST", "/v1/auth/dev", { body: { name: n + stamp } })).data;
 const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
-const goods = { kind: "goods", title: "宜家书桌", price: 40, cat: "furn", cond: "几乎全新", place: "学校门口", desc: "九成新", contact: "wx_seller", photos: [] };
+const goods = { kind: "goods", title: "宜家书桌", price: 40, cat: "furn", cond: "几乎全新", place: "学校门口", desc: "九成新", contact: "wx_seller", delivery: "pickup", photos: [] };
 let n = 0;
 const ok = (name, cond, extra) => { n++; assert.ok(cond, name + " " + JSON.stringify(extra ?? "")); console.log("ok", name); };
 
@@ -40,6 +40,12 @@ r = await call("POST", "/v1/listings", { token: a.token, body: { ...goods, title
 ok("违禁词拒", r.status === 422, r);
 r = await call("POST", "/v1/listings", { token: a.token, body: { ...goods, price: 1.5 } });
 ok("价格要整数", r.status === 400, r);
+for (const word of ["代办成绩单", "学历认证", "毕业证", "换汇 7.2", "人民币换美元"]) {
+  r = await call("POST", "/v1/listings", { token: a.token, body: { ...goods, title: word } });
+  ok("拦下：" + word, r.status === 422, r);
+}
+r = await call("POST", "/v1/listings", { token: a.token, body: { ...goods, delivery: undefined } });
+ok("要选自取或配送", r.status === 400, r);
 
 r = await call("POST", "/v1/listings", { token: a.token, body: { ...goods, photos: [key] } });
 ok("发布", r.status === 201 && r.data.photos[0].key === key, r);
@@ -95,18 +101,25 @@ ok("三人举报自动下架", !r.data.items.some(x => x.id === id));
 r = await call("GET", "/v1/admin/reports", { token: a.token });
 ok("普通人进不了管理", r.status === 403, r);
 
-const rent = { kind: "rent", title: "一室一厅", price: 800, rtype: "转租", from: "2027-01-01", to: "2027-05-01", place: "Starland", contact: "wx_rent", photos: [] };
+const rent = { kind: "rent", title: "一室一厅", price: 800, rtype: "寒假短租", from: "2027-01-01", to: "2027-05-01", leaseEnd: "2027-06-30", utilities: true, privateBath: true, place: "Starland", contact: "wx_rent", photos: [] };
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, from: "2027-06-01" } });
 ok("起止日期反了拒", r.status === 400, r);
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, price: 0 } });
 ok("租金 0 拒", r.status === 400, r);
 r = await call("POST", "/v1/listings", { token: b.token, body: rent });
-ok("发房源", r.status === 201 && r.data.rtype === "转租", r);
+ok("发房源", r.status === 201 && r.data.rtype === "寒假短租" && r.data.utilities === true && r.data.privateBath === true && r.data.leaseEnd === "2027-06-30", r);
 const rid = r.data.id;
-r = await call("GET", "/v1/listings?kind=rent&rtype=" + encodeURIComponent("转租"));
+r = await call("GET", "/v1/listings?kind=rent&rtype=" + encodeURIComponent("寒假短租"));
 ok("房源能筛", r.data.items.some(x => x.id === rid));
 r = await call("GET", "/v1/listings?kind=rent&rtype=" + encodeURIComponent("整租"));
 ok("房源筛掉别的", !r.data.items.some(x => x.id === rid));
+r = await call("POST", `/v1/listings/${rid}/bump`, { token: b.token });
+ok("刚发不能擦亮", r.status === 429 && r.data.error === "too_soon", r);
+r = await call("POST", "/v1/listings", { token: c.token, body: { ...goods, title: "厨具一套", cat: "kitchen" } });
+const older = r.data.id;
+ok("厨具家电分类", r.status === 201 && r.data.cat === "kitchen", r);
+r = await call("POST", `/v1/listings/${older}/bump`, { token: a.token });
+ok("别人不能擦亮", r.status === 401 || r.status === 403, r);
 r = await call("DELETE", "/v1/listings/" + rid, { token: c.token });
 ok("别人不能删", r.status === 403, r);
 r = await call("DELETE", "/v1/listings/" + rid, { token: b.token });
@@ -128,6 +141,13 @@ ok("删号带走条目", !r.data.items.some(x => x.id === did));
 // 管理：本机库里把 c 设成管理员
 import { execSync } from "node:child_process";
 execSync(`npx wrangler d1 execute fengji --local --command "UPDATE users SET is_admin = 1 WHERE id = '${c.me.id}'"`, { stdio: "ignore" });
+execSync(`npx wrangler d1 execute fengji --local --command "UPDATE listings SET bumped_at = 1000 WHERE id = '${older}'"`, { stdio: "ignore" });
+r = await call("GET", "/v1/listings?kind=goods&cat=kitchen");
+const beforeBump = r.data.items.find(x => x.id === older).bumpedAt;
+r = await call("POST", `/v1/listings/${older}/bump`, { token: c.token });
+ok("过了一天能擦亮", r.status === 200 && r.data.bumpedAt > beforeBump, r);
+r = await call("POST", `/v1/listings/${older}/bump`, { token: c.token });
+ok("擦亮限频", r.status === 429, r);
 r = await call("GET", "/v1/me", { token: c.token });
 ok("管理员身份", r.data.isAdmin === true, r);
 r = await call("GET", "/v1/admin/reports", { token: c.token });

@@ -26,7 +26,7 @@ struct ShareCard: View {
                     .font(.largeTitle.weight(.bold))
                     .monospacedDigit()
                     .foregroundStyle(item.price == 0 ? Theme.sell : Theme.ink)
-                Text(item.isRent ? [item.place, item.period].filter { !$0.isEmpty }.joined(separator: " · ") : item.place)
+                Text(item.isRent ? [item.place, item.period].filter { !$0.isEmpty }.joined(separator: " · ") : item.place + " · " + item.deliveryText)
                     .font(.subheadline)
                     .foregroundStyle(Theme.sub)
                 if let contact = item.contact {

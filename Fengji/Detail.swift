@@ -13,7 +13,7 @@ struct DetailView: View {
     @State private var shareImage: ShareImage?
 
     private var line: String {
-        let parts = item.isRent ? [item.rtype ?? "", item.place, item.period] : [item.cond ?? "", item.catLabel, item.place]
+        let parts = item.isRent ? [item.rtype ?? "", item.place, item.period, item.rentFacts] : [item.cond ?? "", item.catLabel, item.place, item.deliveryText]
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 

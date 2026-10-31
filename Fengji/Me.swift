@@ -5,7 +5,7 @@ struct MeView: View {
     @EnvironmentObject var state: AppState
     @State private var items: [Listing] = []
     @State private var phase: FeedModel.Phase = .loading
-    @State private var postingGoods = Demo.scene == "form"
+    @State private var postingGoods = Demo.scene == "form" || Demo.scene == "posted"
     @State private var postingRent = Demo.scene == "rentform"
     @State private var editing: Listing?
     @State private var deleting: Listing?
@@ -47,7 +47,7 @@ struct MeView: View {
                     } else {
                         LazyVStack(spacing: 8) {
                             ForEach(items) { item in
-                                MineRow(item: item, toggle: { Task { await toggle(item) } }, edit: { editing = item }, delete: { deleting = item })
+                                MineRow(item: item, toggle: { Task { await toggle(item) } }, bump: { Task { await bump(item) } }, edit: { editing = item }, delete: { deleting = item })
                             }
                         }
                     }
@@ -104,6 +104,16 @@ struct MeView: View {
         }
     }
 
+    private func bump(_ item: Listing) async {
+        do {
+            try await API.shared.bump(item.id)
+            state.changed()
+            state.toast("擦亮了")
+        } catch {
+            state.toast(error.localizedDescription)
+        }
+    }
+
     private func remove(_ item: Listing) async {
         do {
             try await API.shared.delete(item.id)
@@ -118,6 +128,7 @@ struct MeView: View {
 struct MineRow: View {
     let item: Listing
     let toggle: () -> Void
+    let bump: () -> Void
     let edit: () -> Void
     let delete: () -> Void
 
@@ -147,6 +158,7 @@ struct MineRow: View {
             HStack(spacing: 6) {
                 if item.status != "hidden" {
                     ActionChip(text: item.isOn ? (item.isRent ? "标记已租" : "标记已卖") : "重新上架", action: toggle)
+                    if item.isOn { ActionChip(text: "擦亮", action: bump) }
                     ActionChip(text: "改", action: edit)
                 }
                 ActionChip(text: "删除", danger: true, action: delete)

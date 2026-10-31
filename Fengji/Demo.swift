@@ -14,7 +14,7 @@ enum Demo {
 
     static var initialTab: AppTab {
         switch scene {
-        case "me", "form", "rentform", "settings": return .me
+        case "me", "form", "posted", "rentform", "settings": return .me
         case "rent", "rentdetail": return .rent
         default: return .buy
         }
@@ -63,11 +63,11 @@ enum DemoServer {
     }
 
     static func goods(_ id: Int, _ title: String, _ price: Int, _ cat: String, _ cond: String, _ place: String, photos: [Photo] = [], mine: Bool = false, status: String = "on") -> Listing {
-        Listing(id: "g\(id)", uid: mine ? "me" : "u\(id)", kind: "goods", title: title, price: price, cat: cat, cond: cond, rtype: nil, from: nil, to: nil, place: place, desc: id == 1 ? "搬家出，桌面没有划痕。自己来拿。" : "", status: status, contact: "wx_demo\(id)", photos: photos, createdAt: now - Int64(id) * 3_400_000, mine: mine)
+        Listing(id: "g\(id)", uid: mine ? "me" : "u\(id)", kind: "goods", title: title, price: price, cat: cat, cond: cond, rtype: nil, from: nil, to: nil, place: place, desc: id == 1 ? "搬家出，桌面没有划痕。自己来拿。" : "", status: status, contact: "wx_demo\(id)", photos: photos, createdAt: now - Int64(id) * 3_400_000, mine: mine, delivery: id == 3 ? "deliver" : "pickup")
     }
 
     static func rent(_ id: Int, _ title: String, _ price: Int, _ type: String, _ place: String, photos: [Photo] = []) -> Listing {
-        Listing(id: "r\(id)", uid: "u\(id + 20)", kind: "rent", title: title, price: price, cat: nil, cond: nil, rtype: type, from: "2027-01-05", to: "2027-05-20", place: place, desc: "", status: "on", contact: "wx_rent\(id)", photos: photos, createdAt: now - Int64(id) * 7_000_000, mine: false)
+        Listing(id: "r\(id)", uid: "u\(id + 20)", kind: "rent", title: title, price: price, cat: nil, cond: nil, rtype: type, from: "2027-01-05", to: "2027-05-20", place: place, desc: "", status: "on", contact: "wx_rent\(id)", photos: photos, createdAt: now - Int64(id) * 7_000_000, mine: false, leaseEnd: "2027-05-31", utilities: id == 1, privateBath: id != 2)
     }
 
     static let goodsList: [Listing] = [
@@ -77,13 +77,13 @@ enum DemoServer {
         goods(4, "素描纸一箱", 0, "art", "全新", "Arnold Hall"),
         goods(5, "设计史教材", 15, "book", "有点旧", "学校门口", photos: [photo("c1")]),
         goods(6, "羽绒服 M 码", 30, "wear", "几乎全新", "Victory Dr"),
-        goods(7, "小冰箱", 50, "other", "有使用痕迹", "Forsyth Park"),
+        goods(7, "小冰箱", 50, "kitchen", "有使用痕迹", "Forsyth Park"),
         goods(8, "台灯", 8, "furn", "几乎全新", "学校门口")
     ]
 
     static let rentList: [Listing] = [
         rent(1, "一室一厅，走路到学校 10 分钟", 950, "转租", "Starland 附近", photos: [photo("d1")]),
-        rent(2, "两室找室友", 620, "合租", "Victory Dr"),
+        rent(2, "单间，寒假可住", 620, "寒假短租", "Victory Dr"),
         rent(3, "独栋一层，带院子", 1400, "整租", "Ardsley Park")
     ]
 

@@ -24,18 +24,23 @@ CREATE TABLE IF NOT EXISTS listings (
   price INTEGER NOT NULL,        -- 美元，goods 填 0 是免费送；rent 是每月租金
   cat TEXT,                      -- goods：furn elec art book wear other
   cond TEXT,                     -- goods：成色
-  rtype TEXT,                    -- rent：整租 合租 转租
+  rtype TEXT,                    -- rent：整租 单间 寒假短租 转租
   from_date TEXT,                -- rent：YYYY-MM-DD
   to_date TEXT,
+  lease_end TEXT,                -- rent：租约到期日
+  utilities INTEGER NOT NULL DEFAULT 0,     -- rent：包水电
+  private_bath INTEGER NOT NULL DEFAULT 0,  -- rent：独卫
+  delivery TEXT,                 -- goods：pickup 自取；deliver 可配送
   place TEXT NOT NULL,
   descr TEXT NOT NULL DEFAULT '',
   contact TEXT NOT NULL,         -- 微信号，只给登录的人看
   photos TEXT NOT NULL DEFAULT '[]',
   status TEXT NOT NULL DEFAULT 'on',  -- on 在架；off 已卖 / 已租；hidden 被举报下架
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  bumped_at INTEGER NOT NULL DEFAULT 0      -- 擦亮时间，列表按它排
 );
-CREATE INDEX IF NOT EXISTS listings_feed ON listings(kind, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS listings_feed ON listings(kind, status, bumped_at DESC);
 CREATE INDEX IF NOT EXISTS listings_user ON listings(user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS reports (

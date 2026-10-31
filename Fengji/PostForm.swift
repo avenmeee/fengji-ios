@@ -55,6 +55,12 @@ struct PostForm: View {
     @State private var to: Date
     @State private var place: String
     @State private var desc: String
+    @State private var delivery: String
+    @State private var utilities: Bool
+    @State private var privateBath: Bool
+    @State private var hasLeaseEnd: Bool
+    @State private var leaseEnd: Date
+    @State private var posted = Demo.scene == "posted"
     @State private var contact: String
     @State private var photos: [FormPhoto]
     @State private var picked: [PhotosPickerItem] = []
@@ -75,7 +81,7 @@ struct PostForm: View {
         self.onSaved = onSaved
         _title = State(initialValue: editing?.title ?? "")
         _price = State(initialValue: editing.map { String($0.price) } ?? "")
-        _cat = State(initialValue: editing?.cat ?? "art")
+        _cat = State(initialValue: editing?.cat ?? UserDefaults.standard.string(forKey: "cat") ?? "furn")
         _cond = State(initialValue: editing?.cond ?? "几乎全新")
         _rtype = State(initialValue: editing?.rtype ?? "转租")
         let today = Date()
@@ -83,6 +89,12 @@ struct PostForm: View {
         _to = State(initialValue: editing?.to.flatMap { Self.dayFormat.date(from: $0) } ?? today.addingTimeInterval(90 * 86400))
         _place = State(initialValue: editing?.place ?? (kind == "goods" ? UserDefaults.standard.string(forKey: "place") ?? "" : ""))
         _desc = State(initialValue: editing?.desc ?? "")
+        _delivery = State(initialValue: editing?.delivery ?? UserDefaults.standard.string(forKey: "delivery") ?? "pickup")
+        _utilities = State(initialValue: editing?.utilities ?? false)
+        _privateBath = State(initialValue: editing?.privateBath ?? false)
+        let lease = editing?.leaseEnd.flatMap { Self.dayFormat.date(from: $0) }
+        _hasLeaseEnd = State(initialValue: lease != nil)
+        _leaseEnd = State(initialValue: lease ?? today.addingTimeInterval(180 * 86400))
         _contact = State(initialValue: editing?.contact ?? UserDefaults.standard.string(forKey: "contact") ?? "")
         _photos = State(initialValue: (editing?.photos ?? []).map { FormPhoto.existing($0) })
     }
@@ -92,64 +104,103 @@ struct PostForm: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 14) {
-                    field("照片（最多 3 张）") { photoRow }
-                    field(isRent ? "房子" : "卖什么") {
-                        Input(placeholder: isRent ? "一室一厅，走路到学校 10 分钟" : "宜家书桌，九成新", text: $title)
-                    }
-                    field(isRent ? "每月租金（美元）" : "价格（美元，0 是免费送）") {
-                        Input(placeholder: "", text: $price).keyboardType(.numberPad)
-                    }
-                    if isRent {
-                        field("类型") { options(plainOptions(RTYPES), $rtype) }
-                        HStack(spacing: 10) {
-                            field("起") { dateBox($from) }
-                            field("止") { dateBox($to) }
-                        }
-                    } else {
-                        field("分类") { options(CATS, $cat) }
-                        field("成色") { options(plainOptions(CONDS), $cond) }
-                    }
-                    field(isRent ? "地段" : "在哪拿") {
-                        Input(placeholder: isRent ? "Starland 附近" : "学校门口", text: $place)
-                    }
-                    field("备注（选填）") {
-                        TextEditor(text: $desc)
-                            .scrollContentBackground(.hidden)
-                            .frame(minHeight: 88)
-                            .padding(6)
-                            .background(Theme.fill, in: RoundedRectangle(cornerRadius: 12))
-                    }
-                    field("微信号（所有人能看到）") {
-                        Input(placeholder: "", text: $contact)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    }
-                    if let error {
-                        Text(error).font(.subheadline).foregroundStyle(Theme.warn)
-                    }
-                    Button(busy ? "正在发…" : (editing == nil ? "发布" : "保存")) {
-                        Task { await submit() }
-                    }
-                    .buttonStyle(PrimaryButtonStyle(act: formAct))
-                    .disabled(busy)
-                }
-                .padding(16)
-            }
-            .background(Theme.bg)
-            .scrollDismissesKeyboard(.interactively)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }.disabled(busy)
-                }
+            if posted {
+                postedView
+            } else {
+                form
             }
         }
         .interactiveDismissDisabled(busy)
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }
             Task { await addPicked(items) }
+        }
+    }
+
+    /// 发完：再发一件时地点、微信号、分类都带上，只填照片、名字、价格
+    private var postedView: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Hexagon().fill(Theme.accent).frame(width: 56, height: 56)
+            Text("发好了").font(.title3.weight(.semibold)).foregroundStyle(Theme.ink)
+            Spacer()
+            Button("再发一件") {
+                title = ""
+                price = ""
+                desc = ""
+                photos = []
+                error = nil
+                posted = false
+            }
+            .buttonStyle(PrimaryButtonStyle(act: formAct))
+            Button("完成") { dismiss() }
+                .font(.body.weight(.medium))
+                .foregroundStyle(Theme.ink)
+                .frame(height: 44)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(Theme.bg)
+    }
+
+    private var form: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                field("照片（最多 3 张）") { photoRow }
+                field(isRent ? "房子" : "卖什么") {
+                    Input(placeholder: isRent ? "一室一厅，走路到学校 10 分钟" : "宜家书桌，九成新", text: $title)
+                }
+                field(isRent ? "每月租金（美元）" : "价格（美元，0 是免费送）") {
+                    Input(placeholder: "", text: $price).keyboardType(.numberPad)
+                }
+                if isRent {
+                    field("类型") { options(plainOptions(RTYPES), $rtype) }
+                    HStack(spacing: 10) {
+                        field("起") { dateBox($from) }
+                        field("止") { dateBox($to) }
+                    }
+                    Toggle("包水电", isOn: $utilities).tint(Theme.rent)
+                    Toggle("独卫", isOn: $privateBath).tint(Theme.rent)
+                    Toggle("写租约到期日", isOn: $hasLeaseEnd).tint(Theme.rent)
+                    if hasLeaseEnd { dateBox($leaseEnd) }
+                } else {
+                    field("分类") { options(CATS, $cat) }
+                    field("成色") { options(plainOptions(CONDS), $cond) }
+                    field("怎么拿") { options([(key: "pickup", label: "自取"), (key: "deliver", label: "可配送")], $delivery) }
+                }
+                field(isRent ? "地段" : "在哪拿") {
+                    Input(placeholder: "monty、downtown、TP", text: $place)
+                }
+                field("备注（选填）") {
+                    TextEditor(text: $desc)
+                        .scrollContentBackground(.hidden)
+                        .frame(minHeight: 88)
+                        .padding(6)
+                        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 12))
+                }
+                field("微信号（所有人能看到）") {
+                    Input(placeholder: "", text: $contact)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+                if let error {
+                    Text(error).font(.subheadline).foregroundStyle(Theme.warn)
+                }
+                Button(busy ? "正在发…" : (editing == nil ? "发布" : "保存")) {
+                    Task { await submit() }
+                }
+                .buttonStyle(PrimaryButtonStyle(act: formAct))
+                .disabled(busy)
+            }
+            .padding(16)
+        }
+        .background(Theme.bg)
+        .scrollDismissesKeyboard(.interactively)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消") { dismiss() }.disabled(busy)
+            }
         }
     }
 
@@ -254,9 +305,13 @@ struct PostForm: View {
                 input.rtype = rtype
                 input.from = Self.dayFormat.string(from: from)
                 input.to = Self.dayFormat.string(from: to)
+                input.leaseEnd = hasLeaseEnd ? Self.dayFormat.string(from: leaseEnd) : nil
+                input.utilities = utilities
+                input.privateBath = privateBath
             } else {
                 input.cat = cat
                 input.cond = cond
+                input.delivery = delivery
             }
             let saved: Listing
             if let editing {
@@ -265,12 +320,20 @@ struct PostForm: View {
                 saved = try await API.shared.create(input)
             }
             UserDefaults.standard.set(c, forKey: "contact")
-            if !isRent { UserDefaults.standard.set(p, forKey: "place") }
+            if !isRent {
+                UserDefaults.standard.set(p, forKey: "place")
+                UserDefaults.standard.set(cat, forKey: "cat")
+                UserDefaults.standard.set(delivery, forKey: "delivery")
+            }
             onSaved?(saved)
             state.changed()
-            state.toast(editing == nil ? "发好了" : "改好了")
             if editing == nil { state.tab = .me }
-            dismiss()
+            if editing == nil, !isRent {
+                posted = true
+            } else {
+                state.toast(editing == nil ? "发好了" : "改好了")
+                dismiss()
+            }
         } catch {
             self.error = error.localizedDescription
         }
