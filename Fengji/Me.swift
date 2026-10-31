@@ -171,7 +171,7 @@ struct MineRow: View {
                 HStack(spacing: 10) {
                     Color.clear
                         .frame(width: 56, height: 56)
-                        .overlay { ListingImage(item: item, maxPixel: 200) }
+                        .overlay { ListingImage(item: item, maxPixel: 200, showTag: false) }
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.title).font(.subheadline).foregroundStyle(Theme.ink).lineLimit(1)
