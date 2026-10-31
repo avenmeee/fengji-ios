@@ -208,12 +208,39 @@ struct CategoryBar: View {
 
 // MARK: - 买东西
 
+/// 画廊的节奏：一张大图、两张小图交替
+private enum GalleryRow: Identifiable {
+    case big(Listing)
+    case pair(Listing, Listing?)
+
+    var id: String {
+        switch self {
+        case .big(let a): return a.id
+        case .pair(let a, _): return a.id
+        }
+    }
+}
+
 struct BuyView: View {
     @EnvironmentObject var state: AppState
     @StateObject private var model = FeedModel(kind: "goods")
-    @State private var path: [Listing] = []
+    @State private var path = NavigationPath()
+    @State private var demoOpened = false
 
-    private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+    private var rows: [GalleryRow] {
+        let items = model.items.filter { $0.id != state.pendingDelete?.id }
+        var out: [GalleryRow] = []
+        var i = 0
+        while i < items.count {
+            out.append(.big(items[i]))
+            i += 1
+            if i < items.count {
+                out.append(.pair(items[i], i + 1 < items.count ? items[i + 1] : nil))
+                i += 2
+            }
+        }
+        return out
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -223,7 +250,7 @@ struct BuyView: View {
                 }
                 ScrollViewReader { proxy in
                     ScrollView {
-                        VStack(spacing: 18) {
+                        VStack(spacing: 22) {
                             Color.clear.frame(height: 0).id("top")
                             if model.items.isEmpty {
                                 if model.phase == .ok {
@@ -232,11 +259,21 @@ struct BuyView: View {
                                     PhaseBlock(phase: model.phase)
                                 }
                             } else {
-                                LazyVGrid(columns: columns, spacing: 18) {
-                                    ForEach(model.items.filter { $0.id != state.pendingDelete?.id }) { item in
-                                        NavigationLink(value: item) { GoodsCard(item: item) }
-                                            .buttonStyle(.plain)
-                                            .task { await model.loadMoreIfNeeded(item) }
+                                LazyVStack(spacing: 22) {
+                                    ForEach(rows) { row in
+                                        switch row {
+                                        case .big(let item):
+                                            card(item, aspect: 1.0)
+                                        case .pair(let a, let b):
+                                            HStack(alignment: .top, spacing: 16) {
+                                                card(a, aspect: 0.8)
+                                                if let b {
+                                                    card(b, aspect: 0.8)
+                                                } else {
+                                                    Color.clear.frame(maxWidth: .infinity)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -256,34 +293,54 @@ struct BuyView: View {
             .background(Theme.bg)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
+            .navigationDestination(for: String.self) { route in
+                if route == "me" { MeView(path: $path) } else { SettingsView() }
+            }
             .reloads(model, version: state.version)
             .onChange(of: model.items) { _, items in
-                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "live-detail", path.isEmpty, let first = items.first { path = [first] }
+                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "live-detail", !demoOpened, let first = items.first {
+                    demoOpened = true
+                    path.append(first)
+                }
             }
             .onChange(of: path) { _, p in state.setPushed(.buy, !p.isEmpty) }
+            .onChange(of: state.meRequests) { _, _ in
+                if state.tab == .buy { path.append("me") }
+            }
+            .task {
+                if Demo.opensMe, path.isEmpty { path.append("me") }
+            }
         }
+    }
+
+    private func card(_ item: Listing, aspect: CGFloat) -> some View {
+        NavigationLink(value: item) { GoodsCard(item: item, aspect: aspect) }
+            .buttonStyle(.plain)
+            .task { await model.loadMoreIfNeeded(item) }
     }
 }
 
 struct GoodsCard: View {
     let item: Listing
+    var aspect: CGFloat = 0.8
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Color.clear
-                .aspectRatio(0.87, contentMode: .fit)
-                .overlay { ListingImage(item: item, maxPixel: 800) }
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .aspectRatio(aspect, contentMode: .fit)
+                .overlay { ListingImage(item: item, maxPixel: 900) }
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
             HStack(spacing: 6) {
                 Text(item.priceText)
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 16, weight: .medium))
                     .monospacedDigit()
-                    .foregroundStyle(item.price == 0 ? Theme.sell : Theme.ink)
+                    .foregroundStyle(Theme.ink)
                 if item.isReserved {
-                    Text("已预订").font(.footnote).foregroundStyle(Theme.sell)
+                    Text("已预订").font(.footnote).foregroundStyle(Theme.sub)
                 }
                 Spacer(minLength: 4)
-                ScoreBadge(score: item.score)
+                ScoreBadge(score: item.score, playID: item.id)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -298,17 +355,18 @@ struct GoodsCard: View {
 struct RentView: View {
     @EnvironmentObject var state: AppState
     @StateObject private var model = FeedModel(kind: "rent")
-    @State private var path: [Listing] = []
+    @State private var path = NavigationPath()
+    @State private var demoOpened = false
 
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 TopBar(placeholder: "搜地段", query: $model.q) {
-                    CategoryBar(selected: $model.filter, options: [ALL_OPTION] + UNIT_OPTIONS, act: .rent) { $0 == "all" ? "all" : "rent-\($0)" }
+                    CategoryBar(selected: $model.filter, options: [ALL_OPTION] + UNIT_OPTIONS) { $0 == "all" ? "all" : "rent-\($0)" }
                 }
                 ScrollViewReader { proxy in
                     ScrollView {
-                        VStack(spacing: 20) {
+                        VStack(spacing: 22) {
                             Color.clear.frame(height: 0).id("top")
                             if model.items.isEmpty {
                                 if model.phase == .ok {
@@ -317,7 +375,7 @@ struct RentView: View {
                                     PhaseBlock(phase: model.phase)
                                 }
                             } else {
-                                LazyVStack(spacing: 20) {
+                                LazyVStack(spacing: 22) {
                                     ForEach(model.items.filter { $0.id != state.pendingDelete?.id }) { item in
                                         NavigationLink(value: item) { RentRow(item: item) }
                                             .buttonStyle(.plain)
@@ -341,11 +399,20 @@ struct RentView: View {
             .background(Theme.bg)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
+            .navigationDestination(for: String.self) { route in
+                if route == "me" { MeView(path: $path) } else { SettingsView() }
+            }
             .reloads(model, version: state.version)
             .onChange(of: model.items) { _, items in
-                if Demo.scene == "rentdetail" || Demo.scene == "live-rentdetail", path.isEmpty, let first = items.first { path = [first] }
+                if Demo.scene == "rentdetail" || Demo.scene == "live-rentdetail", !demoOpened, let first = items.first {
+                    demoOpened = true
+                    path.append(first)
+                }
             }
             .onChange(of: path) { _, p in state.setPushed(.rent, !p.isEmpty) }
+            .onChange(of: state.meRequests) { _, _ in
+                if state.tab == .rent { path.append("me") }
+            }
         }
     }
 }
@@ -358,16 +425,17 @@ struct RentRow: View {
             Color.clear
                 .aspectRatio(1.5, contentMode: .fit)
                 .overlay { ListingImage(item: item, maxPixel: 1200) }
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .padding(.bottom, 4)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
+                .padding(.bottom, 6)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(item.priceText)
-                    .font(.system(size: 21, weight: .bold))
+                    .font(.system(size: 19, weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(Theme.ink)
                 Text("/月").font(.footnote).foregroundStyle(Theme.sub)
                 if item.isReserved {
-                    Text("已预订").font(.footnote).foregroundStyle(Theme.sell).padding(.leading, 6)
+                    Text("已预订").font(.footnote).foregroundStyle(Theme.sub).padding(.leading, 6)
                 }
             }
             Text([item.place, item.shortPeriod].filter { !$0.isEmpty }.joined(separator: " · "))

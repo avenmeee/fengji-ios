@@ -2,62 +2,52 @@ import AuthenticationServices
 import SwiftUI
 import UIKit
 
-/// “我”：没登录时上面是登录，登录后上面是我发的；卖东西、出租房子固定在底栏上面。
+/// “我”：从加号进来，靠右滑返回。上面是我发的，发布入口在加号里。
 struct MeView: View {
     @EnvironmentObject var state: AppState
+    @Binding var path: NavigationPath
     @State private var items: [Listing] = []
     @State private var phase: FeedModel.Phase = .loading
-    @State private var postingGoods = Demo.scene == "form" || Demo.scene == "form-filled" || Demo.scene == "form-kb-price" || Demo.scene == "form-kb-desc" || Demo.scene == "posted"
-    @State private var postingRent = Demo.scene == "rentform" || Demo.scene == "rentform-filled" || Demo.scene == "rent-kb-deposit" || Demo.scene == "rent-kb-desc"
     @State private var claiming = Demo.scene == "claim"
     @State private var editing: Listing?
     @State private var acting: Listing?
     @State private var afterActing: (() -> Void)?
     @State private var pricing: Listing?
     @State private var newPrice = ""
-    @State private var path = NavigationPath()
 
     private var visible: [Listing] { items.filter { $0.id != state.pendingDelete?.id } }
 
     var body: some View {
-        NavigationStack(path: $path) {
-            VStack(alignment: .leading, spacing: 0) {
-                header
-                if state.isLoggedIn { list } else { Spacer() }
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            if state.isLoggedIn { list } else { Spacer() }
+        }
+        .background(Theme.bg)
+        .toolbar(.hidden, for: .navigationBar)
+        .task(id: LoadKey(version: state.version, loggedIn: state.isLoggedIn)) { await load() }
+        .task {
+            if Demo.scene == "settings" { path.append("settings") }
+        }
+        .onChange(of: items) { _, list in
+            if Demo.scene == "mine-actions", acting == nil { acting = list.first }
+            if Demo.scene == "undo", state.pendingDelete == nil, let first = list.first { state.softDelete(first) }
+        }
+        .sheet(isPresented: $claiming) { ClaimView() }
+        .sheet(item: $editing) { item in PostForm(kind: item.kind, editing: item) }
+        .sheet(item: $acting, onDismiss: {
+            afterActing?()
+            afterActing = nil
+        }) { item in
+            MineActions(item: item) { action in
+                afterActing = { run(action, item) }
+                acting = nil
             }
-            .background(Theme.bg)
-            .safeAreaInset(edge: .bottom, spacing: 0) { postButtons }
-            .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: Listing.self) { DetailView(item: $0) }
-            .navigationDestination(for: String.self) { _ in SettingsView() }
-            .task(id: LoadKey(version: state.version, loggedIn: state.isLoggedIn)) { await load() }
-            .task {
-                if Demo.scene == "settings" { path.append("settings") }
-            }
-            .onChange(of: path) { _, p in state.setPushed(.me, !p.isEmpty) }
-            .onChange(of: items) { _, list in
-                if Demo.scene == "mine-actions", acting == nil { acting = list.first }
-                if Demo.scene == "undo", state.pendingDelete == nil, let first = list.first { state.softDelete(first) }
-            }
-            .sheet(isPresented: $postingGoods) { PostForm(kind: "goods") }
-            .sheet(isPresented: $postingRent) { PostForm(kind: "rent") }
-            .sheet(isPresented: $claiming) { ClaimView() }
-            .sheet(item: $editing) { item in PostForm(kind: item.kind, editing: item) }
-            .sheet(item: $acting, onDismiss: {
-                afterActing?()
-                afterActing = nil
-            }) { item in
-                MineActions(item: item) { action in
-                    afterActing = { run(action, item) }
-                    acting = nil
-                }
-                .presentationDetents([.height(item.status == "off" ? 190 : 380)])
-            }
-            .alert("改价", isPresented: Binding(get: { pricing != nil }, set: { if !$0 { pricing = nil } }), presenting: pricing) { item in
-                TextField("美元", text: $newPrice).keyboardType(.numberPad)
-                Button("保存") { Task { await savePrice(item) } }
-                Button("取消", role: .cancel) {}
-            }
+            .presentationDetents([.height(item.status == "off" ? 190 : 380)])
+        }
+        .alert("改价", isPresented: Binding(get: { pricing != nil }, set: { if !$0 { pricing = nil } }), presenting: pricing) { item in
+            TextField("美元", text: $newPrice).keyboardType(.numberPad)
+            Button("保存") { Task { await savePrice(item) } }
+            Button("取消", role: .cancel) {}
         }
     }
 
@@ -71,7 +61,7 @@ struct MeView: View {
             } else {
                 SignInBlock()
             }
-            NavigationLink(value: "settings") {
+            Button { path.append("settings") } label: {
                 HexGear().frame(width: 26, height: 26).frame(width: 36, height: 44)
             }
             .buttonStyle(.plain)
@@ -84,64 +74,39 @@ struct MeView: View {
     }
 
     private var list: some View {
-        ScrollViewReader { proxy in
-            List {
-                if visible.isEmpty {
-                    Group {
-                        if phase == .ok {
-                            EmptyBlock(text: "还没发过")
-                        } else {
-                            PhaseBlock(phase: phase)
-                        }
+        List {
+            if visible.isEmpty {
+                Group {
+                    if phase == .ok {
+                        EmptyBlock(text: "还没发过")
+                    } else {
+                        PhaseBlock(phase: phase)
                     }
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
                 }
-                ForEach(visible) { item in
-                    MineRow(item: item, open: { path.append(item) }, more: { acting = item })
-                        .id(item.id)
-                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 8))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button("删除", role: .destructive) { state.softDelete(item) }
-                                .tint(Theme.warn)
-                        }
-                }
-                if state.opsWechat != nil {
-                    Button("认领我在群里发的东西") { claiming = true }
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.sub)
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                }
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .honeyRefresh { await load() }
-            .onChange(of: state.topTicks[.me] ?? 0) { _, _ in
-                if let first = visible.first {
-                    withAnimation(.snappy) { proxy.scrollTo(first.id, anchor: .top) }
-                }
+            ForEach(visible) { item in
+                MineRow(item: item, open: { path.append(item) }, more: { acting = item })
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 8))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button("删除", role: .destructive) { state.softDelete(item) }
+                            .tint(Theme.warn)
+                    }
+            }
+            if state.opsWechat != nil {
+                Button("认领我在群里发的东西") { claiming = true }
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.sub)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
             }
         }
-    }
-
-    private var postButtons: some View {
-        HStack(spacing: 10) {
-            Button("卖东西") {
-                if state.needLogin() { postingGoods = true }
-            }
-            .buttonStyle(PrimaryButtonStyle(act: .sell))
-            Button("出租房子") {
-                if state.needLogin() { postingRent = true }
-            }
-            .buttonStyle(PrimaryButtonStyle(act: .rent))
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 72)
-        .background(Theme.bg)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .honeyRefresh { await load() }
     }
 
     private struct LoadKey: Hashable {
@@ -221,7 +186,7 @@ struct MineRow: View {
                     Color.clear
                         .frame(width: 66, height: 66)
                         .overlay { ListingImage(item: item, maxPixel: 240) }
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.priceText + (item.isRent ? " /月" : ""))
                             .font(.system(size: 17, weight: .bold))

@@ -92,6 +92,12 @@ jobs:
           shot "21-发布填好" form-filled light
           shot "22-发布填好-深" form-filled dark
           shot "23-出租填好" rentform-filled light
+          shot "29-加号弹层" plus-open light
+          shot "30-加号弹层-深" plus-open dark
+          shot "31-蜂巢1件" posted light
+          shot "32-蜂巢3件" posted-3 light
+          shot "33-蜂巢10件" posted-10 light
+          shot "34-分享竖图" share-hive light
           shot "24-键盘-搜索" search-kb light
           shot "25-键盘-价格" form-kb-price light
           shot "26-键盘-备注" form-kb-desc light

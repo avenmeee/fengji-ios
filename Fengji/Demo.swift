@@ -15,10 +15,30 @@ enum Demo {
 
     static var initialTab: AppTab {
         switch scene {
-        case "me", "guest-me", "mine-actions", "undo", "form", "form-filled", "form-kb-price", "form-kb-desc", "posted", "rentform", "rentform-filled", "rent-kb-deposit", "rent-kb-desc", "settings", "claim": return .me
         case "rent", "rentdetail", "live-rent", "live-rentdetail": return .rent
         default: return .buy
         }
+    }
+
+    /// 开场就推到“我”的截图
+    static var opensMe: Bool {
+        ["me", "guest-me", "mine-actions", "undo", "settings", "claim"].contains(scene ?? "")
+    }
+
+    static var initialPosting: PostKind? {
+        guard let scene else { return nil }
+        if scene.hasPrefix("posted") || scene == "form" || scene == "form-filled" || scene.hasPrefix("form-kb") { return .goods }
+        if scene == "rentform" || scene == "rentform-filled" || scene.hasPrefix("rent-kb") { return .rent }
+        return nil
+    }
+
+    static func sampleHive(_ count: Int) -> [HiveItem] {
+        #if DEBUG
+        let names = ["a1", "b1", "c1", "d1", "e1", "a2", "b1", "c1", "d1", "e1"]
+        return (0..<count).map { HiveItem(image: nil, url: "\(Config.base)/p/\(names[$0 % names.count]).jpg", priceText: "$\(10 + $0 * 5)") }
+        #else
+        return []
+        #endif
     }
 
     static var sampleListing: Listing? {

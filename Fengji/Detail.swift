@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 
+/// 详情：照片像挂在墙上，下面是展签。颜色只给六边形。
 struct DetailView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
@@ -13,40 +14,36 @@ struct DetailView: View {
     @State private var shareImage: ShareImage?
     @State private var confirmTakedown = false
     @State private var claiming = false
-    @State private var heroBottom: CGFloat = 1000
+    @State private var page = 0
 
-    private var line: String {
-        let parts = item.isRent ? [item.place, item.period, item.rentFacts] : [item.catLabel, item.cond ?? "", item.place, item.pickupText]
+    /// 展签第二行：分类、成色或房子的情况
+    private var line1: String {
+        let parts = item.isRent ? [item.rentFacts] : [item.catLabel, item.cond ?? ""]
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    /// 第三行：地点和时间
+    private var line2: String {
+        let parts = item.isRent ? [item.place, item.period] : [item.place, item.pickupText]
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .top) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        hero
-                            .background(GeometryReader { g in
-                                Color.clear.preference(key: HeroBottomKey.self, value: g.frame(in: .global).maxY)
-                            })
-                        info
-                    }
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                moreMenu
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    photo
+                    label
                 }
-                .background(Theme.bg)
-                .ignoresSafeArea(edges: .top)
-                .onPreferenceChange(HeroBottomKey.self) { heroBottom = $0 }
-                // 文字滚到时钟那里时，垫上页面底色
-                if heroBottom < geo.safeAreaInsets.top {
-                    Theme.bg.frame(height: 0).background(Theme.bg.ignoresSafeArea(edges: .top))
-                }
-                HStack {
-                    Spacer()
-                    moreMenu
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
             }
         }
+        .background(Theme.bg)
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !gone { contactBar }
@@ -83,43 +80,52 @@ struct DetailView: View {
         }
     }
 
-    /// 照片是主角：铺满顶部，下面两个圆角
-    private var hero: some View {
-        Color.clear
-            .containerRelativeFrame(.vertical) { height, _ in height * 0.62 }
-            .overlay {
-                if item.photos.count > 1 {
-                    TabView {
-                        ForEach(item.photos.indices, id: \.self) { i in
-                            ListingImage(item: item, index: i, maxPixel: 1600).clipped()
-                                .background(NoScrollsToTop())
+    private var photo: some View {
+        VStack(spacing: 10) {
+            Color.clear
+                .aspectRatio(0.78, contentMode: .fit)
+                .overlay {
+                    if item.photos.count > 1 {
+                        TabView(selection: $page) {
+                            ForEach(item.photos.indices, id: \.self) { i in
+                                ListingImage(item: item, index: i, maxPixel: 1600)
+                                    .clipped()
+                                    .background(NoScrollsToTop())
+                                    .tag(i)
+                            }
                         }
+                        .tabViewStyle(.page(indexDisplayMode: .never))
+                    } else {
+                        ListingImage(item: item, maxPixel: 1600)
                     }
-                    .tabViewStyle(.page)
-                } else {
-                    ListingImage(item: item, maxPixel: 1600)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .shadow(color: .black.opacity(0.14), radius: 14, y: 6)
+            if item.photos.count > 1 {
+                HStack(spacing: 6) {
+                    ForEach(item.photos.indices, id: \.self) { i in
+                        Circle()
+                            .fill(i == page ? Theme.ink : Theme.line)
+                            .frame(width: 6, height: 6)
+                    }
                 }
             }
-            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28))
+        }
+        .padding(.horizontal, 28)
+        .padding(.top, 4)
     }
 
-    private var info: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(item.priceText)
-                    .font(.system(size: 34, weight: .heavy))
-                    .monospacedDigit()
-                    .foregroundStyle(item.price == 0 ? Theme.sell : Theme.ink)
-                if item.isRent { Text("/月").font(.subheadline).foregroundStyle(Theme.sub) }
-                Spacer(minLength: 8)
-                ScoreBadge(score: item.score, size: 20)
-            }
+    private var label: some View {
+        VStack(alignment: .leading, spacing: 4) {
             Text(item.title)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Theme.ink)
-            Text(line)
-                .font(.subheadline)
-                .foregroundStyle(Theme.sub)
+            if !line1.isEmpty {
+                Text(line1).font(.subheadline).foregroundStyle(Theme.sub)
+            }
+            if !line2.isEmpty {
+                Text(line2).font(.subheadline).foregroundStyle(Theme.sub)
+            }
             if gone {
                 Text("这条已经没有了").font(.subheadline).foregroundStyle(Theme.warn)
             } else if !item.isOn {
@@ -130,6 +136,16 @@ struct DetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(Theme.sub)
             }
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(item.priceText)
+                    .font(.system(size: 26, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.ink)
+                if item.isRent { Text("/月").font(.subheadline).foregroundStyle(Theme.sub) }
+                Spacer(minLength: 8)
+                ScoreBadge(score: item.score, size: 24)
+            }
+            .padding(.top, 6)
             if !item.desc.isEmpty {
                 Text(item.desc)
                     .foregroundStyle(Theme.ink)
@@ -138,8 +154,8 @@ struct DetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 14)
+        .padding(.horizontal, 28)
+        .padding(.top, 18)
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -191,10 +207,10 @@ struct DetailView: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 38, height: 38)
-                .background(.black.opacity(0.35), in: Circle())
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
         .accessibilityLabel("更多")
     }
@@ -213,7 +229,7 @@ struct DetailView: View {
                     Image(systemName: "doc.on.doc").font(.system(size: 15))
                 }
             }
-            .buttonStyle(PrimaryButtonStyle())
+            .buttonStyle(PrimaryButtonStyle(act: .ink))
             .accessibilityLabel("复制微信号 " + contact)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -227,7 +243,7 @@ struct DetailView: View {
                     Image(systemName: "arrow.right").font(.system(size: 15))
                 }
             }
-            .buttonStyle(PrimaryButtonStyle())
+            .buttonStyle(PrimaryButtonStyle(act: .ink))
             .accessibilityLabel("去 \(item.sourceGroup ?? "") 群找 \(item.sourcePoster ?? "")")
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -293,11 +309,6 @@ struct DetailView: View {
             state.toast(error.localizedDescription)
         }
     }
-}
-
-private struct HeroBottomKey: PreferenceKey {
-    static var defaultValue: CGFloat = 1000
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 /// 翻照片那个横向滚动不抢点状态栏回顶部

@@ -52,6 +52,8 @@ struct Act {
     static let buy = Act(fill: Theme.buy, on: Theme.onBuy, soft: Theme.accentSoft)
     static let sell = Act(fill: Theme.sell, on: Theme.onSell, soft: Theme.sellSoft)
     static let rent = Act(fill: Theme.rent, on: Theme.onRent, soft: Theme.rentSoft)
+    /// 黑白：主按钮不抢照片的颜色
+    static let ink = Act(fill: Theme.ink, on: Theme.bg, soft: Theme.fill)
 }
 
 struct Tint {
@@ -230,53 +232,6 @@ struct Hexagon: Shape {
         }
         p.closeSubpath()
         return p
-    }
-}
-
-/// 小蜜蜂：五档分数的图标。六边形身子、两道黑纹、两片翅膀
-struct BeeMark: View {
-    var size: CGFloat = 14
-
-    var body: some View {
-        ZStack {
-            HStack(spacing: size * 0.1) {
-                Ellipse().stroke(Theme.ink, lineWidth: size * 0.09).frame(width: size * 0.4, height: size * 0.26).rotationEffect(.degrees(35))
-                Ellipse().stroke(Theme.ink, lineWidth: size * 0.09).frame(width: size * 0.4, height: size * 0.26).rotationEffect(.degrees(-35))
-            }
-            .offset(y: -size * 0.32)
-            Hexagon()
-                .fill(Theme.buy)
-                .frame(width: size * 0.78, height: size * 0.78)
-                .overlay {
-                    VStack(spacing: size * 0.1) {
-                        Rectangle().fill(Color.black.opacity(0.85)).frame(height: size * 0.11)
-                        Rectangle().fill(Color.black.opacity(0.85)).frame(height: size * 0.11)
-                    }
-                }
-                .clipShape(Hexagon())
-                .offset(y: size * 0.1)
-        }
-        .frame(width: size, height: size)
-    }
-}
-
-/// 蜜蜂 + 档位数字。没打分不显示。
-struct ScoreBadge: View {
-    let score: Int?
-    var size: CGFloat = 14
-
-    var body: some View {
-        if let score {
-            HStack(spacing: 3) {
-                BeeMark(size: size)
-                Text("\(score)")
-                    .font(.system(size: size, weight: .bold))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.ink)
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("蜂集评分 \(score) 档")
-        }
     }
 }
 

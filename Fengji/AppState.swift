@@ -20,6 +20,14 @@ final class AppState: ObservableObject {
     /// 左滑删了、还能撤销的那条
     @Published private(set) var pendingDelete: Listing?
     private var deleteTask: Task<Void, Never>?
+    /// 加号弹层开着
+    @Published var plusOpen = Demo.scene == "plus-open"
+    /// 正在发布什么，弹在最外层
+    @Published var posting: PostKind? = Demo.initialPosting
+    /// 让当前页推到“我”
+    @Published private(set) var meRequests = 0
+    /// 登录之后接着做的事
+    private var afterLogin: (() -> Void)?
     /// 哪几页进了下一层（这时藏底栏）
     @Published private(set) var pushed: Set<AppTab> = []
 
@@ -36,6 +44,32 @@ final class AppState: ObservableObject {
     }
 
     func changed() { version += 1 }
+
+    /// 加号里的三项：没登录先登录，登录后接着进
+    func plusAction(_ action: PlusAction) {
+        plusOpen = false
+        let go: () -> Void = { [weak self] in
+            guard let self else { return }
+            switch action {
+            case .goods: self.posting = .goods
+            case .rent: self.posting = .rent
+            case .me: self.meRequests += 1
+            }
+        }
+        if isLoggedIn {
+            go()
+        } else {
+            afterLogin = go
+            showLogin = true
+        }
+    }
+
+    /// 登录弹层收起时调
+    func loginDismissed() {
+        let next = afterLogin
+        afterLogin = nil
+        if isLoggedIn { next?() }
+    }
 
     func scrollToTop(_ tab: AppTab) {
         topTicks[tab, default: 0] += 1

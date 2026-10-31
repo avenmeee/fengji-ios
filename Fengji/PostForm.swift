@@ -136,7 +136,9 @@ struct PostForm: View {
     @State private var nameTouched = false
     @State private var showConsent = false
     @State private var showCamera = false
-    @State private var posted = Demo.scene == "posted"
+    @State private var posted = Demo.scene?.hasPrefix("posted") == true
+    @State private var hive: [HiveItem] = Demo.scene == "posted" ? Demo.sampleHive(1) : (Demo.scene == "posted-3" ? Demo.sampleHive(3) : (Demo.scene == "posted-10" ? Demo.sampleHive(10) : []))
+    @State private var hiveShare: ShareImage?
     @State private var dateField: DateField?
     @State private var picked: [PhotosPickerItem] = []
     @State private var error: String?
@@ -307,39 +309,31 @@ struct PostForm: View {
 
     // MARK: - 发完
 
-    /// 再发一件时地点、取货、微信号都带上，只填照片、名字、价格
+    /// 蜂巢连发。再发一件时地点、取货、微信号都带上，只填照片、名字、价格
     private var postedView: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            Hexagon().fill(Theme.accent).frame(width: 56, height: 56)
-            Text("发好了").font(.title3.weight(.semibold)).foregroundStyle(Theme.ink)
-            Spacer()
-            Button("再发一件") {
-                title = ""
-                price = ""
-                desc = ""
-                photos = []
-                cat = nil
-                cond = nil
-                aiGuessed = false
-                nameTouched = false
-                priceTouched = false
-                priceSuggested = false
-                pickupBefore = nil
-                pickupAfter = nil
-                askContact = false
-                error = nil
-                posted = false
-                if UIImagePickerController.isSourceTypeAvailable(.camera) { showCamera = true }
-            }
-            .buttonStyle(PrimaryButtonStyle(act: formAct))
-            Button("完成") { dismiss() }
-                .font(.body.weight(.medium))
-                .foregroundStyle(Theme.ink)
-                .frame(height: 44)
+        HivePostedView(items: hive) {
+            title = ""
+            price = ""
+            desc = ""
+            photos = []
+            cat = nil
+            cond = nil
+            aiGuessed = false
+            nameTouched = false
+            priceTouched = false
+            priceSuggested = false
+            pickupBefore = nil
+            pickupAfter = nil
+            askContact = false
+            error = nil
+            posted = false
+            if UIImagePickerController.isSourceTypeAvailable(.camera) { showCamera = true }
+        } share: {
+            Task { hiveShare = await HiveShareCard.make(items: hive, contact: contact, total: hive.count) }
+        } done: {
+            dismiss()
         }
-        .padding(16)
-        .frame(maxWidth: .infinity)
+        .sheet(item: $hiveShare) { ShareSheet(image: $0.image) }
     }
 
     // MARK: - 卖东西：一屏
@@ -947,11 +941,11 @@ struct PostForm: View {
             if !isRent, editing == nil { UserDefaults.standard.set(true, forKey: "aiConsent") }
             onSaved?(saved)
             state.changed()
-            if editing == nil {
-                state.tab = .me
-                Haptics.beeBuzz()
-            }
+            if editing == nil { Haptics.beeBuzz() }
             if editing == nil, !isRent {
+                var cover = HiveItem(image: nil, url: saved.photos.first?.url, priceText: saved.priceText)
+                if case .fresh(_, _, let preview)? = photos.first { cover.image = preview }
+                hive.append(cover)
                 posted = true
             } else {
                 state.toast(editing == nil ? "发好了" : "改好了")

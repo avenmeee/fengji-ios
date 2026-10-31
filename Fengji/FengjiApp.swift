@@ -34,6 +34,8 @@ struct FengjiApp: App {
             Group {
                 if Demo.scene == "sharecard", let item = Demo.sampleListing {
                     ShareCard(item: item, photo: nil)
+                } else if Demo.scene == "share-hive" {
+                    HiveShareCard(items: Demo.sampleHive(10), contact: "wx_demo", total: 10)
                 } else {
                     RootView()
                 }
@@ -47,7 +49,17 @@ struct FengjiApp: App {
 }
 
 enum AppTab: Hashable {
-    case buy, rent, me
+    case buy, rent
+}
+
+enum PostKind: String, Identifiable {
+    case goods, rent
+
+    var id: String { rawValue }
+}
+
+enum PlusAction {
+    case goods, me, rent
 }
 
 struct RootView: View {
@@ -60,8 +72,12 @@ struct RootView: View {
         TabView(selection: $state.tab) {
             BuyView().tag(AppTab.buy).toolbar(.hidden, for: .tabBar)
             RentView().tag(AppTab.rent).toolbar(.hidden, for: .tabBar)
-            MeView().tag(AppTab.me).toolbar(.hidden, for: .tabBar)
         }
+        .blur(radius: state.plusOpen ? 10 : 0)
+        .overlay {
+            if state.plusOpen { PlusSheet().transition(.opacity) }
+        }
+        .animation(.easeOut(duration: 0.18), value: state.plusOpen)
         .overlay(alignment: .bottom) {
             if !state.pushed.contains(state.tab), !keyboardUp {
                 FloatingBar()
@@ -93,12 +109,15 @@ struct RootView: View {
                 .padding(.horizontal, 16)
                 .frame(height: 44)
                 .background(Theme.ink, in: RoundedRectangle(cornerRadius: 12))
-                .padding(.bottom, 140)
+                .padding(.bottom, 24)
                 .transition(.opacity)
             }
         }
         .animation(.easeOut(duration: 0.18), value: state.pendingDelete?.id)
-        .sheet(isPresented: $state.showLogin) {
+        .sheet(item: $state.posting) { kind in
+            PostForm(kind: kind.rawValue)
+        }
+        .sheet(isPresented: $state.showLogin, onDismiss: { state.loginDismissed() }) {
             LoginSheet()
                 .presentationDetents([.height(240)])
         }
@@ -139,47 +158,31 @@ struct RootView: View {
     }
 }
 
-/// 浮起的底栏：只有图标，当前页垫这一页颜色的六边形。再点当前图标回顶部。
+/// 底栏：买东西、加号、租房子。选中的垫黑六边形，只有加号是黄的。
 struct FloatingBar: View {
     @EnvironmentObject var state: AppState
     @Namespace private var hex
 
-    private let items: [(tab: AppTab, symbol: String, label: String, act: Act)] = [
-        (.buy, "bag", "买东西", .buy),
-        (.rent, "house", "租房子", .rent),
-        (.me, "person", "我", .sell)
-    ]
-
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(items, id: \.label) { item in
-                let on = state.tab == item.tab
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    if on {
-                        state.scrollToTop(item.tab)
-                    } else {
-                        withAnimation(.snappy(duration: 0.22)) { state.tab = item.tab }
-                    }
-                } label: {
-                    ZStack {
-                        if on {
-                            Hexagon()
-                                .fill(item.act.fill)
-                                .frame(width: 46, height: 46)
-                                .matchedGeometryEffect(id: "hex", in: hex)
-                        }
-                        Image(systemName: item.symbol)
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(on ? item.act.on : Theme.sub)
-                    }
-                    .frame(width: 60, height: 52)
-                    .contentShape(Rectangle())
+            tab(.buy, "bag", "买东西")
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.snappy(duration: 0.2)) { state.plusOpen.toggle() }
+            } label: {
+                ZStack {
+                    Hexagon().fill(Theme.accent).frame(width: 66, height: 66)
+                    Image(systemName: "plus")
+                        .font(.system(size: 26, weight: .medium))
+                        .foregroundStyle(Theme.onBuy)
+                        .rotationEffect(.degrees(state.plusOpen ? 45 : 0))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(item.label)
-                .accessibilityAddTraits(on ? .isSelected : [])
+                .frame(width: 70, height: 60)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(state.plusOpen ? "收起" : "发布和我")
+            tab(.rent, "house", "租房子")
         }
         .padding(.horizontal, 8)
         .frame(height: 60)
@@ -187,5 +190,75 @@ struct FloatingBar: View {
         .background(.ultraThinMaterial, in: Capsule())
         .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
         .padding(.bottom, 6)
+    }
+
+    private func tab(_ which: AppTab, _ symbol: String, _ label: String) -> some View {
+        let on = state.tab == which
+        return Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            if on {
+                state.scrollToTop(which)
+            } else {
+                withAnimation(.snappy(duration: 0.22)) { state.tab = which }
+            }
+        } label: {
+            ZStack {
+                if on {
+                    Hexagon()
+                        .fill(Theme.ink)
+                        .frame(width: 44, height: 44)
+                        .matchedGeometryEffect(id: "hex", in: hex)
+                }
+                Image(systemName: symbol)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(on ? Theme.bg : Theme.sub)
+            }
+            .frame(width: 66, height: 52)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+/// 点加号弹出的三格蜂巢：上面我，左下发布东西，右下发布房子
+struct PlusSheet: View {
+    @EnvironmentObject var state: AppState
+    private let size: CGFloat = 112
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.opacity(0.14)
+                .ignoresSafeArea()
+                .onTapGesture { state.plusOpen = false }
+            VStack(spacing: -size * 0.18) {
+                cell("我", "person", fill: Theme.ink, on: Theme.bg, action: .me)
+                HStack(spacing: 4) {
+                    cell("发布东西", "bag", fill: Theme.accent, on: Theme.onBuy, action: .goods)
+                    cell("发布房子", "house", fill: Theme.accent, on: Theme.onBuy, action: .rent)
+                }
+            }
+            .padding(.bottom, 74)
+        }
+    }
+
+    private func cell(_ label: String, _ symbol: String, fill: Color, on: Color, action: PlusAction) -> some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            state.plusAction(action)
+        } label: {
+            ZStack {
+                Hexagon().fill(fill)
+                VStack(spacing: 4) {
+                    Image(systemName: symbol).font(.system(size: 22, weight: .medium))
+                    Text(label).font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundStyle(on)
+            }
+            .frame(width: size, height: size)
+            .contentShape(Hexagon())
+        }
+        .buttonStyle(.plain)
     }
 }
