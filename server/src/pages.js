@@ -41,17 +41,17 @@ export function privacyPage(env) {
   <h2>存在哪</h2>
   <p>存在 Cloudflare 的服务器上。</p>
   <h2>删除</h2>
-  <p>在 App 的“卖东西 → 设置 → 删除账号”可以随时删除账号。你发的内容和照片会马上一起删除。</p>
+  <p>在 App 的“我 → 设置 → 删除账号”可以随时删除账号。你发的内容和照片会马上一起删除。</p>
   <h2>联系</h2>
   <p>${contactLine(env)}</p>
   <h2 lang="en">In English</h2>
-  <p lang="en">Fengji only needs sign-in to post, using Sign in with Apple; we receive an anonymous identifier, not your name or email. What you post (photos, text, location, WeChat ID) is public. We keep daily totals of posts, views and sales that are not linked to anyone. We do not track you, show ads or sell data. Delete your account any time in the app (Sell → Settings → Delete account); your posts and photos are deleted immediately. Data is stored on Cloudflare.</p>`);
+  <p lang="en">Fengji only needs sign-in to post, using Sign in with Apple; we receive an anonymous identifier, not your name or email. What you post (photos, text, location, WeChat ID) is public. We keep daily totals of posts, views and sales that are not linked to anyone. We do not track you, show ads or sell data. Delete your account any time in the app (Me → Settings → Delete account); your posts and photos are deleted immediately. Data is stored on Cloudflare.</p>`);
 }
 
 export function supportPage(env) {
   return page("蜂集帮助", `<h1>蜂集帮助</h1>
   <h2>怎么联系卖家</h2><p>详情页复制微信号，去微信加对方。当面看过再付，看房前别转押金。</p>
   <h2>怎么举报</h2><p>详情页右上角“…”→ 举报。24 小时内处理。也可以屏蔽对方。</p>
-  <h2>怎么删除账号</h2><p>卖东西 → 右上角设置 → 删除账号。内容和照片一起马上删除。</p>
+  <h2>怎么删除账号</h2><p>我 → 设置 → 删除账号。内容和照片一起马上删除。</p>
   <h2>联系我们</h2><p>${contactLine(env)}</p>`);
 }

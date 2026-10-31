@@ -13,6 +13,7 @@ struct SettingsView: View {
                     NavigationLink("用户协议") { TermsView() }
                     if let url = URL(string: Config.base + "/privacy") { Link("隐私政策", destination: url) }
                     if let url = URL(string: Config.base + "/support") { Link("帮助与支持", destination: url) }
+                    Text("举报：在详情页右上角“…”。屏蔽的人在下面的屏蔽名单。").font(.footnote).foregroundStyle(Theme.sub)
                     if !Config.contactEmail.isEmpty, let url = URL(string: "mailto:\(Config.contactEmail)") {
                         Link("联系我们：\(Config.contactEmail)", destination: url)
                     }

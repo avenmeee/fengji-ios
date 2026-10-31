@@ -75,13 +75,13 @@ jobs:
           shot "4-详情-深色" detail dark
           shot "5-详情-没登录" guest-detail light
           shot "14-分享图" sharecard light
-          shot "6-卖-浅色" sell light
-          shot "7-卖-深色" sell dark
+          shot "6-我-浅色" me light
+          shot "7-我-深色" me dark
           shot "8-发布-浅色" form light
           shot "9-租房-浅色" rent light
           shot "10-租房-深色" rent dark
           shot "11-房源详情" rentdetail light
-          shot "12-发房源-深色" rentform dark
+          shot "12-出租房子-深色" rentform dark
           shot "13-设置-浅色" settings light
 
       - name: 签名打包，传 TestFlight

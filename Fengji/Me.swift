@@ -1,10 +1,12 @@
 import SwiftUI
 
-struct SellView: View {
+/// “我”：发布入口都在这里，下面是我发的和设置。没登录也能进，点发布才登录。
+struct MeView: View {
     @EnvironmentObject var state: AppState
     @State private var items: [Listing] = []
     @State private var phase: FeedModel.Phase = .loading
-    @State private var posting = Demo.scene == "form"
+    @State private var postingGoods = Demo.scene == "form"
+    @State private var postingRent = Demo.scene == "rentform"
     @State private var editing: Listing?
     @State private var deleting: Listing?
     @State private var path = NavigationPath()
@@ -13,10 +15,16 @@ struct SellView: View {
         NavigationStack(path: $path) {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Button("发一件东西") {
-                        if state.needLogin() { posting = true }
+                    HStack(spacing: 10) {
+                        Button("卖东西") {
+                            if state.needLogin() { postingGoods = true }
+                        }
+                        .buttonStyle(PrimaryButtonStyle(act: .sell))
+                        Button("出租房子") {
+                            if state.needLogin() { postingRent = true }
+                        }
+                        .buttonStyle(PrimaryButtonStyle(act: .rent))
                     }
-                    .buttonStyle(PrimaryButtonStyle(act: .sell))
 
                     HStack {
                         Text("我发的").font(.footnote).foregroundStyle(Theme.sub)
@@ -24,6 +32,7 @@ struct SellView: View {
                         NavigationLink(value: "settings") {
                             Image(systemName: "gearshape").foregroundStyle(Theme.sub)
                         }
+                        .accessibilityLabel("设置")
                     }
                     .padding(.top, 8)
 
@@ -56,8 +65,9 @@ struct SellView: View {
             .task {
                 if Demo.scene == "settings" { path.append("settings") }
             }
-            .onChange(of: path) { _, p in state.setPushed(.sell, !p.isEmpty) }
-            .sheet(isPresented: $posting) { PostForm(kind: "goods") }
+            .onChange(of: path) { _, p in state.setPushed(.me, !p.isEmpty) }
+            .sheet(isPresented: $postingGoods) { PostForm(kind: "goods") }
+            .sheet(isPresented: $postingRent) { PostForm(kind: "rent") }
             .sheet(item: $editing) { item in PostForm(kind: item.kind, editing: item) }
             .alert("删除这条？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { item in
                 Button("删除", role: .destructive) { Task { await remove(item) } }

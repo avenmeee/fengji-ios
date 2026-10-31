@@ -31,7 +31,7 @@ struct FengjiApp: App {
 }
 
 enum AppTab: Hashable {
-    case buy, sell, rent
+    case buy, rent, me
 }
 
 struct RootView: View {
@@ -41,8 +41,8 @@ struct RootView: View {
         // 三页都留着，切回来不丢滚动位置
         ZStack {
             page(.buy) { BuyView() }
-            page(.sell) { SellView() }
             page(.rent) { RentView() }
+            page(.me) { MeView() }
         }
         .overlay(alignment: .bottom) {
             if !state.pushed.contains(state.tab) {
@@ -85,8 +85,8 @@ struct FloatingBar: View {
 
     private let items: [(tab: AppTab, symbol: String, label: String, act: Act)] = [
         (.buy, "bag", "买东西", .buy),
-        (.sell, "tag", "卖东西", .sell),
-        (.rent, "house", "租房", .rent)
+        (.rent, "house", "租房子", .rent),
+        (.me, "person", "我", .sell)
     ]
 
     var body: some View {

@@ -204,17 +204,12 @@ struct RentView: View {
     @EnvironmentObject var state: AppState
     @StateObject private var model = FeedModel(kind: "rent")
     @State private var path: [Listing] = []
-    @State private var posting = Demo.scene == "rentform"
 
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 14) {
-                    TopBar(options: [ALL_OPTION] + plainOptions(RTYPES), selected: $model.filter, act: .rent, placeholder: "搜地段、小区", query: $model.q) {
-                        RoundButton(symbol: "plus", label: "发房源", act: .rent) {
-                            if state.needLogin() { posting = true }
-                        }
-                    }
+                    TopBar(options: [ALL_OPTION] + plainOptions(RTYPES), selected: $model.filter, act: .rent, placeholder: "搜地段、小区", query: $model.q) { EmptyView() }
                     if model.items.isEmpty {
                         if model.phase == .ok {
                             EmptyBlock(text: model.isFiltered ? "没找到。" : "还没有房源。")
@@ -246,7 +241,6 @@ struct RentView: View {
                 if Demo.scene == "rentdetail", path.isEmpty, let first = items.first { path = [first] }
             }
             .onChange(of: path) { _, p in state.setPushed(.rent, !p.isEmpty) }
-            .sheet(isPresented: $posting) { PostForm(kind: "rent") }
         }
     }
 }

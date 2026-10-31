@@ -269,7 +269,7 @@ struct PostForm: View {
             onSaved?(saved)
             state.changed()
             state.toast(editing == nil ? "发好了" : "改好了")
-            if editing == nil { state.tab = .sell }
+            if editing == nil { state.tab = .me }
             dismiss()
         } catch {
             self.error = error.localizedDescription
