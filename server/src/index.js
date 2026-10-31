@@ -2,9 +2,9 @@
 import { exchangeCode, fetchAppleKeys, revokeToken, verifyIdentityToken } from "./apple.js";
 import { listingPage, privacyPage, supportPage } from "./pages.js";
 
-const CATS = ["furn", "kitchen", "elec", "car", "art", "book", "wear", "other"];
+const CATS = ["furn", "elec", "kitchen", "art", "other"];
 const CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"];
-const RTYPES = ["整租", "单间", "寒假短租", "转租"];
+const RTYPES = ["短租", "转租"];
 const BUMP_EVERY = 24 * 3600 * 1000;
 const REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"];
 const MAX_PHOTOS = 3, MAX_PHOTO_BYTES = 1_500_000;
@@ -213,7 +213,13 @@ async function bump(env, userId, what) {
 
 async function createListing(req, env, url) {
   const u = await needAgreed(req, env);
-  const v = checkListing(await bodyOf(req), u.id);
+  const body = await bodyOf(req);
+  const v = checkListing(body, u.id);
+  // 东西的信息会发给 AI 打分，要先同意（5.1.2(i)）
+  if (v.kind === "goods" && !u.ai_consent_at) {
+    if (body.aiConsent !== true) throw new Fail(400, "need_ai_consent");
+    await env.DB.prepare("UPDATE users SET ai_consent_at = ? WHERE id = ?").bind(Date.now(), u.id).run();
+  }
   const live = await env.DB.prepare("SELECT COUNT(*) AS n FROM listings WHERE user_id = ? AND status = 'on'").bind(u.id).first();
   if (live.n >= MAX_LIVE_LISTINGS) throw new Fail(429, "too_many_listings");
   if (await bump(env, u.id, "post") > LIMITS.post) throw new Fail(429, "daily_limit");
@@ -573,20 +579,39 @@ async function countClick(req, env) {
   return json({ ok: true });
 }
 
-async function setScore(req, env, id) {
+// 本机定时任务：取没打分的（改过价的分已清空），打完批量写回
+async function unscored(req, env) {
   needOperator(req, env);
-  const score = Number((await bodyOf(req)).score);
-  if (!Number.isInteger(score) || score < 1 || score > 5) throw new Fail(400, "bad_score");
-  const r = await env.DB.prepare("UPDATE listings SET score = ?, scored_at = ? WHERE id = ? AND kind = 'goods'").bind(score, Date.now(), id).run();
-  if (!r.meta.changes) throw new Fail(404, "not_found");
-  return json({ ok: true });
+  const now = Date.now();
+  const rows = (await env.DB.prepare("SELECT * FROM listings WHERE kind = 'goods' AND status IN ('on','reserved') AND score IS NULL AND (source_type != 'group' OR source_posted_at >= ?) ORDER BY bumped_at DESC LIMIT 100").bind(now - GROUP_MAX_AGE).all()).results;
+  const origin = new URL(req.url).origin;
+  const comps = {};
+  for (const cat of new Set(rows.map(r => r.cat))) {
+    comps[cat] = (await env.DB.prepare("SELECT id, title, price FROM listings WHERE kind = 'goods' AND cat = ? AND bumped_at >= ? ORDER BY bumped_at DESC LIMIT 30").bind(cat, now - 90 * 86400000).all()).results;
+  }
+  return json({
+    items: rows.map(r => {
+      const first = JSON.parse(r.photos)[0];
+      return {
+        id: r.id, title: r.title, price: r.price, cat: r.cat, cond: r.cond, place: r.place,
+        photo: first ? `${origin}/p/${first}` : null,
+        comps: comps[r.cat].filter(c => c.id !== r.id).map(c => ({ title: c.title, price: c.price }))
+      };
+    })
+  });
 }
 
-// 还没打分的在售东西，打分任务来取
-async function unscored(req, env, url) {
+async function setScores(req, env) {
   needOperator(req, env);
-  const rows = (await env.DB.prepare("SELECT * FROM listings WHERE kind = 'goods' AND status IN ('on','reserved') AND score IS NULL AND (source_type != 'group' OR source_posted_at >= ?) ORDER BY bumped_at DESC LIMIT 50").bind(Date.now() - GROUP_MAX_AGE).all()).results;
-  return json({ items: rows.map(r => view(r, url.origin, null)) });
+  const b = await bodyOf(req);
+  const list = Array.isArray(b) ? b : b.scores;
+  if (!Array.isArray(list) || !list.length || list.length > 200) throw new Fail(400, "bad_scores");
+  for (const x of list) {
+    if (typeof x?.id !== "string" || !Number.isInteger(x.score) || x.score < 1 || x.score > 5) throw new Fail(400, "bad_score");
+  }
+  const now = Date.now();
+  const done = await env.DB.batch(list.map(x => env.DB.prepare("UPDATE listings SET score = ?, scored_at = ? WHERE id = ? AND kind = 'goods'").bind(x.score, now, x.id)));
+  return json({ updated: done.reduce((n, r) => n + r.meta.changes, 0) });
 }
 
 // 要求下架：不用登录，立刻生效，照片一起删，留编号防再导入
@@ -721,8 +746,8 @@ async function route(req, env) {
   }
 
   if (method === "POST" && path === "/v1/admin/import") return importListing(req, env);
-  if (method === "GET" && path === "/v1/admin/unscored") return unscored(req, env, url);
-  if (method === "POST" && (m = /^\/v1\/admin\/listings\/([0-9a-f]+)\/score$/.exec(path))) return setScore(req, env, m[1]);
+  if (method === "GET" && path === "/v1/admin/unscored") return unscored(req, env);
+  if (method === "POST" && path === "/v1/admin/scores") return setScores(req, env);
   if (method === "POST" && path === "/v1/admin/claim/verify") return verifyClaim(req, env);
   if (method === "GET" && path === "/v1/admin/stats") return adminStats(req, env);
   if (method === "GET" && path === "/v1/admin/reports") return adminReports(req, env, url);

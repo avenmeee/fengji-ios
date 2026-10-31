@@ -2,7 +2,7 @@ import Foundation
 
 typealias Option = (key: String, label: String)
 
-let CATS: [Option] = [("furn", "家具"), ("kitchen", "厨具家电"), ("elec", "电子"), ("car", "车"), ("art", "画材"), ("book", "书"), ("wear", "衣物"), ("other", "其他")]
+let CATS: [Option] = [("furn", "家具"), ("elec", "电子"), ("kitchen", "厨具家电"), ("art", "画材"), ("other", "其他")]
 let ALL_OPTION: Option = ("all", "全部")
 
 func plainOptions(_ list: [String]) -> [Option] {
@@ -10,7 +10,7 @@ func plainOptions(_ list: [String]) -> [Option] {
 }
 
 let CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"]
-let RTYPES = ["整租", "单间", "寒假短租", "转租"]
+let RTYPES = ["短租", "转租"]
 let REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"]
 
 struct Photo: Codable, Hashable {
@@ -179,6 +179,7 @@ struct ListingInput: Encodable {
     var privateBath: Bool?
     var longTerm: Bool?
     var furnished: Bool?
+    var aiConsent: Bool?
 }
 
 struct Me: Codable {

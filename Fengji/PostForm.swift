@@ -56,6 +56,8 @@ struct PostForm: View {
     @State private var place: String
     @State private var desc: String
     @State private var delivery: String
+    @State private var aiConsent: Bool
+    @State private var aiConsentShown: Bool
     @State private var utilities: String?
     @State private var deliveryFee: String
     @State private var hasPickupBefore: Bool
@@ -91,6 +93,8 @@ struct PostForm: View {
         _cat = State(initialValue: editing?.cat ?? UserDefaults.standard.string(forKey: "cat") ?? "furn")
         _cond = State(initialValue: editing?.cond ?? "几乎全新")
         _rtype = State(initialValue: editing?.rtype ?? "转租")
+        _aiConsent = State(initialValue: UserDefaults.standard.bool(forKey: "aiConsent"))
+        _aiConsentShown = State(initialValue: !UserDefaults.standard.bool(forKey: "aiConsent"))
         let today = Date()
         _from = State(initialValue: editing?.from.flatMap { Self.dayFormat.date(from: $0) } ?? today)
         _to = State(initialValue: editing?.to.flatMap { Self.dayFormat.date(from: $0) } ?? today.addingTimeInterval(90 * 86400))
@@ -218,6 +222,14 @@ struct PostForm: View {
                         .autocorrectionDisabled()
                 }
                 Text("限萨凡纳，当面交易。").font(.footnote).foregroundStyle(Theme.sub)
+                if !isRent {
+                    Text("名字、价格、分类、成色、地点和第一张照片会发给 AI（Anthropic 的 Claude）打分，买家能看到分。")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.sub)
+                    if aiConsentShown, editing == nil {
+                        Toggle("同意发给 AI 打分", isOn: $aiConsent).tint(formAct.fill)
+                    }
+                }
                 if let error {
                     Text(error).font(.subheadline).foregroundStyle(Theme.warn)
                 }
@@ -326,6 +338,7 @@ struct PostForm: View {
         if isRent, !longTerm, from > to { error = "止要晚于起。"; return }
         if isRent, utilities == nil { error = "选一下包不包水电。"; return }
         if !isRent, photos.isEmpty { error = "要一张实拍照。"; return }
+        if !isRent, editing == nil, !aiConsent { error = "要同意发给 AI 打分才能发布。"; return }
         let fee = deliveryFee.trimmingCharacters(in: .whitespaces)
         if !isRent, delivery != "pickup", !fee.isEmpty, Int(fee) == nil { error = "配送费要填整数。"; return }
 
@@ -352,6 +365,7 @@ struct PostForm: View {
             } else {
                 input.cat = cat
                 input.cond = cond
+                input.aiConsent = editing == nil ? true : nil
                 input.delivery = delivery
                 input.deliveryFee = delivery == "pickup" ? nil : Int(fee)
                 input.pickupBefore = hasPickupBefore ? Self.dayFormat.string(from: pickupBefore) : nil
@@ -368,6 +382,10 @@ struct PostForm: View {
                 UserDefaults.standard.set(p, forKey: "place")
                 UserDefaults.standard.set(cat, forKey: "cat")
                 UserDefaults.standard.set(delivery, forKey: "delivery")
+                if editing == nil {
+                    UserDefaults.standard.set(true, forKey: "aiConsent")
+                    aiConsentShown = false
+                }
             }
             onSaved?(saved)
             state.changed()

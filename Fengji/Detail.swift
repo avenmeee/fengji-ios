@@ -172,8 +172,10 @@ struct DetailView: View {
             }
             if item.isGroup {
                 HStack(spacing: 6) {
-                    ActionChip(text: "是我的，认领") {
-                        if state.needLogin() { claiming = true }
+                    if state.opsWechat != nil {
+                        ActionChip(text: "是我的，认领") {
+                            if state.needLogin() { claiming = true }
+                        }
                     }
                     ActionChip(text: "要求下架", danger: true) { confirmTakedown = true }
                 }

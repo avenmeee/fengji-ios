@@ -75,8 +75,8 @@ enum DemoServer {
         goods(2, "木画架", 25, "art", "有使用痕迹", "Starland", photos: [photo("b1")]),
         goods(3, "Dell 27 寸显示器", 60, "elec", "几乎全新", "宿舍楼下"),
         goods(4, "素描纸一箱", 0, "art", "全新", "Arnold Hall"),
-        goods(5, "设计史教材", 15, "book", "有点旧", "学校门口", photos: [photo("c1")]),
-        goods(6, "羽绒服 M 码", 30, "wear", "几乎全新", "Victory Dr"),
+        goods(5, "设计史教材", 15, "other", "有点旧", "学校门口", photos: [photo("c1")]),
+        goods(6, "羽绒服 M 码", 30, "other", "几乎全新", "Victory Dr"),
         goods(7, "小冰箱", 50, "kitchen", "有使用痕迹", "Forsyth Park"),
         goods(8, "台灯", 8, "furn", "几乎全新", "学校门口")
     ]
@@ -86,8 +86,8 @@ enum DemoServer {
 
     static let rentList: [Listing] = [
         rent(1, "一室一厅，走路到学校 10 分钟", 950, "转租", "Starland 附近", photos: [photo("d1")]),
-        rent(2, "单间，寒假可住", 620, "寒假短租", "Victory Dr"),
-        rent(3, "独栋一层，带院子", 1400, "整租", "Ardsley Park")
+        rent(2, "单间，寒假可住", 620, "短租", "Victory Dr"),
+        rent(3, "独栋一层，带院子", 1400, "转租", "Ardsley Park")
     ]
 
     static let mineList: [Listing] = [

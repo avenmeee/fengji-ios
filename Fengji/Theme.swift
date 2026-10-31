@@ -61,10 +61,7 @@ struct Tint {
         case "furn": return Tint(bg: dyn(0xF1E8D8, 0x423A2C), fg: dyn(0x8A6A35, 0xD9BC85), symbol: "sofa")
         case "kitchen": return Tint(bg: dyn(0xF3E9DC, 0x43382B), fg: dyn(0x9A6A3A, 0xDDB78C), symbol: "fork.knife")
         case "elec": return Tint(bg: dyn(0xDFE7F0, 0x2F3A47), fg: dyn(0x3F628A, 0x9DBBDD), symbol: "desktopcomputer")
-        case "car": return Tint(bg: dyn(0xE4E6EA, 0x363A40), fg: dyn(0x4F5B6B, 0xB2BDCB), symbol: "car")
         case "art": return Tint(bg: dyn(0xF6DFD7, 0x46322B), fg: dyn(0xB04E33, 0xE58A6D), symbol: "paintbrush.pointed")
-        case "book": return Tint(bg: dyn(0xE2EDE4, 0x30402F), fg: dyn(0x4B7A55, 0x8FBE99), symbol: "book")
-        case "wear": return Tint(bg: dyn(0xE9E3F2, 0x393346), fg: dyn(0x6A5596, 0xB9A6DD), symbol: "tshirt")
         default: return Tint(bg: dyn(0xECEBE7, 0x3A3936), fg: dyn(0x6B6A66, 0xB4B1AB), symbol: "shippingbox")
         }
     }
@@ -85,7 +82,7 @@ struct Chip: View {
             Text(text)
                 .font(.system(size: 15, weight: on ? .semibold : .medium))
                 .foregroundStyle(on ? act.on : (quiet ? Theme.sub : Theme.ink))
-                .padding(.horizontal, 13)
+                .padding(.horizontal, quiet ? 9 : 13)
                 .frame(height: 34)
                 .background(on ? act.fill : (quiet ? Color.clear : Theme.fill), in: Capsule())
         }

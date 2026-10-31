@@ -54,7 +54,7 @@ struct ClaimView: View {
             } else {
                 Text("正在取…").foregroundStyle(Theme.sub)
             }
-            Text("发给运营小号，或发到任一二手群。15 分钟内有效。对上后，你在群里发的东西会一次转到这个账号。")
+            Text("发给运营小号。15 分钟内有效。对上后，你在群里发的东西会一次转到这个账号。")
                 .font(.subheadline)
                 .foregroundStyle(Theme.sub)
             if let ops = state.opsWechat {

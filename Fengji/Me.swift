@@ -29,14 +29,16 @@ struct MeView: View {
                         .buttonStyle(PrimaryButtonStyle(act: .rent))
                     }
 
-                    Button("认领我在群里发的东西") {
-                        if state.needLogin() { claiming = true }
+                    if state.opsWechat != nil {
+                        Button("认领我在群里发的东西") {
+                            if state.needLogin() { claiming = true }
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.ink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 14))
                     }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Theme.ink)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 14))
 
                     HStack {
                         Text("我发的").font(.footnote).foregroundStyle(Theme.sub)

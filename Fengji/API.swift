@@ -11,6 +11,7 @@ struct APIError: LocalizedError {
     var errorDescription: String? {
         switch code {
         case "not_allowed": return "这类内容不能发。"
+        case "need_ai_consent": return "要同意发给 AI 打分才能发布。"
         case "need_photo": return "要一张实拍照。"
         case "need_utilities": return "选一下包不包水电。"
         case "need_dates": return "写一下起止日期，或者选长租。"

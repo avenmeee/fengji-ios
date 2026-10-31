@@ -48,9 +48,10 @@ export function privacyPage(env) {
   <p>只在你发布时才要登录。登录用“通过 Apple 登录”，我们只拿到苹果给的匿名编号，拿不到你的姓名和邮箱。</p>
   <p>你主动发布的内容：照片、标题、价格、地点、备注、微信号。这些内容所有人都能看到，包括没有登录的人和看到分享链接的人。</p>
   <p>屏蔽和举报记录。不登录举报时不记录你是谁。</p>
-  <p>部分条目来自微信群，只有物品信息、群名和群昵称，不存微信号和电话，房源不写门牌。发布者可以在详情页一键要求下架，立刻生效，照片一起删除。</p>
+  <p>部分条目来自微信群，由运营者搬进来，未经发布者确认，包括物品信息、群名、群昵称和原图。不公开微信号和电话，房源不写门牌，有人脸、二维码、微信截图、门牌的图不用。发布者可以在详情页一键要求下架，立刻生效，照片一起删除。</p>
   <p>发布、浏览、成交的每日总数，只是数字，不关联到个人。</p>
   <p>认领：把 App 给的验证码用自己的微信发出来，核对发送者后，这个人名下的条目一次转到你的账号。我们只存发送者编号的带密钥哈希用来匹配，不存也不显示微信 ID 明文。认领后你填的微信号才会公开。</p>
+  <p>AI 打分：东西的名字、价格、分类、成色、地点和第一张照片（包括来自微信群的条目）会发给 AI（Anthropic 的 Claude）打分。发布东西前会征得你的同意。微信群的照片在搬进来之前也会发给同一个 AI 筛选。</p>
   <h2>不做什么</h2>
   <p>不追踪你，不放广告，不卖数据。照片上传前去掉定位信息。App 不读你的相册，只拿到你选中的照片。</p>
   <h2>存在哪</h2>
@@ -60,7 +61,7 @@ export function privacyPage(env) {
   <h2>联系</h2>
   <p>${contactLine(env)}</p>
   <h2 lang="en">In English</h2>
-  <p lang="en">Fengji only needs sign-in to post, using Sign in with Apple; we receive an anonymous identifier, not your name or email. What you post (photos, text, location, WeChat ID) is public. We keep daily totals of posts, views and sales that are not linked to anyone. We do not track you, show ads or sell data. Delete your account any time in the app (Me → Settings → Delete account); your posts and photos are deleted immediately. Data is stored on Cloudflare.</p>`);
+  <p lang="en">Fengji only needs sign-in to post, using Sign in with Apple; we receive an anonymous identifier, not your name or email. What you post (photos, text, location, WeChat ID) is public. We keep daily totals of posts, views and sales that are not linked to anyone. We do not track you, show ads or sell data. Some listings are copied from WeChat groups by the operator without the poster's confirmation, including group names, nicknames and original photos; posters can take them down instantly or claim them. Listing details and the first photo are sent to AI (Anthropic's Claude) to produce a rating; you are asked to agree before posting. Delete your account any time in the app (Me → Settings → Delete account); your posts and photos are deleted immediately. Data is stored on Cloudflare.</p>`);
 }
 
 export function supportPage(env) {

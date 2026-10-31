@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_admin INTEGER NOT NULL DEFAULT 0,
   banned INTEGER NOT NULL DEFAULT 0,
   agreed_at INTEGER,             -- 同意用户协议的时间
+  ai_consent_at INTEGER,         -- 同意把东西的信息发给 AI 打分的时间
   sender_hash TEXT,              -- 认领后：他在微信群里的发送者哈希
   contact TEXT,                  -- 认领后：他愿意公开的微信号
   created_at INTEGER NOT NULL
@@ -26,7 +27,7 @@ CREATE TABLE IF NOT EXISTS listings (
   price INTEGER NOT NULL,        -- 美元，goods 填 0 是免费送；rent 是每月租金
   cat TEXT,                      -- goods：furn elec art book wear other
   cond TEXT,                     -- goods：成色
-  rtype TEXT,                    -- rent：整租 单间 寒假短租 转租
+  rtype TEXT,                    -- rent：短租 转租
   from_date TEXT,                -- rent：YYYY-MM-DD
   to_date TEXT,
   lease_end TEXT,                -- rent：租约到期日

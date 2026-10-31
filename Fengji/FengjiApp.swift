@@ -3,8 +3,8 @@ import SwiftUI
 enum Config {
     static let host = "fengji.sinantrails.com"
     static let base = "https://" + host
-    // 规则 1.2 要公开联系方式。空着就不显示那一行，上架前要填。支持页在后端 /support。
-    static let contactEmail = ""
+    // 规则 1.2 要公开联系方式。支持页在后端 /support，用 Worker 变量 CONTACT_EMAIL。
+    static let contactEmail = "avenmeee@gmail.com"
 }
 
 @main
