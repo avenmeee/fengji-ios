@@ -160,7 +160,7 @@ struct PostForm: View {
         var startPhotos = (editing?.photos ?? []).map { FormPhoto.existing($0) }
         if filled { startPhotos = (Demo.sampleListing?.photos ?? []).map { FormPhoto.existing($0) } }
         _photos = State(initialValue: startPhotos)
-        let savedContact = editing?.contact ?? UserDefaults.standard.string(forKey: "contact") ?? ""
+        let savedContact = editing?.contact ?? UserDefaults.standard.string(forKey: "contact") ?? (filled ? "wx_demo" : "")
         _contact = State(initialValue: savedContact)
         _askContact = State(initialValue: savedContact.isEmpty && !filled)
 
@@ -354,7 +354,7 @@ struct PostForm: View {
                             Chip(text: opt.label, on: delivery == opt.key, act: formAct) { delivery = delivery == opt.key ? nil : opt.key }
                         }
                         if let delivery, delivery != "pickup" {
-                            LineField(placeholder: "$ 配送费", text: $deliveryFee)
+                            LineField(placeholder: "$ 配送费", text: $deliveryFee, dollar: true)
                                 .keyboardType(.numberPad)
                                 .frame(width: 90)
                         }
@@ -466,17 +466,21 @@ struct PostForm: View {
 
     private var priceField: some View {
         VStack(spacing: 6) {
-            TextField(isRent ? "$ 月租" : "$ 价格", text: Binding(
-                get: { price },
-                set: {
-                    price = $0
-                    priceTouched = true
-                    priceSuggested = false
-                }
-            ))
-            .keyboardType(.numberPad)
+            HStack(spacing: 0) {
+                if !price.isEmpty { Text("$") }
+                TextField(isRent ? "$ 月租" : "$ 价格", text: Binding(
+                    get: { price },
+                    set: {
+                        price = $0
+                        priceTouched = true
+                        priceSuggested = false
+                    }
+                ))
+                .keyboardType(.numberPad)
+            }
             .font(.system(size: 22, weight: .bold))
             .monospacedDigit()
+            .foregroundStyle(Theme.ink)
             Theme.line.frame(height: 0.5)
             if priceSuggested {
                 Text("AI 建议价，可以改")
@@ -595,8 +599,8 @@ struct PostForm: View {
                 }
                 section("费用") {
                     row("网费") { yesNo("包", "不包", $internet) }
-                    row("押金") { LineField(placeholder: "$", text: $deposit).keyboardType(.numberPad) }
-                    row("申请费") { LineField(placeholder: "$", text: $appFee).keyboardType(.numberPad) }
+                    row("押金") { LineField(placeholder: "$", text: $deposit, dollar: true).keyboardType(.numberPad) }
+                    row("申请费") { LineField(placeholder: "$", text: $appFee, dollar: true).keyboardType(.numberPad) }
                 }
                 section("屋里") {
                     row("家具") { oneOf(["有", "部分有", "没有"], $furniture) }
@@ -684,11 +688,11 @@ struct PostForm: View {
     }
 
     private func row<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             Text(label)
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.sub)
-                .frame(width: 44, alignment: .leading)
+                .frame(width: 44, height: 34, alignment: .leading)
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -888,13 +892,18 @@ struct PostForm: View {
 private struct LineField: View {
     let placeholder: String
     @Binding var text: String
+    var dollar = false
 
     var body: some View {
         VStack(spacing: 6) {
-            TextField(placeholder, text: $text)
-                .font(.system(size: 15))
+            HStack(spacing: 0) {
+                if dollar, !text.isEmpty { Text("$").foregroundStyle(Theme.ink) }
+                TextField(placeholder, text: $text)
+            }
+            .font(.system(size: 15))
             Theme.line.frame(height: 0.5)
         }
+        .padding(.top, 8)
     }
 }
 
