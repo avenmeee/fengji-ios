@@ -83,7 +83,7 @@ enum DemoServer {
     ]
 
     /// 群里搬来的样子
-    static let groupItem = Listing(id: "g20", uid: "0", kind: "goods", title: "落地灯，搬家出", price: 15, cat: "furn", cond: nil, rtype: nil, from: nil, to: nil, place: "downtown", desc: "", status: "on", contact: nil, photos: [photo("c2")], createdAt: now - 900_000, mine: false, score: 4, sourceType: "group", sourceGroup: "二手群 3", sourcePoster: "小林", sourcePostedAt: now - 3 * 86_400_000)
+    static let groupItem = Listing(id: "g20", uid: "0", kind: "goods", title: "落地灯，搬家出", price: 15, cat: "furn", cond: nil, rtype: nil, from: nil, to: nil, place: "Monty", desc: "", status: "on", contact: nil, photos: [photo("c2")], createdAt: now - 900_000, mine: false, score: 4, sourceType: "group", sourceGroup: "二手群 3", sourcePoster: "小林", sourcePostedAt: now - 3 * 86_400_000)
 
     static let rentList: [Listing] = [
         rent(1, "一室一厅，走路到学校 10 分钟", 950, "转租", "Starland 附近", photos: [photo("d1")]),

@@ -304,7 +304,7 @@ struct PostForm: View {
             if let delivery, delivery != "pickup" {
                 Input(placeholder: "配送费（美元）", text: $deliveryFee).keyboardType(.numberPad)
             }
-            Input(placeholder: "在哪拿，比如 monty、downtown、TP", text: $place)
+            Input(placeholder: "在哪拿，比如 Monty、TP、Arcadia", text: $place)
             Toggle("几号前取走", isOn: $hasPickupBefore).tint(formAct.fill)
             if hasPickupBefore { dateBox($pickupBefore) }
             Toggle("几号后可取", isOn: $hasPickupAfter).tint(formAct.fill)
