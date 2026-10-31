@@ -243,8 +243,6 @@ struct ListingInput: Encodable {
     var cond: String?
     var from: String?
     var to: String?
-    var fromPrec: String?
-    var toPrec: String?
     /// "xun" 是上中下旬
     var fromPrec: String? = nil
     var toPrec: String? = nil
