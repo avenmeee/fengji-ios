@@ -61,6 +61,7 @@ struct Tint {
         case "furn": return Tint(bg: dyn(0xF1E8D8, 0x423A2C), fg: dyn(0x8A6A35, 0xD9BC85), symbol: "sofa")
         case "kitchen": return Tint(bg: dyn(0xF3E9DC, 0x43382B), fg: dyn(0x9A6A3A, 0xDDB78C), symbol: "fork.knife")
         case "elec": return Tint(bg: dyn(0xDFE7F0, 0x2F3A47), fg: dyn(0x3F628A, 0x9DBBDD), symbol: "desktopcomputer")
+        case "car": return Tint(bg: dyn(0xE4E6EA, 0x363A40), fg: dyn(0x4F5B6B, 0xB2BDCB), symbol: "car")
         case "art": return Tint(bg: dyn(0xF6DFD7, 0x46322B), fg: dyn(0xB04E33, 0xE58A6D), symbol: "paintbrush.pointed")
         case "book": return Tint(bg: dyn(0xE2EDE4, 0x30402F), fg: dyn(0x4B7A55, 0x8FBE99), symbol: "book")
         case "wear": return Tint(bg: dyn(0xE9E3F2, 0x393346), fg: dyn(0x6A5596, 0xB9A6DD), symbol: "tshirt")
@@ -247,6 +248,68 @@ struct Hexagon: Shape {
     }
 }
 
+/// 小蜜蜂：五档分数的图标。六边形身子、两道黑纹、两片翅膀
+struct BeeMark: View {
+    var size: CGFloat = 14
+
+    var body: some View {
+        ZStack {
+            HStack(spacing: size * 0.1) {
+                Ellipse().stroke(Theme.ink, lineWidth: size * 0.09).frame(width: size * 0.4, height: size * 0.26).rotationEffect(.degrees(35))
+                Ellipse().stroke(Theme.ink, lineWidth: size * 0.09).frame(width: size * 0.4, height: size * 0.26).rotationEffect(.degrees(-35))
+            }
+            .offset(y: -size * 0.32)
+            Hexagon()
+                .fill(Theme.buy)
+                .frame(width: size * 0.78, height: size * 0.78)
+                .overlay {
+                    VStack(spacing: size * 0.1) {
+                        Rectangle().fill(Color.black.opacity(0.85)).frame(height: size * 0.11)
+                        Rectangle().fill(Color.black.opacity(0.85)).frame(height: size * 0.11)
+                    }
+                }
+                .clipShape(Hexagon())
+                .offset(y: size * 0.1)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+/// 蜜蜂 + 档位数字。没打分不显示。
+struct ScoreBadge: View {
+    let score: Int?
+    var size: CGFloat = 14
+
+    var body: some View {
+        if let score {
+            HStack(spacing: 3) {
+                BeeMark(size: size)
+                Text("\(score)")
+                    .font(.system(size: size, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.ink)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("蜂集评分 \(score) 档")
+        }
+    }
+}
+
+/// 图上的小标：已预订、群里搬来
+struct PhotoTag: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 6))
+            .padding(8)
+    }
+}
+
 // MARK: - 图片
 
 @MainActor
@@ -313,6 +376,13 @@ struct ListingImage: View {
                 .foregroundStyle(tint.fg)
             if item.photos.indices.contains(index) {
                 RemoteImage(url: item.photos[index].url, maxPixel: maxPixel)
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if item.isReserved {
+                PhotoTag(text: "已预订")
+            } else if item.isGroup {
+                PhotoTag(text: "群里搬来")
             }
         }
     }

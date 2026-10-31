@@ -63,11 +63,11 @@ enum DemoServer {
     }
 
     static func goods(_ id: Int, _ title: String, _ price: Int, _ cat: String, _ cond: String, _ place: String, photos: [Photo] = [], mine: Bool = false, status: String = "on") -> Listing {
-        Listing(id: "g\(id)", uid: mine ? "me" : "u\(id)", kind: "goods", title: title, price: price, cat: cat, cond: cond, rtype: nil, from: nil, to: nil, place: place, desc: id == 1 ? "搬家出，桌面没有划痕。自己来拿。" : "", status: status, contact: "wx_demo\(id)", photos: photos, createdAt: now - Int64(id) * 3_400_000, mine: mine, delivery: id == 3 ? "deliver" : "pickup")
+        Listing(id: "g\(id)", uid: mine ? "me" : "u\(id)", kind: "goods", title: title, price: price, cat: cat, cond: cond, rtype: nil, from: nil, to: nil, place: place, desc: id == 1 ? "搬家出，桌面没有划痕。自己来拿。" : "", status: status, contact: "wx_demo\(id)", photos: photos, createdAt: now - Int64(id) * 3_400_000, mine: mine, delivery: id == 3 ? "both" : "pickup", deliveryFee: id == 3 ? 5 : nil, pickupBefore: id == 1 ? "2027-01-10" : nil, score: mine ? nil : [5, 4, 3, 5, 2, nil, 4, 1][(id - 1) % 8])
     }
 
     static func rent(_ id: Int, _ title: String, _ price: Int, _ type: String, _ place: String, photos: [Photo] = []) -> Listing {
-        Listing(id: "r\(id)", uid: "u\(id + 20)", kind: "rent", title: title, price: price, cat: nil, cond: nil, rtype: type, from: "2027-01-05", to: "2027-05-20", place: place, desc: "", status: "on", contact: "wx_rent\(id)", photos: photos, createdAt: now - Int64(id) * 7_000_000, mine: false, leaseEnd: "2027-05-31", utilities: id == 1, privateBath: id != 2)
+        Listing(id: "r\(id)", uid: "u\(id + 20)", kind: "rent", title: title, price: price, cat: nil, cond: nil, rtype: type, from: "2027-01-05", to: "2027-05-20", place: place, desc: "", status: "on", contact: "wx_rent\(id)", photos: photos, createdAt: now - Int64(id) * 7_000_000, mine: false, leaseEnd: "2027-05-31", utilities: id == 1, privateBath: id != 2, furnished: id == 1)
     }
 
     static let goodsList: [Listing] = [
@@ -81,6 +81,9 @@ enum DemoServer {
         goods(8, "台灯", 8, "furn", "几乎全新", "学校门口")
     ]
 
+    /// 群里搬来的样子
+    static let groupItem = Listing(id: "g20", uid: "0", kind: "goods", title: "落地灯，搬家出", price: 15, cat: "furn", cond: nil, rtype: nil, from: nil, to: nil, place: "downtown", desc: "", status: "on", contact: nil, photos: [photo("c2")], createdAt: now - 900_000, mine: false, score: 4, sourceType: "group", sourceGroup: "二手群 3", sourcePoster: "小林")
+
     static let rentList: [Listing] = [
         rent(1, "一室一厅，走路到学校 10 分钟", 950, "转租", "Starland 附近", photos: [photo("d1")]),
         rent(2, "单间，寒假可住", 620, "寒假短租", "Victory Dr"),
@@ -89,7 +92,8 @@ enum DemoServer {
 
     static let mineList: [Listing] = [
         goods(11, "显示器支架", 12, "elec", "几乎全新", "学校门口", photos: [photo("e1")], mine: true),
-        goods(12, "油画颜料一套", 20, "art", "有使用痕迹", "Arnold Hall", mine: true, status: "off")
+        goods(12, "油画颜料一套", 20, "art", "有使用痕迹", "Arnold Hall", mine: true, status: "reserved"),
+        goods(13, "小书架", 10, "furn", "有点旧", "TP", mine: true, status: "off")
     ]
 
     static func color(_ name: String) -> UIColor {
@@ -122,14 +126,15 @@ enum DemoServer {
         if path.hasPrefix("/p/") { return (200, jpeg(url.deletingPathExtension().lastPathComponent), "image/jpeg") }
         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let param: (String) -> String? = { name in query.first { $0.name == name }?.value }
-        let all = goodsList + rentList + mineList
+        let all = goodsList + rentList + mineList + [groupItem]
 
         if method == "GET", path == "/v1/me" { return (200, encode(Me(id: "me", isAdmin: false, agreed: true)), json) }
         if method == "GET", path == "/v1/me/listings" { return (200, encode(ListingList(items: mineList)), json) }
         if method == "GET", path == "/v1/admin/stats" { return (200, encode(Stats(posts: 12, views: 340, sold: 5)), json) }
+        if method == "GET", path == "/v1/config" { return (200, encode(AppConfig(opsWechat: "demo_ops")), json) }
         if method == "GET", path == "/v1/me/blocks" { return (200, encode(BlockList(items: [])), json) }
         if method == "GET", path == "/v1/listings" {
-            var list = param("kind") == "rent" ? rentList : goodsList
+            var list = param("kind") == "rent" ? rentList : (Demo.scene == "group" ? [groupItem] + goodsList : goodsList)
             if let c = param("cat") { list = list.filter { $0.cat == c } }
             if let t = param("rtype") { list = list.filter { $0.rtype == t } }
             if let q = param("q") { list = list.filter { $0.title.contains(q) || $0.place.contains(q) } }

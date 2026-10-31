@@ -26,10 +26,12 @@ struct ShareCard: View {
                     .font(.largeTitle.weight(.bold))
                     .monospacedDigit()
                     .foregroundStyle(item.price == 0 ? Theme.sell : Theme.ink)
-                Text(item.isRent ? [item.place, item.period].filter { !$0.isEmpty }.joined(separator: " · ") : item.place + " · " + item.deliveryText)
+                Text(item.isRent ? [item.place, item.period].filter { !$0.isEmpty }.joined(separator: " · ") : [item.place, item.pickupText].filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.subheadline)
                     .foregroundStyle(Theme.sub)
-                if let contact = item.contact {
+                if item.isGroup {
+                    Text("去 \(item.sourceGroup ?? "") 群找 \(item.sourcePoster ?? "")").font(.subheadline.weight(.semibold))
+                } else if let contact = item.contact {
                     Text("微信 " + contact).font(.subheadline.weight(.semibold))
                 }
                 HStack(spacing: 6) {

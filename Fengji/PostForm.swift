@@ -56,7 +56,14 @@ struct PostForm: View {
     @State private var place: String
     @State private var desc: String
     @State private var delivery: String
-    @State private var utilities: Bool
+    @State private var utilities: String?
+    @State private var deliveryFee: String
+    @State private var hasPickupBefore: Bool
+    @State private var pickupBefore: Date
+    @State private var hasPickupAfter: Bool
+    @State private var pickupAfter: Date
+    @State private var longTerm: Bool
+    @State private var furnished: Bool
     @State private var privateBath: Bool
     @State private var hasLeaseEnd: Bool
     @State private var leaseEnd: Date
@@ -90,7 +97,16 @@ struct PostForm: View {
         _place = State(initialValue: editing?.place ?? (kind == "goods" ? UserDefaults.standard.string(forKey: "place") ?? "" : ""))
         _desc = State(initialValue: editing?.desc ?? "")
         _delivery = State(initialValue: editing?.delivery ?? UserDefaults.standard.string(forKey: "delivery") ?? "pickup")
-        _utilities = State(initialValue: editing?.utilities ?? false)
+        _utilities = State(initialValue: editing?.utilities.map { $0 ? "yes" : "no" })
+        _deliveryFee = State(initialValue: editing?.deliveryFee.map { String($0) } ?? "")
+        let before = editing?.pickupBefore.flatMap { Self.dayFormat.date(from: $0) }
+        let after = editing?.pickupAfter.flatMap { Self.dayFormat.date(from: $0) }
+        _hasPickupBefore = State(initialValue: before != nil)
+        _pickupBefore = State(initialValue: before ?? today.addingTimeInterval(14 * 86400))
+        _hasPickupAfter = State(initialValue: after != nil)
+        _pickupAfter = State(initialValue: after ?? today)
+        _longTerm = State(initialValue: editing?.longTerm ?? false)
+        _furnished = State(initialValue: editing?.furnished ?? false)
         _privateBath = State(initialValue: editing?.privateBath ?? false)
         let lease = editing?.leaseEnd.flatMap { Self.dayFormat.date(from: $0) }
         _hasLeaseEnd = State(initialValue: lease != nil)
@@ -129,6 +145,8 @@ struct PostForm: View {
                 price = ""
                 desc = ""
                 photos = []
+                hasPickupBefore = false
+                hasPickupAfter = false
                 error = nil
                 posted = false
             }
@@ -146,7 +164,7 @@ struct PostForm: View {
     private var form: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
-                field("照片（最多 3 张）") { photoRow }
+                field(isRent ? "照片（最多 3 张）" : "实拍照（至少 1 张）") { photoRow }
                 field(isRent ? "房子" : "卖什么") {
                     Input(placeholder: isRent ? "一室一厅，走路到学校 10 分钟" : "宜家书桌，九成新", text: $title)
                 }
@@ -157,16 +175,32 @@ struct PostForm: View {
                     field("类型") { options(plainOptions(RTYPES), $rtype) }
                     HStack(spacing: 10) {
                         field("起") { dateBox($from) }
-                        field("止") { dateBox($to) }
+                        if !longTerm { field("止") { dateBox($to) } }
                     }
-                    Toggle("包水电", isOn: $utilities).tint(Theme.rent)
+                    Toggle("长租", isOn: $longTerm).tint(Theme.rent)
+                    field("水电") {
+                        FlowLayout {
+                            Chip(text: "包水电", on: utilities == "yes", act: formAct) { utilities = "yes" }
+                            Chip(text: "不包", on: utilities == "no", act: formAct) { utilities = "no" }
+                        }
+                    }
+                    Toggle("可拎包入住", isOn: $furnished).tint(Theme.rent)
                     Toggle("独卫", isOn: $privateBath).tint(Theme.rent)
                     Toggle("写租约到期日", isOn: $hasLeaseEnd).tint(Theme.rent)
                     if hasLeaseEnd { dateBox($leaseEnd) }
                 } else {
                     field("分类") { options(CATS, $cat) }
                     field("成色") { options(plainOptions(CONDS), $cond) }
-                    field("怎么拿") { options([(key: "pickup", label: "自取"), (key: "deliver", label: "可配送")], $delivery) }
+                    field("怎么拿") { options([(key: "pickup", label: "自取"), (key: "deliver", label: "可配送"), (key: "both", label: "都可")], $delivery) }
+                    if delivery != "pickup" {
+                        field("配送费（美元，选填）") {
+                            Input(placeholder: "", text: $deliveryFee).keyboardType(.numberPad)
+                        }
+                    }
+                    Toggle("几号前取走", isOn: $hasPickupBefore).tint(formAct.fill)
+                    if hasPickupBefore { dateBox($pickupBefore) }
+                    Toggle("几号后可取", isOn: $hasPickupAfter).tint(formAct.fill)
+                    if hasPickupAfter { dateBox($pickupAfter) }
                 }
                 field(isRent ? "地段" : "在哪拿") {
                     Input(placeholder: "monty、downtown、TP", text: $place)
@@ -183,6 +217,7 @@ struct PostForm: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
+                Text("限萨凡纳，当面交易。").font(.footnote).foregroundStyle(Theme.sub)
                 if let error {
                     Text(error).font(.subheadline).foregroundStyle(Theme.warn)
                 }
@@ -288,7 +323,11 @@ struct PostForm: View {
         if isRent, money == 0 { error = "租金要大于 0。"; return }
         guard !p.isEmpty else { error = isRent ? "写一下地段。" : "写一下在哪拿。"; return }
         guard !c.isEmpty else { error = "留个微信号。"; return }
-        if isRent, from > to { error = "止要晚于起。"; return }
+        if isRent, !longTerm, from > to { error = "止要晚于起。"; return }
+        if isRent, utilities == nil { error = "选一下包不包水电。"; return }
+        if !isRent, photos.isEmpty { error = "要一张实拍照。"; return }
+        let fee = deliveryFee.trimmingCharacters(in: .whitespaces)
+        if !isRent, delivery != "pickup", !fee.isEmpty, Int(fee) == nil { error = "配送费要填整数。"; return }
 
         busy = true
         defer { busy = false }
@@ -304,14 +343,19 @@ struct PostForm: View {
             if isRent {
                 input.rtype = rtype
                 input.from = Self.dayFormat.string(from: from)
-                input.to = Self.dayFormat.string(from: to)
+                input.to = longTerm ? nil : Self.dayFormat.string(from: to)
+                input.longTerm = longTerm
+                input.furnished = furnished
                 input.leaseEnd = hasLeaseEnd ? Self.dayFormat.string(from: leaseEnd) : nil
-                input.utilities = utilities
+                input.utilities = utilities == "yes"
                 input.privateBath = privateBath
             } else {
                 input.cat = cat
                 input.cond = cond
                 input.delivery = delivery
+                input.deliveryFee = delivery == "pickup" ? nil : Int(fee)
+                input.pickupBefore = hasPickupBefore ? Self.dayFormat.string(from: pickupBefore) : nil
+                input.pickupAfter = hasPickupAfter ? Self.dayFormat.string(from: pickupAfter) : nil
             }
             let saved: Listing
             if let editing {

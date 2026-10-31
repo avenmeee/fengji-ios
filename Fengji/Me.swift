@@ -9,6 +9,8 @@ struct MeView: View {
     @State private var postingRent = Demo.scene == "rentform"
     @State private var editing: Listing?
     @State private var deleting: Listing?
+    @State private var pricing: Listing?
+    @State private var newPrice = ""
     @State private var path = NavigationPath()
 
     var body: some View {
@@ -47,7 +49,7 @@ struct MeView: View {
                     } else {
                         LazyVStack(spacing: 8) {
                             ForEach(items) { item in
-                                MineRow(item: item, toggle: { Task { await toggle(item) } }, bump: { Task { await bump(item) } }, edit: { editing = item }, delete: { deleting = item })
+                                MineRow(item: item, setStatus: { status in Task { await setStatus(item, status) } }, changePrice: { pricing = item; newPrice = String(item.price) }, bump: { Task { await bump(item) } }, edit: { editing = item }, delete: { deleting = item })
                             }
                         }
                     }
@@ -69,6 +71,11 @@ struct MeView: View {
             .sheet(isPresented: $postingGoods) { PostForm(kind: "goods") }
             .sheet(isPresented: $postingRent) { PostForm(kind: "rent") }
             .sheet(item: $editing) { item in PostForm(kind: item.kind, editing: item) }
+            .alert("改价", isPresented: Binding(get: { pricing != nil }, set: { if !$0 { pricing = nil } }), presenting: pricing) { item in
+                TextField("美元", text: $newPrice).keyboardType(.numberPad)
+                Button("保存") { Task { await savePrice(item) } }
+                Button("取消", role: .cancel) {}
+            }
             .alert("删除这条？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { item in
                 Button("删除", role: .destructive) { Task { await remove(item) } }
                 Button("取消", role: .cancel) {}
@@ -95,10 +102,24 @@ struct MeView: View {
         }
     }
 
-    private func toggle(_ item: Listing) async {
+    private func setStatus(_ item: Listing, _ status: String) async {
         do {
-            _ = try await API.shared.setStatus(item.id, item.isOn ? "off" : "on")
+            _ = try await API.shared.setStatus(item.id, status)
             state.changed()
+        } catch {
+            state.toast(error.localizedDescription)
+        }
+    }
+
+    private func savePrice(_ item: Listing) async {
+        guard let price = Int(newPrice.trimmingCharacters(in: .whitespaces)), price >= 0 else {
+            state.toast("价格要填整数")
+            return
+        }
+        do {
+            try await API.shared.setPrice(item.id, price)
+            state.changed()
+            state.toast("改好了")
         } catch {
             state.toast(error.localizedDescription)
         }
@@ -127,7 +148,8 @@ struct MeView: View {
 
 struct MineRow: View {
     let item: Listing
-    let toggle: () -> Void
+    let setStatus: (String) -> Void
+    let changePrice: () -> Void
     let bump: () -> Void
     let edit: () -> Void
     let delete: () -> Void
@@ -155,10 +177,17 @@ struct MineRow: View {
             .buttonStyle(.plain)
             .opacity(item.isOn ? 1 : 0.55)
 
-            HStack(spacing: 6) {
+            FlowLayout {
                 if item.status != "hidden" {
-                    ActionChip(text: item.isOn ? (item.isRent ? "标记已租" : "标记已卖") : "重新上架", action: toggle)
-                    if item.isOn { ActionChip(text: "擦亮", action: bump) }
+                    if item.isOn { ActionChip(text: "已预订") { setStatus("reserved") } }
+                    if item.isReserved { ActionChip(text: "转回在售") { setStatus("on") } }
+                    if item.status == "off" {
+                        ActionChip(text: "重新上架") { setStatus("on") }
+                    } else {
+                        ActionChip(text: item.isRent ? "已租" : "已卖") { setStatus("off") }
+                        ActionChip(text: "改价", action: changePrice)
+                        ActionChip(text: "擦亮", action: bump)
+                    }
                     ActionChip(text: "改", action: edit)
                 }
                 ActionChip(text: "删除", danger: true, action: delete)

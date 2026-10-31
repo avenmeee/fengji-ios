@@ -22,7 +22,7 @@ struct SettingsView: View {
                     Section {
                         NavigationLink("屏蔽名单") { BlockedView() }
                         if state.isAdmin {
-                            NavigationLink("举报处理") { AdminReportsView() }
+                            NavigationLink("举报和认领") { AdminReportsView() }
                         }
                     }
                     Section {
@@ -144,6 +144,7 @@ struct AdminReportsView: View {
     @State private var items: [AdminReport] = []
     @State private var loaded = false
     @State private var stats: Stats?
+    @State private var claims: [AdminClaim] = []
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -153,8 +154,21 @@ struct AdminReportsView: View {
                         .font(.footnote)
                         .foregroundStyle(Theme.sub)
                 }
-                if loaded, items.isEmpty {
-                    EmptyBlock(text: "没有待处理的举报。")
+                if loaded, items.isEmpty, claims.isEmpty {
+                    EmptyBlock(text: "没有待处理的。")
+                }
+                ForEach(claims) { c in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("认领：" + c.listing.title).font(.body.weight(.semibold)).foregroundStyle(Theme.ink)
+                        Text("微信 " + c.contact).font(.subheadline).foregroundStyle(Theme.sub)
+                        HStack(spacing: 6) {
+                            ActionChip(text: "同意") { run { try await API.shared.adminDecideClaim(c.id, approve: true) } }
+                            ActionChip(text: "拒绝", danger: true) { run { try await API.shared.adminDecideClaim(c.id, approve: false) } }
+                        }
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 18))
                 }
                 ForEach(items) { r in
                     VStack(alignment: .leading, spacing: 8) {
@@ -168,7 +182,9 @@ struct AdminReportsView: View {
                         HStack(spacing: 6) {
                             ActionChip(text: "没问题") { run { try await API.shared.adminRestore(r.listing.id) } }
                             ActionChip(text: "删除", danger: true) { run { try await API.shared.delete(r.listing.id) } }
-                            ActionChip(text: "封号", danger: true) { run { try await API.shared.adminBan(r.listing.uid) } }
+                            if !r.listing.isGroup {
+                                ActionChip(text: "封号", danger: true) { run { try await API.shared.adminBan(r.listing.uid) } }
+                            }
                         }
                     }
                     .padding(12)
@@ -186,6 +202,7 @@ struct AdminReportsView: View {
     private func load() async {
         items = (try? await API.shared.adminReports()) ?? []
         stats = try? await API.shared.adminStats()
+        claims = (try? await API.shared.adminClaims()) ?? []
         loaded = true
     }
 

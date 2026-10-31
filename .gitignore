@@ -12,5 +12,6 @@ shots/
 node_modules/
 .wrangler/
 .dev.vars
+.admin-token
 视觉/
 shots-dl/

@@ -10,6 +10,8 @@ final class AppState: ObservableObject {
     @Published private(set) var toastText: String?
     /// 写操作后加一，各列表跟着刷新
     @Published private(set) var version = 0
+    /// 运营微信，后端配置；没配是空
+    @Published private(set) var opsWechat: String?
     /// 哪几页进了下一层（这时藏底栏）
     @Published private(set) var pushed: Set<AppTab> = []
 
@@ -44,6 +46,10 @@ final class AppState: ObservableObject {
         if isLoggedIn { return true }
         showLogin = true
         return false
+    }
+
+    func loadConfig() async {
+        if let c = try? await API.shared.config() { opsWechat = c.opsWechat }
     }
 
     func refreshMe() async {

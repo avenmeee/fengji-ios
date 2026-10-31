@@ -30,18 +30,30 @@ CREATE TABLE IF NOT EXISTS listings (
   lease_end TEXT,                -- rent：租约到期日
   utilities INTEGER NOT NULL DEFAULT 0,     -- rent：包水电
   private_bath INTEGER NOT NULL DEFAULT 0,  -- rent：独卫
-  delivery TEXT,                 -- goods：pickup 自取；deliver 可配送
+  delivery TEXT,                 -- goods：pickup 自取；deliver 可配送；both 都可
+  delivery_fee INTEGER,          -- goods：配送费，选填
+  pickup_before TEXT,            -- goods：几号前取走，选填
+  pickup_after TEXT,             -- goods：几号后可取，选填
+  long_term INTEGER NOT NULL DEFAULT 0,     -- rent：长租，没有结束日期
+  furnished INTEGER NOT NULL DEFAULT 0,     -- rent：可拎包入住
+  score INTEGER,                 -- AI 五档 1～5，后台打；没打是空。卖家看不到自己的
+  scored_at INTEGER,
+  source_type TEXT NOT NULL DEFAULT 'self', -- self 自己发；group 群里搬来
+  source_id TEXT,                -- 群里搬来的去重编号
+  source_group TEXT,             -- 去哪个群找
+  source_poster TEXT,            -- 找谁（群昵称）
   place TEXT NOT NULL,
   descr TEXT NOT NULL DEFAULT '',
   contact TEXT NOT NULL,         -- 微信号，只给登录的人看
   photos TEXT NOT NULL DEFAULT '[]',
-  status TEXT NOT NULL DEFAULT 'on',  -- on 在架；off 已卖 / 已租；hidden 被举报下架
+  status TEXT NOT NULL DEFAULT 'on',  -- on 在售；reserved 已预订；off 已卖 / 已租；hidden 被举报下架
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   bumped_at INTEGER NOT NULL DEFAULT 0      -- 擦亮时间，列表按它排
 );
 CREATE INDEX IF NOT EXISTS listings_feed ON listings(kind, status, bumped_at DESC);
 CREATE INDEX IF NOT EXISTS listings_user ON listings(user_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS listings_source ON listings(source_id) WHERE source_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS reports (
   id TEXT PRIMARY KEY,
@@ -69,4 +81,20 @@ CREATE TABLE IF NOT EXISTS daily_counts (
   what TEXT NOT NULL,            -- post / photo
   n INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (day, user_id, what)
+);
+
+-- 群里搬来的条目被要求下架后留下编号，防止再次导入
+CREATE TABLE IF NOT EXISTS import_tombstones (
+  source_id TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL
+);
+
+-- 卖家认领群里搬来的条目，管理员确认
+CREATE TABLE IF NOT EXISTS claims (
+  id TEXT PRIMARY KEY,
+  listing_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  contact TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE (listing_id, user_id)
 );

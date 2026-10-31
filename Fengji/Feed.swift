@@ -9,7 +9,7 @@ final class FeedModel: ObservableObject {
     @Published var filter = "all"
     @Published private(set) var items: [Listing] = []
     @Published private(set) var phase: Phase = .loading
-    private var next: Int64?
+    private var next: Int?
     private var loadingMore = false
 
     init(kind: String) {
@@ -20,7 +20,7 @@ final class FeedModel: ObservableObject {
 
     func load() async {
         do {
-            let page = try await API.shared.feed(kind: kind, filter: filter, q: q.trimmingCharacters(in: .whitespaces), before: nil)
+            let page = try await API.shared.feed(kind: kind, filter: filter, q: q.trimmingCharacters(in: .whitespaces), offset: nil)
             items = page.items
             next = page.next
             phase = .ok
@@ -31,10 +31,10 @@ final class FeedModel: ObservableObject {
     }
 
     func loadMoreIfNeeded(_ item: Listing) async {
-        guard item.id == items.last?.id, let before = next, !loadingMore else { return }
+        guard item.id == items.last?.id, let offset = next, !loadingMore else { return }
         loadingMore = true
         defer { loadingMore = false }
-        if let page = try? await API.shared.feed(kind: kind, filter: filter, q: q.trimmingCharacters(in: .whitespaces), before: before) {
+        if let page = try? await API.shared.feed(kind: kind, filter: filter, q: q.trimmingCharacters(in: .whitespaces), offset: offset) {
             items += page.items
             next = page.next
         }
@@ -166,7 +166,7 @@ struct BuyView: View {
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
             .reloads(model, version: state.version)
             .onChange(of: model.items) { _, items in
-                if Demo.scene == "detail" || Demo.scene == "guest-detail", path.isEmpty, let first = items.first { path = [first] }
+                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group", path.isEmpty, let first = items.first { path = [first] }
             }
             .onChange(of: path) { _, p in state.setPushed(.buy, !p.isEmpty) }
         }
@@ -182,11 +182,15 @@ struct GoodsCard: View {
                 .aspectRatio(0.87, contentMode: .fit)
                 .overlay { ListingImage(item: item, maxPixel: 800) }
                 .clipShape(RoundedRectangle(cornerRadius: 18))
-            Text(item.priceText)
-                .font(.system(size: 18, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(item.price == 0 ? Theme.sell : Theme.ink)
-                .padding(.top, 8)
+            HStack {
+                Text(item.priceText)
+                    .font(.system(size: 18, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(item.price == 0 ? Theme.sell : Theme.ink)
+                Spacer(minLength: 4)
+                ScoreBadge(score: item.score)
+            }
+            .padding(.top, 8)
             Text(item.title)
                 .font(.footnote)
                 .foregroundStyle(Theme.sub)

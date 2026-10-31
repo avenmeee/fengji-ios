@@ -68,7 +68,10 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: state.toastText)
-        .task { await state.refreshMe() }
+        .task {
+            await state.loadConfig()
+            await state.refreshMe()
+        }
     }
 
     private func page<Content: View>(_ tab: AppTab, @ViewBuilder content: () -> Content) -> some View {

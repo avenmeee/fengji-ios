@@ -11,6 +11,9 @@ struct APIError: LocalizedError {
     var errorDescription: String? {
         switch code {
         case "not_allowed": return "这类内容不能发。"
+        case "need_photo": return "要一张实拍照。"
+        case "need_utilities": return "选一下包不包水电。"
+        case "need_dates": return "写一下起止日期，或者选长租。"
         case "too_soon": return "一天只能擦亮一次。"
         case "daily_limit": return "今天发得太多了，明天再试。"
         case "site_limit": return "今天传照片的人太多，明天再试。"
@@ -75,11 +78,11 @@ final class API: @unchecked Sendable {
     func deleteAccount() async throws { try await act("DELETE", "/v1/me") }
 
     // 条目
-    func feed(kind: String, filter: String, q: String, before: Int64?) async throws -> ListingPage {
+    func feed(kind: String, filter: String, q: String, offset: Int?) async throws -> ListingPage {
         var items = [URLQueryItem(name: "kind", value: kind)]
         if filter != "all" { items.append(URLQueryItem(name: kind == "rent" ? "rtype" : "cat", value: filter)) }
         if !q.isEmpty { items.append(URLQueryItem(name: "q", value: q)) }
-        if let before { items.append(URLQueryItem(name: "before", value: String(before))) }
+        if let offset { items.append(URLQueryItem(name: "offset", value: String(offset))) }
         var c = URLComponents()
         c.queryItems = items
         return try await get("/v1/listings" + (c.string ?? ""))
@@ -94,6 +97,14 @@ final class API: @unchecked Sendable {
     func setStatus(_ id: String, _ status: String) async throws -> Listing {
         try await post("POST", "/v1/listings/\(id)/status", ["status": status])
     }
+    func setPrice(_ id: String, _ price: Int) async throws {
+        let _: Listing = try await post("POST", "/v1/listings/\(id)/price", ["price": price])
+    }
+    func takedown(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/takedown") }
+    func claim(_ id: String, contact: String) async throws {
+        let _: OK = try await post("POST", "/v1/listings/\(id)/claim", ["contact": contact])
+    }
+    func config() async throws -> AppConfig { try await get("/v1/config") }
     func bump(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/bump") }
     func countView(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/view") }
     func delete(_ id: String) async throws { try await act("DELETE", "/v1/listings/\(id)") }
@@ -117,6 +128,13 @@ final class API: @unchecked Sendable {
     func adminReports() async throws -> [AdminReport] {
         let r: AdminReportList = try await get("/v1/admin/reports")
         return r.items
+    }
+    func adminClaims() async throws -> [AdminClaim] {
+        let r: AdminClaimList = try await get("/v1/admin/claims")
+        return r.items
+    }
+    func adminDecideClaim(_ id: String, approve: Bool) async throws {
+        try await act("POST", "/v1/admin/claims/\(id)/\(approve ? "approve" : "reject")")
     }
     func adminStats() async throws -> Stats { try await get("/v1/admin/stats") }
     func adminRestore(_ listingId: String) async throws { try await act("POST", "/v1/admin/listings/\(listingId)/restore") }
