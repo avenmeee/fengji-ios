@@ -18,11 +18,11 @@ struct MeView: View {
     @State private var soldPrice = ""
     @State private var wants: [Want] = []
     @State private var loadedKey: LoadKey?
-    @State private var editingProfile = Demo.scene == "profile"
     @State private var reportingWant: Want?
     @State private var blockingWant: Want?
 
-    private var visible: [Listing] { items.filter { $0.id != state.pendingDelete?.id } }
+    private var visible: [Listing] { items.filter { $0.id != state.pendingDelete?.id && $0.status != "off" && $0.status != "deleted" } }
+    private var recordCount: Int { items.filter { $0.status == "off" || $0.status == "deleted" }.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -42,14 +42,16 @@ struct MeView: View {
         }
         .task {
             if Demo.scene == "settings" || Demo.scene == "settings-contact" { path.append("settings") }
+            if Demo.scene == "profile" || Demo.scene == "myinfo" { path.append("myinfo") }
+            if Demo.scene == "records" { path.append("records") }
+            if Demo.scene == "rules" { path.append("settings"); path.append("rules") }
         }
         .onChange(of: items) { _, list in
             if Demo.scene == "mine-actions", acting == nil { acting = list.first }
-            if Demo.scene == "sold-ask", selling == nil { selling = list.first }
+            if Demo.scene == "sold-ask", editing == nil { editing = list.first }
             if Demo.scene == "undo", state.pendingDelete == nil, let first = list.first { state.softDelete(first) }
         }
         .sheet(isPresented: $claiming) { ClaimView() }
-        .sheet(isPresented: $editingProfile) { ProfileSheet() }
         .sheet(item: $editing) { item in PostForm(kind: item.kind, editing: item) }
         .sheet(item: $acting, onDismiss: {
             afterActing?()
@@ -59,7 +61,7 @@ struct MeView: View {
                 afterActing = { run(action, item) }
                 acting = nil
             }
-            .presentationDetents([.height(item.status == "off" ? 190 : 380)])
+            .presentationDetents([.height(item.status == "hidden" ? 130 : 190)])
         }
         .confirmationDialog("举报这条留言", isPresented: Binding(get: { reportingWant != nil }, set: { if !$0 { reportingWant = nil } }), titleVisibility: .visible, presenting: reportingWant) { want in
             ForEach(REASONS, id: \.self) { reason in
@@ -72,26 +74,14 @@ struct MeView: View {
         } message: { _ in
             Text("他的留言会删掉，也收不到他的新留言。")
         }
-        .alert("卖了多少钱？", isPresented: Binding(get: { selling != nil }, set: { if !$0 { selling = nil } }), presenting: selling) { item in
-            TextField("美元", text: $soldPrice).keyboardType(.numberPad)
-            Button("保存") { Task { await setStatus(item, "off", soldPrice: Int(soldPrice.trimmingCharacters(in: .whitespaces))) } }
-            Button("跳过", role: .cancel) { Task { await setStatus(item, "off") } }
-        } message: { _ in
-            Text("选填，只用来比价，不公开")
-        }
-        .alert("改价", isPresented: Binding(get: { pricing != nil }, set: { if !$0 { pricing = nil } }), presenting: pricing) { item in
-            TextField("美元", text: $newPrice).keyboardType(.numberPad)
-            Button("保存") { Task { await savePrice(item) } }
-            Button("取消", role: .cancel) {}
-        }
     }
 
     private var header: some View {
         HStack(spacing: 12) {
             if state.isLoggedIn {
-                Button { editingProfile = true } label: {
+                Button { path.append("myinfo") } label: {
                     HStack(spacing: 12) {
-                        SellerAvatar(name: state.me?.name ?? "", color: state.me?.color ?? 0, named: state.me?.named ?? false, size: 48)
+                        SellerAvatar(name: state.me?.name ?? "", color: state.me?.color ?? 0, named: state.me?.named ?? false, size: 48, url: state.me?.avatar)
                         Text(state.me?.name ?? "")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(Theme.ink)
@@ -103,7 +93,7 @@ struct MeView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("改昵称和头像，现在是 " + (state.me?.name ?? ""))
+                .accessibilityLabel("我的信息，现在是 " + (state.me?.name ?? ""))
                 Spacer()
             } else {
                 SignInBlock()
@@ -163,6 +153,21 @@ struct MeView: View {
                         Button("删除", role: .destructive) { state.softDelete(item) }
                             .tint(Theme.warn)
                     }
+            }
+            if recordCount > 0 {
+                Button { path.append("records") } label: {
+                    HStack {
+                        Text("记录").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                        Text("卖掉和删掉的 \(recordCount) 件").font(.subheadline).foregroundStyle(Theme.sub)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.sub)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             }
             if state.opsWechat != nil {
                 Button("认领我在群里发的东西") { claiming = true }
@@ -272,94 +277,6 @@ struct MeView: View {
             state.toast("擦亮了")
         } catch {
             state.toast(error.localizedDescription)
-        }
-    }
-}
-
-/// 改昵称和头像颜色。第一版不传照片。
-struct ProfileSheet: View {
-    @EnvironmentObject var state: AppState
-    @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-    @State private var color = 0
-    @State private var busy = false
-    @State private var error: String?
-    @State private var loaded = false
-
-    private var isDefault: Bool {
-        let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty || (state.me?.named != true && t == state.me?.name)
-    }
-
-    var body: some View {
-        VStack(spacing: 24) {
-            SellerAvatar(name: name, color: color, named: !isDefault, size: 116)
-                .padding(.top, 32)
-            HStack(spacing: 10) {
-                ForEach(SellerAvatar.colors.indices, id: \.self) { i in
-                    Button {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        color = i
-                    } label: {
-                        VStack(spacing: 4) {
-                            SellerAvatar(name: "", color: i, named: false, size: 42)
-                            Circle()
-                                .fill(color == i ? Theme.ink : Color.clear)
-                                .frame(width: 6, height: 6)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("颜色 \(i + 1)")
-                    .accessibilityAddTraits(color == i ? .isSelected : [])
-                }
-            }
-            VStack(spacing: 8) {
-                TextField("昵称", text: $name)
-                    .font(.system(size: 20, weight: .semibold))
-                    .multilineTextAlignment(.center)
-                    .autocorrectionDisabled()
-                Theme.line.frame(height: 0.5)
-                Text(error ?? "不改也可以")
-                    .font(.footnote)
-                    .foregroundStyle(error == nil ? Theme.sub : Theme.warn)
-            }
-            .padding(.horizontal, 24)
-            Spacer(minLength: 0)
-            Button {
-                Task { await save() }
-            } label: {
-                HStack(spacing: 8) {
-                    if busy { HoneyLoader(size: 22) }
-                    Text(busy ? "正在保存" : "保存")
-                }
-            }
-            .buttonStyle(PrimaryButtonStyle(act: .ink))
-            .disabled(busy)
-        }
-        .padding(16)
-        .background(Theme.bg)
-        .contentShape(Rectangle())
-        .onTapGesture { hideKeyboard() }
-        .presentationDragIndicator(.visible)
-        .task(id: state.me?.id) {
-            // 资料可能晚一步到
-            guard !loaded, let me = state.me else { return }
-            loaded = true
-            name = me.name ?? ""
-            color = me.color ?? 0
-        }
-    }
-
-    private func save() async {
-        busy = true
-        defer { busy = false }
-        error = nil
-        do {
-            let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            state.setProfile(try await API.shared.updateProfile(nickname: isDefault ? "" : t, color: color))
-            dismiss()
-        } catch {
-            self.error = error.localizedDescription
         }
     }
 }
@@ -474,17 +391,9 @@ struct MineActions: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // 状态和改价都在编辑页里
             if item.status != "hidden" {
-                if item.isOn { row("已预订") { pick(.status("reserved")) } }
-                if item.isReserved { row("转回在售") { pick(.status("on")) } }
-                if item.status == "off" {
-                    row("重新上架") { pick(.status("on")) }
-                } else {
-                    row(item.isRent ? "已租" : "已卖") { pick(.status("off")) }
-                    row("改价") { pick(.price) }
-                    row("擦亮") { pick(.bump) }
-                    row("编辑") { pick(.edit) }
-                }
+                row("编辑") { pick(.edit) }
             }
             row("删除", color: Theme.warn) { pick(.delete) }
             Spacer(minLength: 0)

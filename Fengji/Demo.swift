@@ -22,7 +22,7 @@ enum Demo {
 
     /// 开场就推到“我”的截图
     static var opensMe: Bool {
-        ["me", "guest-me", "mine-actions", "undo", "settings", "settings-contact", "claim", "wants", "profile", "sold-ask"].contains(scene ?? "")
+        ["me", "guest-me", "mine-actions", "undo", "settings", "settings-contact", "claim", "wants", "profile", "sold-ask", "myinfo", "records", "rules"].contains(scene ?? "")
     }
 
     static var initialPosting: PostKind? {
@@ -122,7 +122,8 @@ enum DemoServer {
     static let mineList: [Listing] = [
         goods(11, "显示器支架", 12, "elec", "几乎全新", "学校门口", photos: [photo("e1")], mine: true),
         goods(12, "油画颜料一套", 20, "art", "有使用痕迹", "Arnold Hall", mine: true, status: "reserved"),
-        goods(13, "小书架", 10, "furn", "有点旧", "TP", mine: true, status: "off")
+        goods(13, "小书架", 10, "furn", "有点旧", "TP", mine: true, status: "off"),
+        goods(14, "台灯", 8, "furn", "有点旧", "Monty", mine: true, status: "deleted")
     ]
 
     static func color(_ name: String) -> UIColor {

@@ -150,7 +150,21 @@ final class API: @unchecked Sendable {
         let _: OK = try await post("POST", "/v1/listings/\(id)/click", ["what": what])
     }
     func countView(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/view") }
-    func delete(_ id: String) async throws { try await act("DELETE", "/v1/listings/\(id)") }
+    /// 卖家删：对外消失，带一张小缩略图留给自己的记录
+    func delete(_ id: String, thumb: Data? = nil) async throws {
+        _ = try await send("DELETE", "/v1/listings/\(id)", body: thumb, contentType: "image/jpeg")
+    }
+    func purge(_ id: String) async throws { try await act("DELETE", "/v1/listings/\(id)?purge=1") }
+    func uploadAvatar(jpeg: Data) async throws -> Me {
+        try JSONDecoder().decode(Me.self, from: await send("POST", "/v1/me/avatar", body: jpeg, contentType: "image/jpeg"))
+    }
+    func removeAvatar() async throws -> Me {
+        try JSONDecoder().decode(Me.self, from: await send("DELETE", "/v1/me/avatar"))
+    }
+    func reportAvatar(_ id: String) async throws {
+        let _: OK = try await post("POST", "/v1/listings/\(id)/report-name", ["what": "avatar"])
+    }
+    func adminRemoveAvatar(_ uid: String) async throws { try await act("POST", "/v1/admin/users/\(uid)/remove-avatar") }
     func upload(jpeg: Data) async throws -> String {
         let data = try await send("POST", "/v1/photos", body: jpeg, contentType: "image/jpeg")
         return try JSONDecoder().decode(PhotoKey.self, from: data).key

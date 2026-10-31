@@ -296,6 +296,8 @@ struct SellerAvatar: View {
     let color: Int?
     let named: Bool
     var size: CGFloat = 20
+    /// 自己传的头像；"/p/…" 或完整网址
+    var url: String? = nil
 
     private var fill: Color {
         guard let color, Self.colors.indices.contains(color) else { return Color(red: 0.56, green: 0.56, blue: 0.58) }
@@ -306,7 +308,11 @@ struct SellerAvatar: View {
         ZStack {
             Hexagon().fill(fill)
             Hexagon().stroke(fill, style: StrokeStyle(lineWidth: size * 0.08, lineJoin: .round))
-            if named {
+            if let url, !url.isEmpty {
+                RemoteImage(url: url.hasPrefix("/") ? Config.base + url : url, maxPixel: max(96, size * 3))
+                    .frame(width: size, height: size)
+                    .clipShape(Hexagon())
+            } else if named {
                 Text(String(name.prefix(1)))
                     .font(.system(size: size * 0.46, weight: .bold))
                     .foregroundStyle(.white)
@@ -351,7 +357,7 @@ struct SellerLine: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 20)
+            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 20, url: item.sellerAvatar)
             Text(([item.sellerLabel] + (item.isGroup ? ["来自群"] : []) + extra).filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(.footnote)
                 .foregroundStyle(Theme.sub)

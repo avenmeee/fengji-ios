@@ -97,6 +97,15 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// 删掉前留一张小图给自己的记录：最长边 240
+    private static func thumbnail(_ item: Listing) async -> Data? {
+        guard let first = item.photos.first, let url = URL(string: first.url),
+              let (data, _) = try? await URLSession.shared.data(from: url), let image = UIImage(data: data) else { return nil }
+        let k = 240 / max(image.size.width, image.size.height, 1)
+        let small = await image.byPreparingThumbnail(ofSize: CGSize(width: image.size.width * k, height: image.size.height * k))
+        return (small ?? image).jpegData(compressionQuality: 0.7)
+    }
+
     func undoDelete() {
         deleteTask?.cancel()
         deleteTask = nil
@@ -111,7 +120,7 @@ final class AppState: ObservableObject {
         pendingDelete = nil
         Task {
             do {
-                try await API.shared.delete(item.id)
+                try await API.shared.delete(item.id, thumb: await Self.thumbnail(item))
                 changed()
             } catch {
                 toast(error.localizedDescription)

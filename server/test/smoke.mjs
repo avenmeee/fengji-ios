@@ -132,8 +132,13 @@ r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, utilit
 ok("水电必须选", r.status === 400 && r.data.error === "need_utilities", r);
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, to: "" } });
 ok("没结束日期又不是长租拒", r.status === 400, r);
-r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, unitType: "both" } });
-ok("整套单间只能选一个", r.status === 400 && r.data.error === "need_unit", r);
+r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, unitType: "both", place: "都可以样品" } });
+ok("整套单间可以都选", r.status === 201 && r.data.unitType === "both", r);
+const bothId = r.data.id;
+r = await call("GET", "/v1/listings?kind=rent&unit=whole");
+ok("都选的在整套里", r.data.items.some(x => x.id === bothId), r);
+r = await call("GET", "/v1/listings?kind=rent&unit=room");
+ok("都选的在单间里", r.data.items.some(x => x.id === bothId), r);
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, unitType: undefined } });
 ok("整套或单间必选", r.status === 400 && r.data.error === "need_unit", r);
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, photos: [] } });
@@ -515,5 +520,52 @@ ok("同类比价优先成交价并标明", withComps?.comps[0]?.sold === true &&
 r = await call("POST", `/v1/listings/${soldGoods.id}/status`, { token: c.token, body: { status: "on" } });
 r = await call("GET", "/v1/admin/unscored", { token: ADMIN });
 ok("重新上架成交价作废", !r.data.items.find(x => x.id === artWaiting.id).comps.some(x => x.sold), r);
+
+// 上中下旬
+r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, from: "2027-11-11", fromPrec: "xun", to: "2028-05-31", toPrec: "xun" } });
+ok("起止可以是旬", r.data.fromPrec === "xun" && r.data.toPrec === "xun" && r.data.from === "2027-11-11", r);
+r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, from: "2027-11-11", fromPrec: "xun", to: "", toPrec: "xun", longTerm: true } });
+ok("长租没有止的精度", r.data.toPrec === null && r.data.longTerm === true, r);
+
+// 记录：软删除、彻底删除
+const keep = (await call("POST", "/v1/listings", { token: c.token, body: { ...goods, photos: await cPhoto(), title: "要删的", price: 33, cat: "art" } })).data;
+r = await fetch(`${BASE}/v1/listings/${keep.id}`, { method: "DELETE", headers: { authorization: `Bearer ${c.token}`, "content-type": "image/jpeg" }, body: jpeg });
+ok("删除带缩略图", r.status === 200);
+r = await call("GET", `/v1/listings/${keep.id}`);
+ok("删了别人看不到", r.status === 404, r);
+r = await call("GET", "/v1/listings?kind=goods&q=要删的");
+ok("删了不在列表", !r.data.items.some(x => x.id === keep.id), r);
+r = await call("GET", "/v1/me/listings", { token: c.token });
+let rec = r.data.items.find(x => x.id === keep.id);
+ok("本人记录里有，带删除时间和一张缩略图", rec?.status === "deleted" && rec.deletedAt > 0 && rec.photos.length === 1, rec);
+r = await call("POST", `/v1/listings/${keep.id}/status`, { token: c.token, body: { status: "on" } });
+ok("删了的不能直接改状态", r.status === 400 && r.data.error === "deleted", r);
+r = await call("DELETE", `/v1/listings/${keep.id}?purge=1`, { token: c.token });
+r = await call("GET", "/v1/me/listings", { token: c.token });
+ok("彻底删除", !r.data.items.some(x => x.id === keep.id), r);
+
+// 头像
+const e = await login("e");
+await call("POST", "/v1/me/agree", { token: e.token });
+r = await fetch(`${BASE}/v1/me/avatar`, { method: "POST", headers: { authorization: `Bearer ${e.token}`, "content-type": "image/jpeg" }, body: jpeg });
+let av = await r.json();
+ok("传头像", r.status === 200 && av.avatar?.startsWith("/p/"), av);
+r = await fetch(BASE + av.avatar);
+ok("头像能取", r.status === 200);
+r = await fetch(`${BASE}/v1/me/avatar`, { method: "POST", headers: { authorization: `Bearer ${e.token}`, "content-type": "image/jpeg" }, body: new Uint8Array([1, 2, 3]) });
+ok("头像要是 jpeg", r.status === 415);
+const dPost = (await call("POST", "/v1/listings", { token: e.token, body: { ...goods, photos: [(await call("POST", "/v1/photos", { token: e.token, raw: jpeg })).data.key], title: "有头像的" } })).data;
+r = await call("GET", `/v1/listings/${dPost.id}`);
+ok("详情带头像", r.data.sellerAvatar?.includes("/p/"), r);
+await call("POST", `/v1/listings/${dPost.id}/report-name`, { token: b.token, body: { what: "avatar" } });
+r = await call("GET", "/v1/admin/reports", { token: c.token });
+ok("头像能被举报", r.data.items.some(x => x.reason === "头像不当"), r);
+r = await call("POST", `/v1/admin/users/${dPost.uid}/remove-avatar`, { token: c.token });
+r = await call("GET", `/v1/listings/${dPost.id}`);
+ok("管理员撤头像", r.data.sellerAvatar === null, r);
+r = await fetch(BASE + av.avatar);
+ok("撤掉的头像也删了", r.status === 404);
+r = await fetch(BASE + "/rules");
+ok("举报规则页", r.status === 200 && (await r.text()).includes("24 小时"));
 
 console.log(`全部通过：${n} 项`);

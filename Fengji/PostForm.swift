@@ -14,7 +14,7 @@ private enum FormPhoto: Identifiable {
     }
 }
 
-private enum ImagePrep {
+enum ImagePrep {
     /// 给 AI 看的小图，省钱也快
     static func forAI(_ image: UIImage) -> Data? {
         let longest = max(image.size.width, image.size.height)
@@ -91,6 +91,10 @@ struct PostForm: View {
     let kind: String
     let editing: Listing?
     var onSaved: ((Listing) -> Void)?
+    /// 在售、已预订、已卖（已租）
+    @State private var status: String
+    @State private var askSold = Demo.scene == "sold-ask"
+    @State private var soldPrice = ""
 
     // 必填
     @State private var title: String
@@ -114,6 +118,8 @@ struct PostForm: View {
     @State private var bedrooms: String?
     @State private var baths: String?
     @State private var unitWhole: Bool
+    @State private var fromXun: Bool
+    @State private var toXun: Bool
     @State private var unitRoom: Bool
     @State private var priceSuggested: Bool
     @State private var priceTouched = false
@@ -155,57 +161,61 @@ struct PostForm: View {
         iso.flatMap { dayFormat.date(from: $0) }
     }
 
-    init(kind: String, editing: Listing? = nil, onSaved: ((Listing) -> Void)? = nil) {
+    /// prefill：从记录重新发，预填文字，照片要重新放
+    init(kind: String, editing: Listing? = nil, prefill: Listing? = nil, startStatus: String? = nil, onSaved: ((Listing) -> Void)? = nil) {
         self.kind = kind
         self.editing = editing
         self.onSaved = onSaved
+        let source = editing ?? prefill
+        _status = State(initialValue: startStatus ?? source?.status ?? "on")
         let filled = Demo.scene == "form-filled" || Demo.scene == "rentform-filled"
         let isRent = kind == "rent"
 
-        _title = State(initialValue: editing?.title ?? (filled ? (isRent ? "一室一厅，走路到学校" : "榉木画架") : ""))
-        _price = State(initialValue: editing.map { String($0.price) } ?? (filled ? (isRent ? "950" : "25") : ""))
+        _title = State(initialValue: source?.title ?? (filled ? (isRent ? "一室一厅，走路到学校" : "榉木画架") : ""))
+        _price = State(initialValue: source.map { String($0.price) } ?? (filled ? (isRent ? "950" : "25") : ""))
         var startPhotos = (editing?.photos ?? []).map { FormPhoto.existing($0) }
         if filled { startPhotos = (Demo.sampleListing?.photos ?? []).map { FormPhoto.existing($0) } }
         _photos = State(initialValue: startPhotos)
-        let savedContact = editing?.contact ?? UserDefaults.standard.string(forKey: "contact") ?? (filled ? "wx_demo1" : "")
+        let savedContact = source?.contact ?? UserDefaults.standard.string(forKey: "contact") ?? (filled ? "wx_demo1" : "")
         _contact = State(initialValue: savedContact)
 
-        _cat = State(initialValue: editing?.cat ?? (filled && !isRent ? "art" : nil))
-        _cond = State(initialValue: editing?.cond ?? (filled && !isRent ? "几乎全新" : nil))
+        _cat = State(initialValue: source?.cat ?? (filled && !isRent ? "art" : nil))
+        _cond = State(initialValue: source?.cond ?? (filled && !isRent ? "几乎全新" : nil))
         let savedDelivery = UserDefaults.standard.string(forKey: "defaultDelivery") ?? ""
-        let startDelivery = editing?.delivery ?? (filled ? "both" : (savedDelivery.isEmpty ? nil : savedDelivery))
+        let startDelivery = source?.delivery ?? (filled ? "both" : (savedDelivery.isEmpty ? nil : savedDelivery))
         let savedPlace = isRent ? "" : (UserDefaults.standard.string(forKey: "defaultPlace") ?? "")
-        _pickup = State(initialValue: startDelivery == "pickup" || startDelivery == "both" || (editing?.place.isEmpty == false && !isRent) || (editing == nil && !savedPlace.isEmpty))
+        _pickup = State(initialValue: startDelivery == "pickup" || startDelivery == "both" || (source?.place.isEmpty == false && !isRent) || (source == nil && !savedPlace.isEmpty))
         _deliver = State(initialValue: startDelivery == "deliver" || startDelivery == "both")
-        _deliveryFee = State(initialValue: editing?.deliveryFee.map { String($0) } ?? (filled ? "5" : ""))
-        _pickupBefore = State(initialValue: Self.date(editing?.pickupBefore) ?? (filled && !isRent ? Date().addingTimeInterval(20 * 86400) : nil))
-        _pickupAfter = State(initialValue: Self.date(editing?.pickupAfter))
-        let startPlace = editing?.place ?? (filled ? "Monty" : savedPlace)
+        _deliveryFee = State(initialValue: source?.deliveryFee.map { String($0) } ?? (filled ? "5" : ""))
+        _pickupBefore = State(initialValue: Self.date(source?.pickupBefore) ?? (filled && !isRent ? Date().addingTimeInterval(20 * 86400) : nil))
+        _pickupAfter = State(initialValue: Self.date(source?.pickupAfter))
+        let startPlace = source?.place ?? (filled ? "Monty" : savedPlace)
         _place = State(initialValue: startPlace)
-        _desc = State(initialValue: editing?.desc ?? (filled && !isRent ? "搬家出，自己来拿" : ""))
+        _desc = State(initialValue: source?.desc ?? (filled && !isRent ? "搬家出，自己来拿" : ""))
 
-        _from = State(initialValue: Self.date(editing?.from) ?? (filled && isRent ? Date() : nil))
-        _to = State(initialValue: Self.date(editing?.to) ?? (filled && isRent ? Date().addingTimeInterval(120 * 86400) : nil))
-        _utilities = State(initialValue: editing?.utilities ?? (filled && isRent ? true : nil))
-        let room = Self.parseRoom(editing?.roomType)
+        _from = State(initialValue: Self.date(source?.from) ?? (filled && isRent ? Date() : nil))
+        _to = State(initialValue: Self.date(source?.to) ?? (filled && isRent ? Date().addingTimeInterval(120 * 86400) : nil))
+        _utilities = State(initialValue: source?.utilities ?? (filled && isRent ? true : nil))
+        let room = Self.parseRoom(source?.roomType)
         _bedrooms = State(initialValue: room.0 ?? (filled && isRent ? "1" : nil))
         _baths = State(initialValue: room.1 ?? (filled && isRent ? "1" : nil))
-        let unit = editing?.unitType ?? (filled && isRent ? "room" : nil)
-        // 二选一。以前存的“都可以”按单间
-        _unitWhole = State(initialValue: unit == "whole")
+        let unit = source?.unitType ?? (filled && isRent ? "room" : nil)
+        _unitWhole = State(initialValue: unit == "whole" || unit == "both")
+        _fromXun = State(initialValue: source?.fromPrec == "xun")
+        _toXun = State(initialValue: source?.toPrec == "xun")
         _unitRoom = State(initialValue: unit == "room" || unit == "both")
         _priceSuggested = State(initialValue: filled && !isRent)
-        _internet = State(initialValue: editing?.internet)
-        _deposit = State(initialValue: editing?.deposit.map { String($0) } ?? "")
-        _appFee = State(initialValue: editing?.appFee.map { String($0) } ?? "")
-        _furniture = State(initialValue: editing?.furniture)
-        _privateBath = State(initialValue: editing?.privateBath)
-        _parking = State(initialValue: editing?.parking)
-        _pets = State(initialValue: editing?.pets)
-        let mate = Self.parseRoommates(editing?.roommates)
+        _internet = State(initialValue: source?.internet)
+        _deposit = State(initialValue: source?.deposit.map { String($0) } ?? "")
+        _appFee = State(initialValue: source?.appFee.map { String($0) } ?? "")
+        _furniture = State(initialValue: source?.furniture)
+        _privateBath = State(initialValue: source?.privateBath)
+        _parking = State(initialValue: source?.parking)
+        _pets = State(initialValue: source?.pets)
+        let mate = Self.parseRoommates(source?.roommates)
         _roommateCount = State(initialValue: mate.0)
         _roommateNote = State(initialValue: mate.1)
-        _leaseEnd = State(initialValue: Self.date(editing?.leaseEnd))
+        _leaseEnd = State(initialValue: Self.date(source?.leaseEnd))
 
         _aiConsent = State(initialValue: UserDefaults.standard.bool(forKey: "aiConsent") || Demo.isOn)
         _aiGuessed = State(initialValue: filled && !isRent)
@@ -280,11 +290,22 @@ struct PostForm: View {
             }
             .ignoresSafeArea()
         }
+        .alert("卖了多少钱？", isPresented: $askSold) {
+            TextField("美元", text: $soldPrice).keyboardType(.numberPad)
+            Button("保存") { Task { await markSold(Int(soldPrice.trimmingCharacters(in: .whitespaces))) } }
+            Button("跳过", role: .cancel) { Task { await markSold(nil) } }
+        } message: {
+            Text("选填，只用来比价，不公开")
+        }
         .sheet(item: $dateField) { field in
-            CalendarSheet(title: field.title, start: dateValue(field), clearLabel: field.clearLabel) { value in
+            CalendarSheet(title: field.title, start: dateValue(field), clearLabel: field.clearLabel,
+                          allowXun: field == .from || field == .to, xun: field == .from ? fromXun : (field == .to ? toXun : false),
+                          xunEnd: field == .to) { value, xun in
                 setDate(field, value)
+                if field == .from { fromXun = xun && value != nil }
+                if field == .to { toXun = xun && value != nil }
             }
-            .presentationDetents([.height(480)])
+            .presentationDetents([.height(field == .from || field == .to ? 530 : 480)])
         }
     }
 
@@ -342,6 +363,7 @@ struct PostForm: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    statusRow
                     requiredBlock {
                         HStack(spacing: 8) {
                             goodsPhotos
@@ -528,6 +550,20 @@ struct PostForm: View {
         }
     }
 
+    /// 编辑时才有：状态三选一
+    @ViewBuilder
+    private var statusRow: some View {
+        if let editing, editing.status != "hidden" {
+            row("状态") {
+                HStack(spacing: 6) {
+                    Chip(text: "在售", on: status == "on", act: formAct) { status = "on" }
+                    Chip(text: "已预订", on: status == "reserved", act: formAct) { status = "reserved" }
+                    Chip(text: isRent ? "已租" : "已卖", on: status == "off", act: formAct) { status = "off" }
+                }
+            }
+        }
+    }
+
     private var contactField: some View {
         LineField(placeholder: "微信号", text: $contact)
             .textInputAutocapitalization(.never)
@@ -540,14 +576,14 @@ struct PostForm: View {
     private func placeChips(surface: Color) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             FlowLayout(spacing: 6) {
-                ForEach(PLACES, id: \.self) { p in
+                ForEach(isRent ? RENT_PLACES : PLACES, id: \.self) { p in
                     Chip(text: p, on: place == p, act: formAct, surface: surface) {
                         place = place == p ? "" : p
                     }
                 }
             }
             LineField(placeholder: "手动填地点", text: Binding(
-                get: { PLACES.contains(place) ? "" : place },
+                get: { (isRent ? RENT_PLACES : PLACES).contains(place) ? "" : place },
                 set: { place = $0 }
             ))
             .focused($focus, equals: .place)
@@ -561,6 +597,7 @@ struct PostForm: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    statusRow
                     requiredBlock {
                         FlowLayout(spacing: 8) { rentPhotos }
                         HStack(alignment: .bottom, spacing: 14) {
@@ -569,14 +606,14 @@ struct PostForm: View {
                         }
                         row("出租") {
                             FlowLayout(spacing: 6) {
-                                Chip(text: "整套", on: unitWhole, act: formAct, surface: Theme.bg) { unitWhole = true; unitRoom = false }
-                                Chip(text: "单间", on: unitRoom, act: formAct, surface: Theme.bg) { unitRoom = true; unitWhole = false }
+                                Chip(text: "整套", on: unitWhole, act: formAct, surface: Theme.bg) { unitWhole.toggle() }
+                                Chip(text: "单间", on: unitRoom, act: formAct, surface: Theme.bg) { unitRoom.toggle() }
                             }
                         }
                         row("地段") { placeChips(surface: Theme.bg) }
                         HStack(spacing: 10) {
-                            DateTile(label: "起", value: from, empty: "选日期", act: formAct, surface: Theme.bg) { dateField = .from }
-                            DateTile(label: "止", value: to, empty: "长租", act: formAct, surface: Theme.bg) { dateField = .to }
+                            DateTile(label: "起", value: from, empty: "选日期", act: formAct, surface: Theme.bg, xun: fromXun) { dateField = .from }
+                            DateTile(label: "止", value: to, empty: "长租", act: formAct, surface: Theme.bg, xun: toXun) { dateField = .to }
                         }
                         row("水电") {
                             FlowLayout(spacing: 6) {
@@ -589,7 +626,7 @@ struct PostForm: View {
                     contactField
                     Theme.line.frame(height: 0.5)
                     section("房型") {
-                        row("几室") { oneOf(["1", "2", "3", "4+"], $bedrooms) }
+                        row("几室") { oneOf(["1", "2", "3"], $bedrooms) }
                         row("几卫") { oneOf(["1", "2", "3"], $baths) }
                     }
                     section("费用") {
@@ -606,8 +643,6 @@ struct PostForm: View {
                     section("屋里") {
                         row("家具") { oneOf(["有", "部分有", "没有"], $furniture) }
                         row("独卫") { yesNo("有", "没有", $privateBath) }
-                        row("停车") { oneOf(["有车位", "路边", "没有"], $parking) }
-                        row("宠物") { oneOf(["可以", "不可以"], $pets) }
                     }
                     section("室友") {
                         row("现在") { oneOf(Self.roommateCounts, $roommateCount) }
@@ -815,6 +850,18 @@ struct PostForm: View {
         }
     }
 
+    private func markSold(_ price: Int?) async {
+        guard let editing, !Demo.isOn || Demo.scene != "sold-ask" else { return }
+        do {
+            _ = try await API.shared.setStatus(editing.id, "off", soldPrice: price)
+            state.changed()
+            state.toast("改好了")
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     private func submit() async {
         error = nil
         focus = nil
@@ -832,7 +879,7 @@ struct PostForm: View {
         guard !t.isEmpty else { error = isRent ? "写一下标题。" : "写一下卖什么。"; return }
         if isRent {
             if money == 0 { error = "租金要大于 0。"; return }
-            if !unitWhole, !unitRoom { error = "选整套或单间。两种都租就分开发两条。"; return }
+            if !unitWhole, !unitRoom { error = "选整套或单间，都可以就都选。"; return }
             if p.isEmpty { error = "选一下地段。"; return }
             guard let start = from else { error = "选一下起始日期。"; return }
             if let end = to, start > end { error = "止要晚于起。"; return }
@@ -862,13 +909,15 @@ struct PostForm: View {
             if isRent {
                 input.from = day(from)
                 input.to = day(to)
+                input.fromPrec = fromXun ? "xun" : nil
+                input.toPrec = toXun && to != nil ? "xun" : nil
                 input.longTerm = to == nil
                 input.utilities = utilities
                 input.leaseEnd = day(leaseEnd)
                 input.privateBath = privateBath
                 input.internet = internet
                 input.furniture = furniture
-                input.unitType = unitWhole ? "whole" : "room"
+                input.unitType = unitWhole && unitRoom ? "both" : (unitWhole ? "whole" : "room")
                 input.deposit = Int(dep)
                 input.appFee = Int(app)
                 input.parking = parking
@@ -887,9 +936,19 @@ struct PostForm: View {
                 input.pickupBefore = day(pickupBefore)
                 input.pickupAfter = day(pickupAfter)
             }
-            let saved: Listing
+            var saved: Listing
             if let editing {
                 saved = try await API.shared.update(editing.id, input)
+                if status != editing.status {
+                    if status == "off", !isRent {
+                        // 先存好别的，再问卖了多少钱
+                        onSaved?(saved)
+                        state.changed()
+                        askSold = true
+                        return
+                    }
+                    saved = try await API.shared.setStatus(editing.id, status)
+                }
             } else {
                 saved = try await API.shared.create(input)
             }
@@ -976,11 +1035,13 @@ private struct DateTile: View {
     let empty: String
     let act: Act
     var surface: Color = Theme.fill
+    var xun = false
     let action: () -> Void
 
     private var text: String {
         guard let value else { return empty }
         let c = Calendar.current.dateComponents([.month, .day], from: value)
+        if xun { return "\(c.month ?? 0) 月" + Listing.xunName(c.day ?? 1) }
         return "\(c.month ?? 0) 月 \(c.day ?? 0) 日"
     }
 
@@ -1010,9 +1071,15 @@ private struct CalendarSheet: View {
     let title: String
     let start: Date?
     let clearLabel: String?
-    let pick: (Date?) -> Void
+    /// 房子的起止可以只选上中下旬
+    var allowXun = false
+    var xun = false
+    /// 止：选旬时取该旬最后一天
+    var xunEnd = false
+    let pick: (Date?, Bool) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var month: Date = Date()
+    @State private var xunMode = false
 
     private var calendar: Calendar {
         var c = Calendar(identifier: .gregorian)
@@ -1039,6 +1106,21 @@ private struct CalendarSheet: View {
                 Spacer()
                 arrow("chevron.right", "下个月", 1)
             }
+            if allowXun {
+                HStack(spacing: 6) {
+                    Chip(text: "具体日期", on: !xunMode, act: .rent) { xunMode = false }
+                    Chip(text: "上中下旬", on: xunMode, act: .rent) { xunMode = true }
+                    Spacer()
+                }
+            }
+            if xunMode {
+                HStack(spacing: 10) {
+                    ForEach([(1, "上旬"), (11, "中旬"), (21, "下旬")], id: \.0) { first, name in
+                        xunCell(first, name)
+                    }
+                }
+                .padding(.top, 12)
+            } else {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 2) {
                 ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { d in
                     Text(d).font(.system(size: 13)).foregroundStyle(Theme.sub).frame(height: 26)
@@ -1051,11 +1133,12 @@ private struct CalendarSheet: View {
                     }
                 }
             }
+            }
             Spacer(minLength: 0)
             if let clearLabel {
                 Theme.line.frame(height: 0.5)
                 Button(clearLabel) {
-                    pick(nil)
+                    pick(nil, false)
                     dismiss()
                 }
                 .font(.system(size: 16))
@@ -1068,14 +1151,39 @@ private struct CalendarSheet: View {
         .padding(.bottom, 8)
         .background(Theme.bg)
         .presentationDragIndicator(.visible)
-        .onAppear { month = start ?? Date() }
+        .onAppear {
+            month = start ?? Date()
+            xunMode = xun
+        }
+    }
+
+    /// 选月份加旬。起存该旬第一天，止存最后一天，排序和过期用这个。
+    private func xunCell(_ first: Int, _ name: String) -> some View {
+        let comps = calendar.dateComponents([.year, .month], from: month)
+        let startDay = calendar.date(from: DateComponents(year: comps.year, month: comps.month, day: first)) ?? month
+        let lastInMonth = calendar.range(of: .day, in: .month, for: startDay)?.count ?? 30
+        let lastDay = calendar.date(from: DateComponents(year: comps.year, month: comps.month, day: first == 21 ? lastInMonth : first + 9)) ?? startDay
+        let value = xunEnd ? lastDay : startDay
+        let selected = xun && start.map { calendar.isDate($0, equalTo: startDay, toGranularity: .month) && Listing.xunName(calendar.component(.day, from: $0)) == name } ?? false
+        return Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            pick(value, true)
+            dismiss()
+        } label: {
+            Text(name)
+                .font(.system(size: 17, weight: selected ? .bold : .medium))
+                .foregroundStyle(selected ? Theme.onBuy : Theme.ink)
+                .frame(maxWidth: .infinity, minHeight: 64)
+                .background(selected ? Theme.accent : Theme.fill, in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
     }
 
     private func dayCell(_ day: Date) -> some View {
-        let selected = start.map { calendar.isDate($0, inSameDayAs: day) } ?? false
+        let selected = !xun && (start.map { calendar.isDate($0, inSameDayAs: day) } ?? false)
         return Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            pick(day)
+            pick(day, false)
             dismiss()
         } label: {
             ZStack {
@@ -1105,7 +1213,7 @@ private struct CalendarSheet: View {
 }
 
 /// 系统相机
-private struct CameraPicker: UIViewControllerRepresentable {
+struct CameraPicker: UIViewControllerRepresentable {
     let onPhoto: (UIImage) -> Void
     @Environment(\.dismiss) private var dismiss
 

@@ -1,7 +1,7 @@
 // 蜂集后端：买、卖、租房的条目，登录，照片，举报、屏蔽、删号、管理。
 import { describePhoto } from "./ai.js";
 import { exchangeCode, fetchAppleKeys, revokeToken, verifyIdentityToken } from "./apple.js";
-import { listingPage, privacyPage, supportPage } from "./pages.js";
+import { listingPage, privacyPage, rulesPage, supportPage } from "./pages.js";
 import { pushToUser } from "./push.js";
 
 const CATS = ["furn", "elec", "kitchen", "art", "other"];
@@ -74,9 +74,10 @@ async function startSession(env, userId) {
 // 昵称和头像颜色：没改过就由账号 id 算，同一个人始终一样
 const defaultName = id => "同学 " + String(id).slice(-3).toUpperCase();
 const defaultColor = id => (parseInt(String(id).slice(0, 6), 16) || 0) % 6;
-const meOf = u => ({ id: u.id, isAdmin: !!u.is_admin, agreed: !!u.agreed_at, name: u.nickname || defaultName(u.id), color: u.avatar_color ?? defaultColor(u.id), named: !!u.nickname });
+const meOf = u => ({ id: u.id, isAdmin: !!u.is_admin, agreed: !!u.agreed_at, name: u.nickname || defaultName(u.id), color: u.avatar_color ?? defaultColor(u.id), named: !!u.nickname, avatar: u.avatar_key ? "/p/" + u.avatar_key : null });
 const NAME_NOT_ALLOWED = /官方|管理员|客服|蜂集|admin|apple|微信|weixin|\bvx\b|\bwx\b|\d{6,}/i;
-const SELLER_COLUMNS = "(SELECT nickname FROM users u WHERE u.id = l.user_id) AS seller_nick, (SELECT avatar_color FROM users u WHERE u.id = l.user_id) AS seller_color";
+const SELLER_COLUMNS = "(SELECT nickname FROM users u WHERE u.id = l.user_id) AS seller_nick, (SELECT avatar_color FROM users u WHERE u.id = l.user_id) AS seller_color, (SELECT avatar_key FROM users u WHERE u.id = l.user_id) AS seller_avatar";
+const MAX_AVATAR_BYTES = 400 * 1024, MAX_THUMB_BYTES = 80 * 1024;
 
 async function loginWithSub(env, sub, refresh) {
   let u = await env.DB.prepare("SELECT * FROM users WHERE apple_sub = ?").bind(sub).first();
@@ -142,7 +143,7 @@ function checkListing(b, userId, existing = []) {
     if (typeof k !== "string" || !k.startsWith(userId + "/") || !/^[0-9a-f]+\/[0-9a-f]+\.jpg$/.test(k)) throw new Fail(400, "bad_photo");
   }
 
-  const out = { kind, title, price, place, descr, contact, photos: JSON.stringify(photos), cat: null, cond: null, from_date: null, to_date: null, lease_end: null, utilities: 0, private_bath: 0, delivery: null, delivery_fee: null, pickup_before: null, pickup_after: null, long_term: 0, furnished: 0, room_type: null, unit_type: null, furniture: null, internet: 0, deposit: null, app_fee: null, parking: null, pets: null, roommates: null };
+  const out = { kind, title, price, place, descr, contact, photos: JSON.stringify(photos), cat: null, cond: null, from_date: null, to_date: null, from_prec: null, to_prec: null, lease_end: null, utilities: 0, private_bath: 0, delivery: null, delivery_fee: null, pickup_before: null, pickup_after: null, long_term: 0, furnished: 0, room_type: null, unit_type: null, furniture: null, internet: 0, deposit: null, app_fee: null, parking: null, pets: null, roommates: null };
   if (kind === "goods") {
     // 只有照片、名字、价格、微信号是必须的；分类没选归其他，其余没填就不显示
     const cat = b.cat == null || b.cat === "" ? "other" : b.cat;
@@ -162,7 +163,7 @@ function checkListing(b, userId, existing = []) {
   } else {
     if (!photos.length) throw new Fail(400, "need_photo");
     if (typeof b.utilities !== "boolean") throw new Fail(400, "need_utilities");
-    if (!["whole", "room"].includes(b.unitType)) throw new Fail(400, "need_unit");
+    if (!["whole", "room", "both"].includes(b.unitType)) throw new Fail(400, "need_unit");
     const money = v => {
       if (v == null || v === "") return null;
       const n = Number(v);
@@ -175,6 +176,7 @@ function checkListing(b, userId, existing = []) {
     const roomText = [out.room_type, out.parking, out.pets, out.roommates].filter(Boolean).join(" ");
     if (BANNED.some(r => r.test(roomText))) throw new Fail(422, "not_allowed");
     out.from_date = dayOf(b.from); out.to_date = b.longTerm ? null : dayOf(b.to); out.lease_end = dayOf(b.leaseEnd);
+    out.from_prec = b.fromPrec === "xun" ? "xun" : null; out.to_prec = !b.longTerm && b.toPrec === "xun" ? "xun" : null;
     if (!out.from_date) throw new Fail(400, "need_dates");
     if (!b.longTerm && !out.to_date) throw new Fail(400, "need_dates");
     out.long_term = b.longTerm ? 1 : 0; out.furnished = b.furnished ? 1 : 0;
@@ -189,9 +191,10 @@ function view(row, origin, viewer) {
   const group = row.source_type === "group";
   const nick = row.seller_nick ?? (mine ? viewer.nickname : null);
   const color = row.seller_color ?? (mine ? viewer.avatar_color : null);
+  const avatar = row.seller_avatar ?? (mine ? viewer.avatar_key : null);
   return {
     id: row.id, uid: row.user_id, kind: row.kind, title: row.title, price: row.price,
-    cat: row.cat, cond: row.cond, from: row.from_date,
+    cat: row.cat, cond: row.cond, from: row.from_date, fromPrec: row.from_prec || null, toPrec: row.to_prec || null,
     roomType: row.room_type || null, unitType: row.unit_type || null, internet: triView(row.internet), furniture: row.furniture || null, deposit: row.deposit ?? null, appFee: row.app_fee ?? null,
     parking: row.parking || null, pets: row.pets || null, roommates: row.roommates || null, to: row.to_date,
     leaseEnd: row.lease_end, utilities: !!row.utilities, privateBath: triView(row.private_bath), delivery: row.delivery,
@@ -200,6 +203,7 @@ function view(row, origin, viewer) {
     sellerName: group ? (row.source_poster || null) : (nick || defaultName(row.user_id)),
     sellerColor: group ? null : (color ?? defaultColor(row.user_id)),
     sellerNamed: group ? true : !!nick,
+    sellerAvatar: group || !avatar ? null : `${origin}/p/${avatar}`,
     sourceType: row.source_type || "self", sourceGroup: row.source_group || null, sourcePoster: row.source_poster || null, sourcePostedAt: row.source_posted_at ?? null,
     score: mine ? null : (row.score ?? null),  // 卖家看不到自己的分
     deliveryFee: row.delivery_fee ?? null, pickupBefore: row.pickup_before || null, pickupAfter: row.pickup_after || null,
@@ -235,6 +239,7 @@ async function oneListing(req, env, url, id) {
   const row = await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.id = ?`).bind(id).first();
   const canSeeHidden = viewer && row && (viewer.id === row.user_id || viewer.is_admin);
   if (!row || (row.status === "hidden" && !canSeeHidden) || groupExpired(row)) throw new Fail(404, "not_found");
+  if (row.status === "deleted" && !(viewer && viewer.id === row.user_id)) throw new Fail(404, "not_found");
   return json(view(row, url.origin, viewer));
 }
 
@@ -258,8 +263,8 @@ async function createListing(req, env, url) {
   if (await bump(env, u.id, "post") > LIMITS.post) throw new Fail(429, "daily_limit");
   const id = newId(), now = Date.now();
   await bump(env, "*", "post");
-  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, from_date, to_date, lease_end, utilities, private_bath, delivery, delivery_fee, pickup_before, pickup_after, long_term, furnished, room_type, unit_type, furniture, internet, deposit, app_fee, parking, pets, roommates, place, descr, contact, photos, status, created_at, updated_at, bumped_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?)")
-    .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, now, now, now).run();
+  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, from_date, to_date, lease_end, from_prec, to_prec, utilities, private_bath, delivery, delivery_fee, pickup_before, pickup_after, long_term, furnished, room_type, unit_type, furniture, internet, deposit, app_fee, parking, pets, roommates, place, descr, contact, photos, status, created_at, updated_at, bumped_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?)")
+    .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.from_prec, v.to_prec, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, now, now, now).run();
   const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
   return json(view(row, url.origin, u), 201);
 }
@@ -275,10 +280,11 @@ async function updateListing(req, env, url, id) {
   const u = await needAgreed(req, env);
   const row = await ownedOrFail(env, id, u);
   if (row.status === "hidden") throw new Fail(403, "hidden");
+  if (row.status === "deleted") throw new Fail(400, "deleted");
   const v = checkListing(await bodyOf(req), u.id, JSON.parse(row.photos));
   if (v.kind !== row.kind) throw new Fail(400, "bad_kind");
-  await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, from_date=?, to_date=?, lease_end=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, room_type=?, unit_type=?, furniture=?, internet=?, deposit=?, app_fee=?, parking=?, pets=?, roommates=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
-    .bind(v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, Date.now(), id).run();
+  await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, from_date=?, to_date=?, lease_end=?, from_prec=?, to_prec=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, room_type=?, unit_type=?, furniture=?, internet=?, deposit=?, app_fee=?, parking=?, pets=?, roommates=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
+    .bind(v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.from_prec, v.to_prec, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, Date.now(), id).run();
   if (v.price !== row.price) await clearScore(env, id);
   const kept = new Set(JSON.parse(v.photos));
   await removePhotos(env, JSON.parse(row.photos).filter(k => !kept.has(k)));
@@ -290,6 +296,7 @@ async function setStatus(req, env, url, id) {
   const u = await needUser(req, env);
   const row = await ownedOrFail(env, id, u);
   if (row.status === "hidden") throw new Fail(403, "hidden");
+  if (row.status === "deleted") throw new Fail(400, "deleted");
   const { status, soldPrice } = await bodyOf(req);
   if (!["on", "reserved", "off"].includes(status)) throw new Fail(400, "bad_status");
   // 成交价选填，重新上架就作废
@@ -311,6 +318,7 @@ async function setPrice(req, env, url, id) {
   const u = await needUser(req, env);
   const row = await ownedOrFail(env, id, u);
   if (row.status === "hidden") throw new Fail(403, "hidden");
+  if (row.status === "deleted") throw new Fail(400, "deleted");
   const price = Number((await bodyOf(req)).price);
   if (!Number.isInteger(price) || price < 0 || price > 1_000_000 || (row.kind === "rent" && price === 0)) throw new Fail(400, "bad_price");
   await env.DB.prepare("UPDATE listings SET price=?, updated_at=? WHERE id=?").bind(price, Date.now(), id).run();
@@ -348,14 +356,35 @@ async function deleteRows(env, rows) {
 async function deleteListing(req, env, id) {
   const u = await needUser(req, env);
   const row = await ownedOrFail(env, id, u, true);
-  await deleteRows(env, [row]);
+  const purge = new URL(req.url).searchParams.get("purge") === "1";
+  if (purge || row.user_id !== u.id || row.source_type === "group") {
+    await deleteRows(env, [row]);
+    return json({ ok: true });
+  }
+  if (row.status === "deleted") return json({ ok: true });
+  // 原图都删掉，App 顺手传一张小缩略图留给本人的记录
+  let thumb = [];
+  const buf = await req.arrayBuffer();
+  const head = new Uint8Array(buf.slice(0, 3));
+  if (buf.byteLength > 0 && buf.byteLength <= MAX_THUMB_BYTES && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
+    const key = `${u.id}/${newId()}.jpg`;
+    await env.PHOTOS.put(key, buf, { httpMetadata: { contentType: "image/jpeg", cacheControl: "private, max-age=86400" } });
+    thumb = [key];
+  }
+  await removePhotos(env, JSON.parse(row.photos));
+  await env.DB.batch([
+    env.DB.prepare("UPDATE listings SET status = 'deleted', deleted_at = ?, photos = ?, score = NULL, scored_at = NULL WHERE id = ?").bind(Date.now(), JSON.stringify(thumb), id),
+    env.DB.prepare("DELETE FROM wants WHERE listing_id = ?").bind(id),
+    env.DB.prepare("DELETE FROM reports WHERE listing_id = ?").bind(id)
+  ]);
   return json({ ok: true });
 }
 
 async function mine(req, env, url) {
   const u = await needUser(req, env);
   const rows = (await env.DB.prepare("SELECT * FROM listings WHERE user_id = ? ORDER BY created_at DESC LIMIT 200").bind(u.id).all()).results;
-  return json({ items: rows.map(r => view(r, url.origin, u)) });
+  // 成交价和删除时间只给本人看
+  return json({ items: rows.map(r => ({ ...view(r, url.origin, u), soldPrice: r.sold_price ?? null, deletedAt: r.deleted_at ?? null, updatedAt: r.updated_at ?? null })) });
 }
 
 // ---- 照片 ----
@@ -389,7 +418,7 @@ async function report(req, env, id) {
   if (!row) throw new Fail(404, "not_found");
   await env.DB.prepare("INSERT OR IGNORE INTO reports (id, listing_id, reporter_id, reason, note, created_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(newId(), id, u ? u.id : "anon:" + newId(), b.reason, clean(b.note, 300), Date.now()).run();
-  const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE listing_id = ? AND status = 'open' AND reporter_id NOT LIKE 'anon:%' AND reporter_id NOT LIKE 'want:%' AND reporter_id NOT LIKE 'name:%'").bind(id).first();
+  const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE listing_id = ? AND status = 'open' AND reporter_id NOT LIKE 'anon:%' AND reporter_id NOT LIKE 'want:%' AND reporter_id NOT LIKE 'name:%' AND reporter_id NOT LIKE 'avatar:%'").bind(id).first();
   if (c.n >= AUTO_HIDE_REPORTS) await env.DB.prepare("UPDATE listings SET status = 'hidden' WHERE id = ? AND status = 'on'").bind(id).run();
   return json({ ok: true });
 }
@@ -422,6 +451,7 @@ async function agree(req, env) {
 async function wipeUser(env, u) {
   const rows = (await env.DB.prepare("SELECT id, photos FROM listings WHERE user_id = ?").bind(u.id).all()).results;
   await deleteRows(env, rows);
+  if (u.avatar_key) await removePhotos(env, [u.avatar_key]);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(u.id),
     env.DB.prepare("DELETE FROM blocks WHERE user_id = ? OR blocked_id = ?").bind(u.id, u.id),
@@ -479,8 +509,10 @@ async function adminBan(req, env, id) {
   if (id === admin.id) throw new Fail(400, "self");
   const rows = (await env.DB.prepare("SELECT id, photos FROM listings WHERE user_id = ?").bind(id).all()).results;
   await deleteRows(env, rows);
+  const banned = await env.DB.prepare("SELECT avatar_key FROM users WHERE id = ?").bind(id).first();
+  if (banned?.avatar_key) await removePhotos(env, [banned.avatar_key]);
   await env.DB.batch([
-    env.DB.prepare("UPDATE users SET banned = 1 WHERE id = ?").bind(id),
+    env.DB.prepare("UPDATE users SET banned = 1, avatar_key = NULL WHERE id = ?").bind(id),
     env.DB.prepare("DELETE FROM wants WHERE buyer_id = ? OR seller_id = ?").bind(id, id),
     env.DB.prepare("DELETE FROM devices WHERE user_id = ?").bind(id),
     env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(id)
@@ -559,11 +591,13 @@ async function deleteWant(req, env, id) {
 // 举报昵称：不算进条目的自动下架，管理员可以重置昵称
 async function reportName(req, env, id) {
   const u = await currentUser(req, env);
+  let what = "name";
+  try { what = (await req.json()).what === "avatar" ? "avatar" : "name"; } catch (e) { what = "name"; }
   const row = await env.DB.prepare(`SELECT l.user_id, l.source_type, ${SELLER_COLUMNS} FROM listings l WHERE l.id = ?`).bind(id).first();
   if (!row) throw new Fail(404, "not_found");
   if (row.source_type === "group") throw new Fail(400, "bad_reason");
   await env.DB.prepare("INSERT OR IGNORE INTO reports (id, listing_id, reporter_id, reason, note, reported_user, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .bind(newId(), id, "name:" + (u ? u.id : newId()), "昵称不当", row.seller_nick || "", row.user_id, Date.now()).run();
+    .bind(newId(), id, what + ":" + (u ? u.id : newId()), what === "avatar" ? "头像不当" : "昵称不当", what === "avatar" ? (row.seller_avatar || "") : (row.seller_nick || ""), row.user_id, Date.now()).run();
   return json({ ok: true });
 }
 
@@ -572,6 +606,39 @@ async function adminResetName(req, env, id) {
   await env.DB.batch([
     env.DB.prepare("UPDATE users SET nickname = NULL WHERE id = ?").bind(id),
     env.DB.prepare("UPDATE reports SET status = 'done' WHERE reported_user = ? AND reason = '昵称不当'").bind(id)
+  ]);
+  return json({ ok: true });
+}
+
+async function uploadAvatar(req, env) {
+  const u = await needUser(req, env);
+  const buf = await req.arrayBuffer();
+  if (buf.byteLength > MAX_AVATAR_BYTES) throw new Fail(413, "photo_too_big");
+  const head = new Uint8Array(buf.slice(0, 3));
+  if (!(head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff)) throw new Fail(415, "not_jpeg");
+  if (await bump(env, u.id, "avatar") > 10) throw new Fail(429, "daily_limit");
+  const key = `${u.id}/${newId()}.jpg`;
+  await env.PHOTOS.put(key, buf, { httpMetadata: { contentType: "image/jpeg", cacheControl: "public, max-age=31536000, immutable" } });
+  if (u.avatar_key) await removePhotos(env, [u.avatar_key]);
+  await env.DB.prepare("UPDATE users SET avatar_key = ? WHERE id = ?").bind(key, u.id).run();
+  return json(meOf({ ...u, avatar_key: key }));
+}
+
+async function removeAvatar(req, env) {
+  const u = await needUser(req, env);
+  if (u.avatar_key) await removePhotos(env, [u.avatar_key]);
+  await env.DB.prepare("UPDATE users SET avatar_key = NULL WHERE id = ?").bind(u.id).run();
+  return json(meOf({ ...u, avatar_key: null }));
+}
+
+// 头像被举报：撤掉换回默认
+async function adminRemoveAvatar(req, env, id) {
+  await needAdmin(req, env);
+  const row = await env.DB.prepare("SELECT avatar_key FROM users WHERE id = ?").bind(id).first();
+  if (row?.avatar_key) await removePhotos(env, [row.avatar_key]);
+  await env.DB.batch([
+    env.DB.prepare("UPDATE users SET avatar_key = NULL WHERE id = ?").bind(id),
+    env.DB.prepare("UPDATE reports SET status = 'done' WHERE reported_user = ? AND reason = '头像不当'").bind(id)
   ]);
   return json({ ok: true });
 }
@@ -751,7 +818,7 @@ async function importOne(env, b) {
 
   const id = newId();
   await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, unit_type, place, descr, contact, photos, status, created_at, updated_at, bumped_at, source_type, source_id, source_group, source_poster, source_posted_at, merge_key, sender_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, owner ? owner.id : GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, kind === "rent" && ["whole", "room"].includes(b.unitType) ? b.unitType : null, place, descr, owner?.contact || "", JSON.stringify(keys), now, now, postedAt, owner ? "claimed" : "group", sourceId, group, poster, postedAt, mergeKey, senderHash).run();
+    .bind(id, owner ? owner.id : GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, kind === "rent" && ["whole", "room", "both"].includes(b.unitType) ? b.unitType : null, place, descr, owner?.contact || "", JSON.stringify(keys), now, now, postedAt, owner ? "claimed" : "group", sourceId, group, poster, postedAt, mergeKey, senderHash).run();
   return { status: 201, data: { id } };
 }
 
@@ -922,6 +989,7 @@ async function route(req, env) {
   if (method === "GET" && path === "/v1/config") return json({ opsWechat: env.OPS_WECHAT || null, aiDescribe: aiEnabled(env) });
   if (method === "GET" && path === "/privacy") return privacyPage(env);
   if (method === "GET" && path === "/support") return supportPage(env);
+  if (method === "GET" && path === "/rules") return rulesPage(env);
   if (method === "GET" && (m = /^\/l\/([0-9a-f]+)$/.exec(path))) return listingPage(env, url, m[1]);
   if (method === "GET" && (m = /^\/p\/(.+)$/.exec(path))) return servePhoto(env, m[1]);
 
@@ -931,6 +999,8 @@ async function route(req, env) {
   if (method === "POST" && path === "/v1/me/agree") return agree(req, env);
   if (method === "GET" && path === "/v1/me") return json(meOf(await needUser(req, env)));
   if (method === "PATCH" && path === "/v1/me") return updateProfile(req, env);
+  if (method === "POST" && path === "/v1/me/avatar") return uploadAvatar(req, env);
+  if (method === "DELETE" && path === "/v1/me/avatar") return removeAvatar(req, env);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/report-name$/.exec(path))) return reportName(req, env, m[1]);
   if (method === "DELETE" && path === "/v1/me") return deleteAccount(req, env);
   if (method === "GET" && path === "/v1/me/listings") return mine(req, env, url);
@@ -979,6 +1049,7 @@ async function route(req, env) {
   if (method === "POST" && (m = /^\/v1\/admin\/listings\/([0-9a-f]+)\/restore$/.exec(path))) return adminRestore(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/admin\/users\/([0-9a-f]+)\/ban$/.exec(path))) return adminBan(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/admin\/users\/([0-9a-f]+)\/reset-name$/.exec(path))) return adminResetName(req, env, m[1]);
+  if (method === "POST" && (m = /^\/v1\/admin\/users\/([0-9a-f]+)\/remove-avatar$/.exec(path))) return adminRemoveAvatar(req, env, m[1]);
 
   throw new Fail(404, "not_found");
 }

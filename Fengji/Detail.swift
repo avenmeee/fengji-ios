@@ -132,7 +132,7 @@ struct DetailView: View {
     /// 只有一行，不做个人主页
     private var sellerRow: some View {
         HStack(spacing: 12) {
-            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 42)
+            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 42, url: item.sellerAvatar)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.sellerLabel)
                     .font(.system(size: 16, weight: .medium))
@@ -226,6 +226,14 @@ struct DetailView: View {
             }
             if !item.mine, !gone {
                 Button("举报", systemImage: "flag") { choosingReason = true }
+                if !item.isGroup, item.sellerAvatar != nil {
+                    Button("举报头像", systemImage: "photo.badge.exclamationmark") {
+                        Task {
+                            try? await API.shared.reportAvatar(item.id)
+                            state.toast("收到了，会尽快处理")
+                        }
+                    }
+                }
                 if !item.isGroup {
                     Button("举报昵称", systemImage: "person.crop.circle.badge.exclamationmark") {
                         Task {

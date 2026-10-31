@@ -9,83 +9,99 @@ struct SettingsView: View {
     @AppStorage("appearance") private var appearance = "light"
     @AppStorage("defaultPlace") private var defaultPlace = ""
     @AppStorage("defaultDelivery") private var defaultDelivery = ""
+    @AppStorage("contact") private var savedContact = ""
+    @State private var blockedCount: Int?
     @State private var error: String?
 
+    private var infoLine: String {
+        let pickup = ["pickup": "默认自取", "deliver": "默认可配送", "both": "默认自取或配送"][defaultDelivery] ?? "取货不限"
+        return pickup + " · " + (savedContact.isEmpty ? "微信没填" : "微信已填")
+    }
+
     var body: some View {
-        List {
-            Group {
-                Section {
-                    Picker("外观", selection: $appearance) {
-                        Text("浅色").tag("light")
-                        Text("深色").tag("dark")
-                        Text("跟随手机").tag("system")
+        VStack(spacing: 0) {
+            PageTop(title: "设置")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    if state.isLoggedIn {
+                        NavigationLink(value: "myinfo") { myInfo }.buttonStyle(.plain)
+                    } else {
+                        SignInBlock()
                     }
-                }
-                Section("发布默认，不填也能发") {
-                    TextField("默认地点，比如 Monty", text: $defaultPlace)
-                    Picker("默认取货", selection: $defaultDelivery) {
-                        Text("不写").tag("")
-                        Text("自取").tag("pickup")
-                        Text("可配送").tag("deliver")
-                        Text("都可").tag("both")
+                    VStack(alignment: .leading, spacing: 10) {
+                        GroupLabel(text: "外观")
+                        HStack(spacing: 6) {
+                            ForEach([("light", "浅色"), ("dark", "深色"), ("system", "跟随手机")], id: \.0) { key, label in
+                                Chip(text: label, on: appearance == key, act: .buy) { appearance = key }
+                            }
+                        }
                     }
-                }
-                Section {
-                    NavigationLink("用户协议") { TermsView() }
-                    if let url = URL(string: Config.base + "/privacy") { Link("隐私政策", destination: url) }
-                    if let url = URL(string: Config.base + "/support") { Link("帮助与支持", destination: url) }
-                    if !Config.contactEmail.isEmpty, let url = URL(string: "mailto:\(Config.contactEmail)") {
-                        Button("联系我们") { withAnimation(.snappy(duration: 0.18)) { showEmail.toggle() } }
-                            .foregroundStyle(Theme.ink)
-                        if showEmail {
-                            HStack {
-                                Link(Config.contactEmail, destination: url).buttonStyle(.borderless)
-                                Spacer()
-                                Button {
-                                    UIPasteboard.general.string = Config.contactEmail
-                                    state.toast("已复制")
-                                } label: {
-                                    Image(systemName: "doc.on.doc").foregroundStyle(Theme.sub)
+                    VStack(alignment: .leading, spacing: 2) {
+                        GroupLabel(text: "规则")
+                        NavigationLink { TermsView() } label: { SettingRow(symbol: "doc.text", title: "用户协议") }.buttonStyle(.plain)
+                        NavigationLink(value: "rules") { SettingRow(symbol: "flag", title: "举报规则") }.buttonStyle(.plain)
+                        if let url = URL(string: Config.base + "/privacy") {
+                            Link(destination: url) { SettingRow(symbol: "checkmark.shield", title: "隐私政策") }.buttonStyle(.plain)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        GroupLabel(text: "帮助")
+                        if let url = URL(string: Config.base + "/support") {
+                            Link(destination: url) { SettingRow(symbol: "questionmark.circle", title: "帮助与支持") }.buttonStyle(.plain)
+                        }
+                        if !Config.contactEmail.isEmpty {
+                            Button { withAnimation(.snappy(duration: 0.18)) { showEmail.toggle() } } label: {
+                                SettingRow(symbol: "envelope", title: "联系我们")
+                            }
+                            .buttonStyle(.plain)
+                            EmailReveal(shown: $showEmail)
+                        }
+                        if state.isLoggedIn {
+                            NavigationLink { BlockedView() } label: {
+                                SettingRow(symbol: "nosign", title: "屏蔽名单") {
+                                    if let blockedCount, blockedCount > 0 {
+                                        Text("\(blockedCount)").font(.subheadline).monospacedDigit().foregroundStyle(Theme.sub)
+                                    }
                                 }
-                                .buttonStyle(.borderless)
-                                .accessibilityLabel("复制邮箱")
                             }
+                            .buttonStyle(.plain)
                         }
-                    }
-                }
-                if state.isLoggedIn {
-                    Section {
-                        NavigationLink("屏蔽名单") { BlockedView() }
                         if state.isAdmin {
-                            NavigationLink("举报处理") { AdminReportsView() }
+                            NavigationLink { AdminReportsView() } label: { SettingRow(symbol: "tray", title: "举报处理") }.buttonStyle(.plain)
                         }
                     }
-                    Section {
-                        Button("退出登录") {
-                            Task {
-                                await state.logout()
-                                dismiss()
-                            }
-                        }
-                        .foregroundStyle(Theme.ink)
-                        Button("删除账号", role: .destructive) { confirmDelete = true }
-                    } footer: {
-                        if let error {
-                            Text(error).foregroundStyle(Theme.warn)
-                        }
-                    }
-                } else {
-                    Section {
-                        Button("登录") { state.showLogin = true }
+                    if let error {
+                        Text(error).font(.subheadline).foregroundStyle(Theme.warn)
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
-            .listRowBackground(Color.clear)
+            if state.isLoggedIn {
+                HStack {
+                    Button("退出登录") {
+                        Task {
+                            await state.logout()
+                            dismiss()
+                        }
+                    }
+                    .foregroundStyle(Theme.ink)
+                    Spacer()
+                    Button("删除账号") { confirmDelete = true }
+                        .foregroundStyle(Theme.warn)
+                }
+                .font(.system(size: 16, weight: .medium))
+                .buttonStyle(.plain)
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+            }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
         .background(Theme.bg)
         .toolbar(.hidden, for: .navigationBar)
+        .task(id: state.version) {
+            guard state.isLoggedIn else { return }
+            blockedCount = (try? await API.shared.blocks())?.count
+        }
         .alert("删除账号？", isPresented: $confirmDelete) {
             Button("删除", role: .destructive) {
                 Task {
@@ -100,8 +116,31 @@ struct SettingsView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("你发的东西和照片会一起马上删除，不能恢复。")
+            Text("你发的东西、记录、头像和照片会一起马上删除，不能恢复。")
         }
+    }
+
+    /// 头像、昵称、默认地点，点整块进“我的信息”
+    private var myInfo: some View {
+        HStack(spacing: 14) {
+            SellerAvatar(name: state.me?.name ?? "", color: state.me?.color, named: state.me?.named ?? false, size: 68, url: state.me?.avatar)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(state.me?.name ?? "").font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
+                HStack(spacing: 4) {
+                    Image(systemName: "mappin").font(.system(size: 10, weight: .semibold))
+                    Text(defaultPlace.isEmpty ? "没设默认地点" : defaultPlace).font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(Theme.onBuy)
+                .padding(.horizontal, 8)
+                .frame(height: 22)
+                .background(Theme.buy, in: Capsule())
+                Text(infoLine).font(.footnote).foregroundStyle(Theme.sub)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.sub)
+        }
+        .contentShape(Rectangle())
+        .accessibilityLabel("我的信息，" + (state.me?.name ?? ""))
     }
 }
 
@@ -119,7 +158,7 @@ struct TermsView: View {
 
                 只限萨凡纳，当面交易。看货再付，看房前别转押金，合同和房东身份自己核对。
 
-                你的昵称和你发的微信号，所有人都能看到。没留微信时，买家可以点“想要”留言，留言和对方的联系方式只有你能看到，可以删除、举报、屏蔽。
+                你的昵称、头像和你发的微信号，所有人都能看到。删掉的帖子只留小图和文字在你自己的记录里，可以彻底删除。没留微信时，买家可以点“想要”留言，留言和对方的联系方式只有你能看到，可以删除、举报、屏蔽。
 
                 放上的照片会发给 AI（Anthropic 的 Claude）自动填名字、分类和成色；东西的名字、价格、分类、成色、地点和第一张照片也会发给 AI 打分。
 
@@ -211,6 +250,9 @@ struct AdminReportsView: View {
                         HStack(spacing: 6) {
                             ActionChip(text: "没问题") { run { try await API.shared.adminRestore(r.listing.id) } }
                             ActionChip(text: "删除", danger: true) { run { try await API.shared.delete(r.listing.id) } }
+                            if r.reason == "头像不当", let uid = r.reportedUser {
+                                ActionChip(text: "撤头像") { run { try await API.shared.adminRemoveAvatar(uid) } }
+                            }
                             if r.reason == "昵称不当", let uid = r.reportedUser {
                                 ActionChip(text: "重置昵称") { run { try await API.shared.adminResetName(uid) } }
                             }

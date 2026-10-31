@@ -48,7 +48,8 @@ export function privacyPage(env) {
   <p>只在你发布时才要登录。登录用“通过 Apple 登录”，我们只拿到苹果给的匿名编号，拿不到你的姓名和邮箱。</p>
   <p>你主动发布的内容：照片、标题、价格、地点、备注、微信号。这些内容所有人都能看到，包括没有登录的人和看到分享链接的人。</p>
   <p>屏蔽和举报记录。不登录举报时不记录你是谁。</p>
-  <p>昵称和头像颜色：默认是“同学 xxx”，由账号编号算出，不是真名。可以改，所有人都能看到，会经过违禁词过滤，也可以被举报。</p>
+  <p>昵称和头像：默认是“同学 xxx”和蜜蜂头像，由账号编号算出，不是真名。可以改昵称、上传自己的头像照片，所有人都能看到。昵称会经过违禁词过滤；昵称和头像都可以被举报，管理员可以撤掉换回默认。换头像时旧照片删除，删号时一起删除。</p>
+  <p>删掉的帖子：对外马上消失，原图删除。我们只留一张小缩略图和文字（名字、价格、状态、日期，选填的成交价），放在“我 → 记录”里给你本人看，别人看不到。你可以在记录里彻底删除；删号时全部彻底删除。</p>
   <p>成交价：标记已卖时可以选填卖了多少钱。只用于同类比价和汇总，不公开显示。重新上架、删帖或删号时一起删除。</p>
   <p>“想要”留言：你留的一句话和联系方式只有卖家能看到。删帖或删号时一起删除。</p>
   <p>推送：同意通知后，我们保存设备的推送令牌，只用来告诉你有人想要。退出登录或删号时删除。</p>
@@ -72,6 +73,14 @@ export function privacyPage(env) {
 const revealedContact = env => env.CONTACT_EMAIL ? `<details><summary>点这里看邮箱 Show email</summary>
   <p>${contactLine(env)} <button id="copy" hidden>复制</button></p></details>
   <script>const b=document.getElementById("copy");if(navigator.clipboard){b.hidden=false;b.onclick=async()=>{await navigator.clipboard.writeText(${JSON.stringify(env.CONTACT_EMAIL)});b.textContent="已复制"}}</script>` : `<p>${contactLine(env)}</p>`;
+
+export function rulesPage(env) {
+  return page("蜂集举报规则", `<h1>蜂集举报规则</h1>
+  <h2>可以举报什么</h2><p>违禁物品、色情、暴力、仇恨；诈骗、骚扰；假学历、代写代考、私下换汇；冒充他人、侵犯别人的照片或文字；不当的昵称和头像；虚假信息。</p>
+  <h2>怎么举报</h2><p>在东西或房子的详情页，点右上角“…”→ 举报，选原因。不当的昵称或头像选“举报昵称”或“举报头像”。想马上不再看到这个人，可以同时屏蔽。“想要”留言在“我”里点“…”举报。</p>
+  <h2>多久处理</h2><p>24 小时内处理。违规的内容会下架；不当的昵称会重置，头像会撤掉换回默认；情节严重的停用账号。三个人举报同一条，会先自动下架等处理。</p>
+  <h2>申诉</h2><p>觉得处理错了，写邮件说明：</p>${revealedContact(env)}`);
+}
 
 export function supportPage(env) {
   return page("蜂集帮助", `<h1>蜂集帮助</h1>

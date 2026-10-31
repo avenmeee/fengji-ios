@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
   sender_hash TEXT,              -- 认领后：他在微信群里的发送者哈希
   contact TEXT,                  -- 认领后：他愿意公开的微信号
   nickname TEXT,                 -- 没改过是空，显示“同学 xxx”
-  avatar_color INTEGER,          -- 0～5，没选过是空，按账号 id 算
+  avatar_color INTEGER,
+  avatar_key TEXT,               -- 自己传的头像，R2 里的键；没传是空          -- 0～5，没选过是空，按账号 id 算
   created_at INTEGER NOT NULL
 );
 
@@ -52,7 +53,10 @@ CREATE TABLE IF NOT EXISTS listings (
   furnished INTEGER NOT NULL DEFAULT 0,     -- rent：可拎包入住
   score INTEGER,                 -- 四档：1 偏贵 2 价格合理 3 有性价比 4 捡漏，后台打；没打是空。卖家看不到自己的
   scored_at INTEGER,
-  sold_price INTEGER,            -- 卖家选填的成交价，只用于比价和汇总，不公开
+  from_prec TEXT,                -- 起的精度：空是具体日期，xun 是上中下旬（存该旬第一天）
+  to_prec TEXT,                  -- 止的精度：xun 时存该旬最后一天
+  sold_price INTEGER,
+  deleted_at INTEGER,            -- 卖家删了：对外消失，只留一张小缩略图和文字给本人看记录            -- 卖家选填的成交价，只用于比价和汇总，不公开
   source_type TEXT NOT NULL DEFAULT 'self', -- self 自己发；group 群里搬来
   source_id TEXT,                -- 群里搬来的去重编号
   source_group TEXT,             -- 去哪个群找

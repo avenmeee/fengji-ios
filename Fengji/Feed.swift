@@ -337,7 +337,13 @@ struct BuyView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
             .navigationDestination(for: String.self) { route in
-                if route == "me" { MeView(path: $path) } else { SettingsView() }
+                switch route {
+                case "me": MeView(path: $path)
+                case "myinfo": MyInfoView()
+                case "records": RecordsView()
+                case "rules": RulesView()
+                default: SettingsView()
+                }
             }
             .reloads(model, version: state.version)
             .onChange(of: model.items) { _, items in
@@ -446,7 +452,13 @@ struct RentView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
             .navigationDestination(for: String.self) { route in
-                if route == "me" { MeView(path: $path) } else { SettingsView() }
+                switch route {
+                case "me": MeView(path: $path)
+                case "myinfo": MyInfoView()
+                case "records": RecordsView()
+                case "rules": RulesView()
+                default: SettingsView()
+                }
             }
             .reloads(model, version: state.version)
             .onChange(of: model.items) { _, items in

@@ -14,6 +14,8 @@ let UNIT_OPTIONS: [Option] = [("whole", "整套"), ("room", "单间")]
 
 /// 热门地点，卖东西和房子都用；选了存文字
 let PLACES = ["Monty", "TP", "Mark", "大中超"]
+/// 房子地段：群里出现最多的三个
+let RENT_PLACES = ["Monty", "大中超", "Mark"]
 let REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"]
 
 struct Photo: Codable, Hashable {
@@ -22,6 +24,11 @@ struct Photo: Codable, Hashable {
 }
 
 struct Listing: Codable, Identifiable, Hashable {
+    var sellerAvatar: String? = nil
+    /// 只有本人的记录里有
+    var soldPrice: Int? = nil
+    var deletedAt: Int64? = nil
+    var updatedAt: Int64? = nil
     var sellerName: String? = nil
     var sellerColor: Int? = nil
     var sellerNamed: Bool? = nil
@@ -34,6 +41,9 @@ struct Listing: Codable, Identifiable, Hashable {
     var cond: String?
     var from: String?
     var to: String?
+    /// "xun" 是上中下旬
+    var fromPrec: String? = nil
+    var toPrec: String? = nil
     var place: String
     var desc: String
     var status: String
@@ -99,7 +109,7 @@ struct Listing: Codable, Identifiable, Hashable {
     }
 
     var period: String {
-        let a = Self.day(from), b = Self.day(to)
+        let a = Self.day(from, fromPrec), b = Self.day(to, toPrec)
         if longTerm == true, let a { return "\(a) 起，长租" }
         if let a, let b { return "\(a) – \(b)" }
         if let a { return "\(a) 起" }
@@ -136,22 +146,21 @@ struct Listing: Codable, Identifiable, Hashable {
         if let end = Self.day(leaseEnd) { parts.append("租约到 \(end)") }
         if let deposit { parts.append("押金 $\(deposit)") }
         if let appFee { parts.append("申请费 $\(appFee)") }
-        if let parking { parts.append("停车：\(parking)") }
-        if let pets { parts.append("宠物：\(pets)") }
         if let roommates { parts.append("室友：\(roommates)") }
         return parts.joined(separator: " · ")
     }
 
     /// 卡片上用的短日期：1/5–5/20
     var shortPeriod: String {
-        let a = Self.slash(from), b = Self.slash(to)
+        let a = Self.slash(from, fromPrec), b = Self.slash(to, toPrec)
         if longTerm == true, let a { return "\(a) 起长租" }
         if let a, let b { return "\(a)–\(b)" }
         return a ?? b ?? ""
     }
 
-    private static func slash(_ iso: String?) -> String? {
+    private static func slash(_ iso: String?, _ prec: String? = nil) -> String? {
         guard let parts = iso?.split(separator: "-"), parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]) else { return nil }
+        if prec == "xun" { return "\(m)月" + xunName(d) }
         return "\(m)/\(d)"
     }
 
@@ -165,7 +174,13 @@ struct Listing: Codable, Identifiable, Hashable {
         return days < 30 ? "\(days) 天前" : "\(days / 30) 个月前"
     }
 
-    private static func day(_ iso: String?) -> String? {
+    /// 1～10 上旬，11～20 中旬，其余下旬
+    static func xunName(_ day: Int) -> String { day <= 10 ? "上旬" : (day <= 20 ? "中旬" : "下旬") }
+
+    private static func day(_ iso: String?, _ prec: String? = nil) -> String? {
+        if prec == "xun", let parts = iso?.split(separator: "-"), parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]) {
+            return "\(m)月" + xunName(d)
+        }
         guard let parts = iso?.split(separator: "-"), parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]) else { return nil }
         return "\(m)月\(d)日"
     }
@@ -228,6 +243,11 @@ struct ListingInput: Encodable {
     var cond: String?
     var from: String?
     var to: String?
+    var fromPrec: String?
+    var toPrec: String?
+    /// "xun" 是上中下旬
+    var fromPrec: String? = nil
+    var toPrec: String? = nil
     let place: String
     let desc: String
     let contact: String
@@ -260,6 +280,8 @@ struct Me: Codable {
     var name: String?
     var color: Int?
     var named: Bool?
+    /// "/p/…" 相对路径
+    var avatar: String?
 }
 
 struct LoginResult: Codable {
