@@ -70,7 +70,7 @@ struct MeView: View {
     private var header: some View {
         HStack(spacing: 12) {
             if state.isLoggedIn {
-                Text("我发的")
+                Text(wants.isEmpty ? "我发的" : "我")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(Theme.ink)
                 Spacer()

@@ -164,6 +164,8 @@ final class AppState: ObservableObject {
         me = r.me
         if !r.me.agreed { me = try await API.shared.agree() }
         changed()
+        // 退出登录时令牌删了，重新登录要再报一次
+        Notifier.refresh()
     }
 
     private func setSession(_ value: String?) {

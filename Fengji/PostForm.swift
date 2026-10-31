@@ -460,7 +460,8 @@ struct PostForm: View {
     /// 明白告诉卖家 AI 在帮他填
     @ViewBuilder
     private var aiHint: some View {
-        if state.aiDescribe || Demo.isOn, editing == nil, photos.count < maxPhotos {
+        // 照片多了放不下，只在前两格旁边显示
+        if state.aiDescribe || Demo.isOn, editing == nil, photos.count < 2 {
             HStack(spacing: 6) {
                 if aiLoading {
                     HoneyLoader(size: 26)
@@ -470,7 +471,7 @@ struct PostForm: View {
                         Image(systemName: "sparkle").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.onBuy)
                     }
                 }
-                Text(aiLoading ? "AI 正在认\n也可以自己写" : (aiGuessed ? "AI 填好了\n可以改" : "放上照片\nAI 填名字和分类"))
+                Text(aiLoading ? "AI 正在认\n也可以自己写" : (aiGuessed ? "AI 填好了\n可以改" : "放上照片\nAI 帮你填名字"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(2)
