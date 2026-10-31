@@ -22,7 +22,7 @@ enum Demo {
 
     /// 开场就推到“我”的截图
     static var opensMe: Bool {
-        ["me", "guest-me", "mine-actions", "undo", "settings", "settings-contact", "claim", "wants"].contains(scene ?? "")
+        ["me", "guest-me", "mine-actions", "undo", "settings", "settings-contact", "claim", "wants", "profile"].contains(scene ?? "")
     }
 
     static var initialPosting: PostKind? {
@@ -84,11 +84,19 @@ enum DemoServer {
     }
 
     static func goods(_ id: Int, _ title: String, _ price: Int, _ cat: String, _ cond: String, _ place: String, photos: [Photo] = [], mine: Bool = false, status: String = "on") -> Listing {
-        Listing(id: "g\(id)", uid: mine ? "me" : "u\(id)", kind: "goods", title: title, price: price, cat: cat, cond: cond, from: nil, to: nil, place: place, desc: id == 1 ? "搬家出，桌面没有划痕。自己来拿。" : "", status: status, contact: "wx_demo\(id)", photos: photos, createdAt: now - Int64(id) * 3_400_000, mine: mine, delivery: id == 3 ? "both" : "pickup", deliveryFee: id == 3 ? 5 : nil, pickupBefore: id == 1 ? "2027-01-10" : nil, score: mine ? nil : [5, 4, 3, 5, 2, nil, 4, 1][(id - 1) % 8])
+        var l = Listing(id: "g\(id)", uid: mine ? "me" : "u\(id)", kind: "goods", title: title, price: price, cat: cat, cond: cond, from: nil, to: nil, place: place, desc: id == 1 ? "搬家出，桌面没有划痕。自己来拿。" : "", status: status, contact: "wx_demo\(id)", photos: photos, createdAt: now - Int64(id) * 3_400_000, mine: mine, delivery: id == 3 ? "both" : "pickup", deliveryFee: id == 3 ? 5 : nil, pickupBefore: id == 1 ? "2027-01-10" : nil, score: mine ? nil : [5, 4, 3, 5, 2, nil, 4, 1][(id - 1) % 8])
+        l.sellerName = id % 2 == 0 ? "林夏" : "同学 3F\(id % 10)"
+        l.sellerColor = id % 6
+        l.sellerNamed = id % 2 == 0
+        return l
     }
 
     static func rent(_ id: Int, _ title: String, _ price: Int, _ place: String, photos: [Photo] = []) -> Listing {
-        Listing(id: "r\(id)", uid: "u\(id + 20)", kind: "rent", title: title, price: price, cat: nil, cond: nil, from: "2027-01-05", to: "2027-05-20", place: place, desc: "", status: "on", contact: "wx_rent\(id)", photos: photos, createdAt: now - Int64(id) * 7_000_000, mine: false, leaseEnd: "2027-05-31", utilities: id == 1, privateBath: id != 2, unitType: id == 3 ? "whole" : "room")
+        var l = Listing(id: "r\(id)", uid: "u\(id + 20)", kind: "rent", title: title, price: price, cat: nil, cond: nil, from: "2027-01-05", to: "2027-05-20", place: place, desc: "", status: "on", contact: "wx_rent\(id)", photos: photos, createdAt: now - Int64(id) * 7_000_000, mine: false, leaseEnd: "2027-05-31", utilities: id == 1, privateBath: id != 2, unitType: id == 3 ? "whole" : "room")
+        l.sellerName = "同学 3F\(id % 10)"
+        l.sellerColor = id % 6
+        l.sellerNamed = false
+        return l
     }
 
     static let goodsList: [Listing] = [
@@ -149,7 +157,7 @@ enum DemoServer {
         let param: (String) -> String? = { name in query.first { $0.name == name }?.value }
         let all = goodsList + rentList + mineList + [groupItem]
 
-        if method == "GET", path == "/v1/me" { return (200, encode(Me(id: "me", isAdmin: false, agreed: true)), json) }
+        if method == "GET", path == "/v1/me" { return (200, encode(Me(id: "me", isAdmin: false, agreed: true, name: "同学 3F7", color: 0, named: false)), json) }
         if method == "GET", path == "/v1/me/listings" { return (200, encode(ListingList(items: mineList)), json) }
         if method == "GET", path == "/v1/admin/stats" { return (200, encode(Stats(posts: 12, views: 340, sold: 5, copies: 40, groupClicks: 18)), json) }
         if method == "GET", path == "/v1/me/wants" {

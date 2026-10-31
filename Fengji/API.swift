@@ -11,6 +11,7 @@ struct APIError: LocalizedError {
     var errorDescription: String? {
         switch code {
         case "not_allowed": return "这类内容不能发。"
+        case "bad_name": return "这个昵称不能用。"
         case "want_again": return "今天已经发过了。"
         case "need_contact": return "留个联系方式，卖家才联系得上你。"
         case "need_ai_consent": return "要同意发给 AI 打分才能发布。"
@@ -77,6 +78,15 @@ final class API: @unchecked Sendable {
     func agree() async throws -> Me {
         try JSONDecoder().decode(Me.self, from: await send("POST", "/v1/me/agree"))
     }
+    private struct ProfileBody: Encodable {
+        let nickname: String
+        let color: Int
+    }
+    func updateProfile(nickname: String, color: Int) async throws -> Me {
+        try await post("PATCH", "/v1/me", ProfileBody(nickname: nickname, color: color))
+    }
+    func reportName(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/report-name") }
+    func adminResetName(_ uid: String) async throws { try await act("POST", "/v1/admin/users/\(uid)/reset-name") }
     func logout() async throws { try await act("POST", "/v1/auth/logout") }
     func deleteAccount() async throws { try await act("DELETE", "/v1/me") }
 

@@ -170,6 +170,43 @@ struct TopBar<Filters: View>: View {
     }
 }
 
+/// 租房的筛选：几个词，选中变粗加下划线
+struct TextTabs: View {
+    @Binding var selected: String
+    let options: [Option]
+    @Namespace private var line
+
+    var body: some View {
+        HStack(spacing: 24) {
+            ForEach(options, id: \.key) { opt in
+                let on = selected == opt.key
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.snappy(duration: 0.2)) { selected = opt.key }
+                } label: {
+                    Text(opt.label)
+                        .font(.system(size: 17, weight: on ? .semibold : .regular))
+                        .foregroundStyle(on ? Theme.ink : Theme.sub)
+                        .frame(height: 44)
+                        .overlay(alignment: .bottom) {
+                            if on {
+                                Capsule()
+                                    .fill(Theme.ink)
+                                    .frame(height: 3)
+                                    .matchedGeometryEffect(id: "line", in: line)
+                                    .padding(.bottom, 4)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
 /// 分类：只有图标。选中的垫六边形，并展开写出名字，一屏放下。
 struct CategoryBar: View {
     @Binding var selected: String
@@ -349,6 +386,7 @@ struct GoodsCard: View {
                 Spacer(minLength: 4)
                 ScoreBadge(score: item.score, playID: item.id)
             }
+            SellerLine(item: item)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -369,7 +407,7 @@ struct RentView: View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 TopBar(placeholder: "搜地段", query: $model.q) {
-                    CategoryBar(selected: $model.filter, options: [ALL_OPTION] + UNIT_OPTIONS) { $0 == "all" ? "all" : "rent-\($0)" }
+                    TextTabs(selected: $model.filter, options: [ALL_OPTION] + UNIT_OPTIONS)
                 }
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -447,10 +485,7 @@ struct RentRow: View {
                     Text("已预订").font(.footnote).foregroundStyle(Theme.sub).padding(.leading, 6)
                 }
             }
-            Text([item.place, item.shortPeriod].filter { !$0.isEmpty }.joined(separator: " · "))
-                .font(.footnote)
-                .foregroundStyle(Theme.sub)
-                .lineLimit(1)
+            SellerLine(item: item, extra: [item.place, item.shortPeriod])
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())

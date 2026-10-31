@@ -284,6 +284,82 @@ final class ImageCache {
     func set(_ key: String, _ image: UIImage) { store.setObject(image, forKey: key as NSString) }
 }
 
+/// 卖家头像：圆角六边形。没改昵称是小蜜蜂，改了是第一个字，群帖是灰色加群昵称第一个字。
+struct SellerAvatar: View {
+    static let colors: [Color] = [
+        Color(red: 0.36, green: 0.56, blue: 0.72), Color(red: 0.44, green: 0.60, blue: 0.42),
+        Color(red: 0.79, green: 0.47, blue: 0.34), Color(red: 0.57, green: 0.47, blue: 0.73),
+        Color(red: 0.79, green: 0.42, blue: 0.55), Color(red: 0.31, green: 0.61, blue: 0.59)
+    ]
+
+    let name: String
+    let color: Int?
+    let named: Bool
+    var size: CGFloat = 20
+
+    private var fill: Color {
+        guard let color, Self.colors.indices.contains(color) else { return Color(red: 0.56, green: 0.56, blue: 0.58) }
+        return Self.colors[color]
+    }
+
+    var body: some View {
+        ZStack {
+            Hexagon().fill(fill)
+            Hexagon().stroke(fill, style: StrokeStyle(lineWidth: size * 0.08, lineJoin: .round))
+            if named {
+                Text(String(name.prefix(1)))
+                    .font(.system(size: size * 0.46, weight: .bold))
+                    .foregroundStyle(.white)
+                    .minimumScaleFactor(0.5)
+            } else {
+                SellerBee(stripe: fill)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct SellerBee: View {
+    let stripe: Color
+
+    var body: some View {
+        Canvas { ctx, size in
+            let s = size.height
+            func oval(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> Path {
+                Path(ellipseIn: CGRect(x: (x - w / 2) * s, y: (y - h / 2) * s, width: w * s, height: h * s))
+            }
+            ctx.fill(oval(0.31, 0.44, 0.30, 0.14), with: .color(.white.opacity(0.8)))
+            ctx.fill(oval(0.69, 0.44, 0.30, 0.14), with: .color(.white.opacity(0.8)))
+            ctx.fill(oval(0.5, 0.29, 0.16, 0.16), with: .color(.white))
+            let body = oval(0.5, 0.57, 0.25, 0.40)
+            ctx.fill(body, with: .color(.white))
+            ctx.drawLayer { layer in
+                layer.clip(to: body)
+                for y in [0.52, 0.60] as [CGFloat] {
+                    layer.fill(Path(CGRect(x: 0, y: y * s, width: s, height: 0.035 * s)), with: .color(stripe))
+                }
+            }
+        }
+    }
+}
+
+/// 卡片上的一行：小头像加昵称
+struct SellerLine: View {
+    let item: Listing
+    var extra: [String] = []
+
+    var body: some View {
+        HStack(spacing: 6) {
+            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.sellerNamed ?? false, size: 20)
+            Text(([item.sellerLabel] + (item.isGroup ? ["来自群"] : []) + extra).filter { !$0.isEmpty }.joined(separator: " · "))
+                .font(.footnote)
+                .foregroundStyle(Theme.sub)
+                .lineLimit(1)
+        }
+    }
+}
+
 /// 卡片阴影：只给一个矩形画，滑动时不用每帧按图片算
 struct CardShadow: View {
     let radius: CGFloat

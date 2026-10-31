@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
   ai_consent_at INTEGER,         -- 同意把东西的信息发给 AI 打分的时间
   sender_hash TEXT,              -- 认领后：他在微信群里的发送者哈希
   contact TEXT,                  -- 认领后：他愿意公开的微信号
+  nickname TEXT,                 -- 没改过是空，显示“同学 xxx”
+  avatar_color INTEGER,          -- 0～5，没选过是空，按账号 id 算
   created_at INTEGER NOT NULL
 );
 

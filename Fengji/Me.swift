@@ -16,6 +16,7 @@ struct MeView: View {
     @State private var newPrice = ""
     @State private var wants: [Want] = []
     @State private var loadedKey: LoadKey?
+    @State private var editingProfile = Demo.scene == "profile"
     @State private var reportingWant: Want?
     @State private var blockingWant: Want?
 
@@ -45,6 +46,7 @@ struct MeView: View {
             if Demo.scene == "undo", state.pendingDelete == nil, let first = list.first { state.softDelete(first) }
         }
         .sheet(isPresented: $claiming) { ClaimView() }
+        .sheet(isPresented: $editingProfile) { ProfileSheet() }
         .sheet(item: $editing) { item in PostForm(kind: item.kind, editing: item) }
         .sheet(item: $acting, onDismiss: {
             afterActing?()
@@ -77,9 +79,21 @@ struct MeView: View {
     private var header: some View {
         HStack(spacing: 12) {
             if state.isLoggedIn {
-                Text(wants.isEmpty ? "我发的" : "我")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(Theme.ink)
+                Button { editingProfile = true } label: {
+                    HStack(spacing: 12) {
+                        SellerAvatar(name: state.me?.name ?? "", color: state.me?.color ?? 0, named: state.me?.named ?? false, size: 48)
+                        Text(state.me?.name ?? "")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(Theme.ink)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.sub)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("改昵称和头像，现在是 " + (state.me?.name ?? ""))
                 Spacer()
             } else {
                 SignInBlock()
@@ -113,12 +127,12 @@ struct MeView: View {
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                 }
-                Text("我发的")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
             }
+            Text("我发的")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.ink)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             if visible.isEmpty {
                 Group {
                     if phase == .ok {
@@ -245,6 +259,93 @@ struct MeView: View {
             state.toast("擦亮了")
         } catch {
             state.toast(error.localizedDescription)
+        }
+    }
+}
+
+/// 改昵称和头像颜色。第一版不传照片。
+struct ProfileSheet: View {
+    @EnvironmentObject var state: AppState
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var color = 0
+    @State private var busy = false
+    @State private var error: String?
+    @State private var loaded = false
+
+    private var isDefault: Bool {
+        let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty || (state.me?.named != true && t == state.me?.name)
+    }
+
+    var body: some View {
+        VStack(spacing: 24) {
+            SellerAvatar(name: name, color: color, named: !isDefault, size: 116)
+                .padding(.top, 32)
+            HStack(spacing: 10) {
+                ForEach(SellerAvatar.colors.indices, id: \.self) { i in
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        color = i
+                    } label: {
+                        VStack(spacing: 4) {
+                            SellerAvatar(name: "", color: i, named: false, size: 42)
+                            Circle()
+                                .fill(color == i ? Theme.ink : Color.clear)
+                                .frame(width: 6, height: 6)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("颜色 \(i + 1)")
+                    .accessibilityAddTraits(color == i ? .isSelected : [])
+                }
+            }
+            VStack(spacing: 8) {
+                TextField("昵称", text: $name)
+                    .font(.system(size: 20, weight: .semibold))
+                    .multilineTextAlignment(.center)
+                    .autocorrectionDisabled()
+                Theme.line.frame(height: 0.5)
+                Text(error ?? "不改也可以")
+                    .font(.footnote)
+                    .foregroundStyle(error == nil ? Theme.sub : Theme.warn)
+            }
+            .padding(.horizontal, 24)
+            Spacer(minLength: 0)
+            Button {
+                Task { await save() }
+            } label: {
+                HStack(spacing: 8) {
+                    if busy { HoneyLoader(size: 22) }
+                    Text(busy ? "正在保存" : "保存")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle(act: .ink))
+            .disabled(busy)
+        }
+        .padding(16)
+        .background(Theme.bg)
+        .contentShape(Rectangle())
+        .onTapGesture { hideKeyboard() }
+        .presentationDragIndicator(.visible)
+        .onAppear {
+            guard !loaded else { return }
+            loaded = true
+            name = state.me?.name ?? ""
+            color = state.me?.color ?? 0
+        }
+    }
+
+    private func save() async {
+        busy = true
+        defer { busy = false }
+        error = nil
+        do {
+            let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            state.setProfile(try await API.shared.updateProfile(nickname: isDefault ? "" : t, color: color))
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 }

@@ -129,6 +129,26 @@ struct DetailView: View {
         .padding(.top, 4)
     }
 
+    /// 只有一行，不做个人主页
+    private var sellerRow: some View {
+        HStack(spacing: 12) {
+            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.sellerNamed ?? false, size: 42)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.sellerLabel)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                if item.isGroup {
+                    Text(["来自群", item.sourceGroup ?? "", "未确认"].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.sub)
+                }
+            }
+        }
+        .padding(.top, 10)
+        .accessibilityElement(children: .combine)
+    }
+
     private var label: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(item.title)
@@ -145,11 +165,6 @@ struct DetailView: View {
             } else if !item.isOn {
                 Text(item.statusText).font(.subheadline).foregroundStyle(Theme.warn)
             }
-            if item.isGroup, !gone {
-                Text("\(item.groupAge)发在群里 · 未确认")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.sub)
-            }
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(item.priceText)
                     .font(.system(size: 26, weight: .bold))
@@ -160,6 +175,7 @@ struct DetailView: View {
                 ScoreBadge(score: item.score, size: 24)
             }
             .padding(.top, 6)
+            sellerRow
             if !item.desc.isEmpty {
                 Text(item.desc)
                     .foregroundStyle(Theme.ink)
@@ -210,6 +226,14 @@ struct DetailView: View {
             }
             if !item.mine, !gone {
                 Button("举报", systemImage: "flag") { choosingReason = true }
+                if !item.isGroup {
+                    Button("举报昵称", systemImage: "person.crop.circle.badge.exclamationmark") {
+                        Task {
+                            try? await API.shared.reportName(item.id)
+                            state.toast("收到了，会尽快处理")
+                        }
+                    }
+                }
                 if !item.isGroup {
                     Button("屏蔽这个人", systemImage: "hand.raised") {
                         if state.needLogin() { confirmBlock = true }

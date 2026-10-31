@@ -71,7 +71,12 @@ async function startSession(env, userId) {
   return token;
 }
 
-const meOf = u => ({ id: u.id, isAdmin: !!u.is_admin, agreed: !!u.agreed_at });
+// 昵称和头像颜色：没改过就由账号 id 算，同一个人始终一样
+const defaultName = id => "同学 " + String(id).slice(-3).toUpperCase();
+const defaultColor = id => (parseInt(String(id).slice(0, 6), 16) || 0) % 6;
+const meOf = u => ({ id: u.id, isAdmin: !!u.is_admin, agreed: !!u.agreed_at, name: u.nickname || defaultName(u.id), color: u.avatar_color ?? defaultColor(u.id), named: !!u.nickname });
+const NAME_NOT_ALLOWED = /官方|管理员|客服|蜂集|admin|apple|微信|weixin|\bvx\b|\bwx\b|\d{6,}/i;
+const SELLER_COLUMNS = "(SELECT nickname FROM users u WHERE u.id = l.user_id) AS seller_nick, (SELECT avatar_color FROM users u WHERE u.id = l.user_id) AS seller_color";
 
 async function loginWithSub(env, sub, refresh) {
   let u = await env.DB.prepare("SELECT * FROM users WHERE apple_sub = ?").bind(sub).first();
@@ -182,6 +187,8 @@ function checkListing(b, userId, existing = []) {
 function view(row, origin, viewer) {
   const mine = !!viewer && viewer.id === row.user_id;
   const group = row.source_type === "group";
+  const nick = row.seller_nick ?? (mine ? viewer.nickname : null);
+  const color = row.seller_color ?? (mine ? viewer.avatar_color : null);
   return {
     id: row.id, uid: row.user_id, kind: row.kind, title: row.title, price: row.price,
     cat: row.cat, cond: row.cond, from: row.from_date,
@@ -190,6 +197,9 @@ function view(row, origin, viewer) {
     leaseEnd: row.lease_end, utilities: !!row.utilities, privateBath: triView(row.private_bath), delivery: row.delivery,
     place: row.place, desc: row.descr, status: row.status,
     contact: group || !row.contact ? null : row.contact,
+    sellerName: group ? (row.source_poster || null) : (nick || defaultName(row.user_id)),
+    sellerColor: group ? null : (color ?? defaultColor(row.user_id)),
+    sellerNamed: group ? true : !!nick,
     sourceType: row.source_type || "self", sourceGroup: row.source_group || null, sourcePoster: row.source_poster || null, sourcePostedAt: row.source_posted_at ?? null,
     score: mine ? null : (row.score ?? null),  // 卖家看不到自己的分
     deliveryFee: row.delivery_fee ?? null, pickupBefore: row.pickup_before || null, pickupAfter: row.pickup_after || null,
@@ -214,7 +224,7 @@ async function feed(req, env, url) {
   }
   const offset = Math.max(0, Math.floor(Number(p.get("offset")) || 0));
   if (viewer) { where.push("l.user_id NOT IN (SELECT blocked_id FROM blocks WHERE user_id = ?)"); args.push(viewer.id); }
-  const rows = (await env.DB.prepare(`SELECT l.* FROM listings l WHERE ${where.join(" AND ")} ORDER BY COALESCE(l.score, 3) DESC, l.bumped_at DESC LIMIT ? OFFSET ?`).bind(...args, PAGE, offset).all()).results;
+  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY COALESCE(l.score, 3) DESC, l.bumped_at DESC LIMIT ? OFFSET ?`).bind(...args, PAGE, offset).all()).results;
   return json({ items: rows.map(r => view(r, url.origin, viewer)), next: rows.length === PAGE ? offset + PAGE : null });
 }
 
@@ -222,7 +232,7 @@ const groupExpired = row => row.source_type === "group" && !(row.source_posted_a
 
 async function oneListing(req, env, url, id) {
   const viewer = await currentUser(req, env);
-  const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
+  const row = await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.id = ?`).bind(id).first();
   const canSeeHidden = viewer && row && (viewer.id === row.user_id || viewer.is_admin);
   if (!row || (row.status === "hidden" && !canSeeHidden) || groupExpired(row)) throw new Fail(404, "not_found");
   return json(view(row, url.origin, viewer));
@@ -376,7 +386,7 @@ async function report(req, env, id) {
   if (!row) throw new Fail(404, "not_found");
   await env.DB.prepare("INSERT OR IGNORE INTO reports (id, listing_id, reporter_id, reason, note, created_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(newId(), id, u ? u.id : "anon:" + newId(), b.reason, clean(b.note, 300), Date.now()).run();
-  const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE listing_id = ? AND status = 'open' AND reporter_id NOT LIKE 'anon:%' AND reporter_id NOT LIKE 'want:%'").bind(id).first();
+  const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE listing_id = ? AND status = 'open' AND reporter_id NOT LIKE 'anon:%' AND reporter_id NOT LIKE 'want:%' AND reporter_id NOT LIKE 'name:%'").bind(id).first();
   if (c.n >= AUTO_HIDE_REPORTS) await env.DB.prepare("UPDATE listings SET status = 'hidden' WHERE id = ? AND status = 'on'").bind(id).run();
   return json({ ok: true });
 }
@@ -443,7 +453,7 @@ async function logout(req, env) {
 // ---- 管理 ----
 async function adminReports(req, env, url) {
   await needAdmin(req, env);
-  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, r.reported_user, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.room_type, l.unit_type, l.furniture, l.internet, l.deposit, l.app_fee, l.parking, l.pets, l.roommates, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
+  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, r.reported_user, (SELECT nickname FROM users u WHERE u.id = l.user_id) AS seller_nick, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.room_type, l.unit_type, l.furniture, l.internet, l.deposit, l.app_fee, l.parking, l.pets, l.roommates, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
     FROM reports r JOIN listings l ON l.id = r.listing_id WHERE r.status = 'open' ORDER BY r.created_at DESC LIMIT 100`).all()).results;
   return json({ items: rows.map(r => ({ id: r.id, reason: r.reason, note: r.note, at: r.at, reporter: r.reporter, reportedUser: r.reported_user || null, listing: view({ ...r, id: r.lid }, url.origin, { id: "admin" }) })) });
 }
@@ -541,6 +551,43 @@ async function deleteWant(req, env, id) {
   const { w } = await ownWant(req, env, id);
   await env.DB.prepare("DELETE FROM wants WHERE id = ?").bind(w.id).run();
   return json({ ok: true });
+}
+
+// 举报昵称：不算进条目的自动下架，管理员可以重置昵称
+async function reportName(req, env, id) {
+  const u = await currentUser(req, env);
+  const row = await env.DB.prepare(`SELECT l.user_id, l.source_type, ${SELLER_COLUMNS} FROM listings l WHERE l.id = ?`).bind(id).first();
+  if (!row) throw new Fail(404, "not_found");
+  if (row.source_type === "group") throw new Fail(400, "bad_reason");
+  await env.DB.prepare("INSERT OR IGNORE INTO reports (id, listing_id, reporter_id, reason, note, reported_user, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(newId(), id, "name:" + (u ? u.id : newId()), "昵称不当", row.seller_nick || "", row.user_id, Date.now()).run();
+  return json({ ok: true });
+}
+
+async function adminResetName(req, env, id) {
+  await needAdmin(req, env);
+  await env.DB.batch([
+    env.DB.prepare("UPDATE users SET nickname = NULL WHERE id = ?").bind(id),
+    env.DB.prepare("UPDATE reports SET status = 'done' WHERE reported_user = ? AND reason = '昵称不当'").bind(id)
+  ]);
+  return json({ ok: true });
+}
+
+async function updateProfile(req, env) {
+  const u = await needUser(req, env);
+  const b = await bodyOf(req);
+  let nickname = u.nickname;
+  if (typeof b.nickname === "string") {
+    nickname = clean(b.nickname, 12) || null;
+    if (nickname && (BANNED.some(r => r.test(nickname)) || NAME_NOT_ALLOWED.test(nickname))) throw new Fail(422, "bad_name");
+  }
+  let color = u.avatar_color;
+  if (b.color !== undefined) {
+    if (!Number.isInteger(b.color) || b.color < 0 || b.color > 5) throw new Fail(400, "bad_color");
+    color = b.color;
+  }
+  await env.DB.prepare("UPDATE users SET nickname = ?, avatar_color = ? WHERE id = ?").bind(nickname, color, u.id).run();
+  return json(meOf({ ...u, nickname, avatar_color: color }));
 }
 
 async function reportWant(req, env, id) {
@@ -880,6 +927,8 @@ async function route(req, env) {
   if (method === "POST" && path === "/v1/auth/logout") return logout(req, env);
   if (method === "POST" && path === "/v1/me/agree") return agree(req, env);
   if (method === "GET" && path === "/v1/me") return json(meOf(await needUser(req, env)));
+  if (method === "PATCH" && path === "/v1/me") return updateProfile(req, env);
+  if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/report-name$/.exec(path))) return reportName(req, env, m[1]);
   if (method === "DELETE" && path === "/v1/me") return deleteAccount(req, env);
   if (method === "GET" && path === "/v1/me/listings") return mine(req, env, url);
   if (method === "GET" && path === "/v1/me/blocks") return blockList(req, env);
@@ -926,6 +975,7 @@ async function route(req, env) {
   if (method === "POST" && (m = /^\/v1\/admin\/reports\/([0-9a-f]+)\/close$/.exec(path))) return adminCloseReport(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/admin\/listings\/([0-9a-f]+)\/restore$/.exec(path))) return adminRestore(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/admin\/users\/([0-9a-f]+)\/ban$/.exec(path))) return adminBan(req, env, m[1]);
+  if (method === "POST" && (m = /^\/v1\/admin\/users\/([0-9a-f]+)\/reset-name$/.exec(path))) return adminResetName(req, env, m[1]);
 
   throw new Fail(404, "not_found");
 }

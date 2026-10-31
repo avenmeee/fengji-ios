@@ -466,4 +466,33 @@ ok("点击类型要对", r.status === 400, r);
 r = await call("GET", "/v1/admin/stats", { token: c.token });
 ok("点击只加总数", r.data.copies === before.copies + 1 && r.data.groupClicks === before.groupClicks + 1, r);
 
+// 昵称
+r = await call("GET", "/v1/me", { token: b.token });
+ok("默认昵称", /^同学 [0-9A-F]{3}$/.test(r.data.name) && r.data.named === false && r.data.color >= 0 && r.data.color <= 5, r);
+const fallbackName = r.data.name;
+r = await call("PATCH", "/v1/me", { token: b.token, body: { nickname: "代写" } });
+ok("昵称过违禁词", r.status === 422 && r.data.error === "bad_name", r);
+r = await call("PATCH", "/v1/me", { token: b.token, body: { nickname: "蜂集客服" } });
+ok("不能冒充官方", r.status === 422, r);
+r = await call("PATCH", "/v1/me", { token: b.token, body: { nickname: "wx 12345678" } });
+ok("不能放联系方式", r.status === 422, r);
+r = await call("PATCH", "/v1/me", { token: b.token, body: { color: 9 } });
+ok("颜色要在范围里", r.status === 400, r);
+r = await call("PATCH", "/v1/me", { token: b.token, body: { nickname: "林夏", color: 2 } });
+ok("改昵称和颜色", r.data.name === "林夏" && r.data.color === 2 && r.data.named === true, r);
+r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent } });
+const namedId = r.data.id;
+ok("发了条带昵称的", !!namedId, r);
+r = await call("GET", `/v1/listings/${namedId}`);
+ok("详情显示昵称和颜色", r.data.sellerName === "林夏" && r.data.sellerColor === 2 && r.data.sellerNamed === true, r);
+r = await call("GET", "/v1/listings?kind=rent");
+ok("列表显示昵称", r.data.items.find(x => x.id === namedId)?.sellerName === "林夏", r);
+for (const u of [c, d]) await call("POST", `/v1/listings/${namedId}/report-name`, { token: u.token });
+await call("POST", `/v1/listings/${namedId}/report-name`, {});
+await call("POST", `/v1/listings/${namedId}/report-name`, {});
+r = await call("GET", `/v1/listings/${namedId}`);
+ok("举报昵称不下架条目", r.data.status === "on", r);
+r = await call("PATCH", "/v1/me", { token: b.token, body: { nickname: "" } });
+ok("清空回到默认", r.data.name === fallbackName && r.data.named === false, r);
+
 console.log(`全部通过：${n} 项`);

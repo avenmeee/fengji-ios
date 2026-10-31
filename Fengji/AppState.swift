@@ -168,6 +168,11 @@ final class AppState: ObservableObject {
         Notifier.refresh()
     }
 
+    func setProfile(_ value: Me) {
+        me = value
+        changed()
+    }
+
     private func setSession(_ value: String?) {
         token = value
         API.shared.token = value

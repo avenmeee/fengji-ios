@@ -22,6 +22,9 @@ struct Photo: Codable, Hashable {
 }
 
 struct Listing: Codable, Identifiable, Hashable {
+    var sellerName: String? = nil
+    var sellerColor: Int? = nil
+    var sellerNamed: Bool? = nil
     let id: String
     let uid: String
     let kind: String
@@ -71,6 +74,7 @@ struct Listing: Codable, Identifiable, Hashable {
     var isGroup: Bool { sourceType == "group" }
     /// 没认领的群帖子：只能去群里找
     var findInGroup: Bool { isGroup }
+    var sellerLabel: String { sellerName ?? sourcePoster ?? "同学" }
     /// “3 天前发在群里”里的前半句
     var groupAge: String {
         guard let t = sourcePostedAt else { return "" }
@@ -253,6 +257,9 @@ struct Me: Codable {
     let id: String
     let isAdmin: Bool
     let agreed: Bool
+    var name: String?
+    var color: Int?
+    var named: Bool?
 }
 
 struct LoginResult: Codable {
