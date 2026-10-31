@@ -51,7 +51,7 @@ struct Listing: Codable, Identifiable, Hashable {
     var pickupAfter: String?
     var longTerm: Bool?
     var furnished: Bool?
-    /// AI 五档，1～5；没打分或是自己的就是空
+    /// 四档，1 偏贵 2 价格合理 3 有性价比 4 捡漏；没打分或是自己的就是空
     var score: Int?
     var sourceType: String?
     var sourceGroup: String?

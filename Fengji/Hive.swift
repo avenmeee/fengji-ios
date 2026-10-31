@@ -159,7 +159,7 @@ struct HiveShareCard: View {
         let w = cellWidth, r = w / 3.0.squareRoot()
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
-                BeeIcon(level: 4, size: 24)
+                BeeIcon(level: 3, size: 24)
                 Text("蜂集").font(.system(size: 17, weight: .bold))
                 Spacer()
                 Text("\(total) 件").font(.system(size: 14)).foregroundStyle(Theme.sub)
@@ -218,7 +218,7 @@ struct HiveShareCard: View {
     }
 }
 
-// MARK: - 五档小蜜蜂
+// MARK: - 四档小蜜蜂
 
 /// 一档比一档满。5 档可以传翅膀角度和上移，做动效用。
 struct BeeIcon: View {
@@ -253,19 +253,17 @@ struct BeeIcon: View {
             ctx.scaleBy(x: canvas.width / 64, y: canvas.height / 64)
             switch level {
             case ...1:
-                ctx.stroke(hex(32, 32, 22), with: .color(Theme.sub), style: round)
-            case 2:
                 ctx.drawLayer { l in
                     l.clip(to: Path(CGRect(x: 0, y: 32, width: 64, height: 32)))
                     l.fill(hex(32, 32, 22), with: .color(Theme.buy))
                 }
                 ctx.stroke(hex(32, 32, 22), with: .color(Theme.sub), style: round)
-            case 3:
+            case 2:
                 body3(&ctx)
             default:
                 ctx.translateBy(x: 32, y: 36 - lift)
                 ctx.scaleBy(x: scale, y: scale)
-                if level >= 5 { ctx.rotate(by: .degrees(14)) }
+                if level >= 4 { ctx.rotate(by: .degrees(14)) }
                 ctx.translateBy(x: -32, y: -36)
                 drawWing(&ctx, center: CGPoint(x: 16, y: 17), tilt: 32, root: CGPoint(x: 23, y: 26), angle: wing)
                 drawWing(&ctx, center: CGPoint(x: 48, y: 17), tilt: -32, root: CGPoint(x: 41, y: 26), angle: -wing)
@@ -292,7 +290,7 @@ struct BeeIcon: View {
 
     private func drawWing(_ ctx: inout GraphicsContext, center: CGPoint, tilt: CGFloat, root: CGPoint, angle: Double) {
         let path = wingPath(cx: center.x, cy: center.y, degrees: tilt)
-        let filled = level >= 5
+        let filled = level >= 4
         ctx.drawLayer { l in
             l.translateBy(x: root.x, y: root.y)
             l.rotate(by: .degrees(angle))
@@ -315,10 +313,19 @@ enum BeeSeen {
     static var ids = Set<String>()
 }
 
-/// 蜜蜂 + 档位数字。没打分不显示。5 档第一次出现时扇一下翅膀。
+func scoreLabel(_ score: Int) -> String {
+    switch score {
+    case ...1: return "偏贵"
+    case 2: return "价格合理"
+    case 3: return "有性价比"
+    default: return "捡漏"
+    }
+}
+
+/// 蜜蜂 + 档位文字。没打分不显示。捡漏第一次出现时扇一下翅膀。
 struct ScoreBadge: View {
     let score: Int?
-    var size: CGFloat = 19
+    var size: CGFloat = 18
     /// 列表里传条目编号：同一次打开只飞一次。详情传 nil，打开就飞。
     var playID: String?
     var plays = true
@@ -329,7 +336,7 @@ struct ScoreBadge: View {
     var body: some View {
         if let score {
             HStack(spacing: 3) {
-                if score >= 5 {
+                if score >= 4 {
                     KeyframeAnimator(initialValue: BeeMotion(), trigger: tick) { v in
                         BeeIcon(level: score, size: size, wing: v.wing, lift: v.lift, scale: v.scale)
                     } keyframes: { _ in
@@ -358,13 +365,14 @@ struct ScoreBadge: View {
                 } else {
                     BeeIcon(level: score, size: size)
                 }
-                Text("\(score)")
-                    .font(.system(size: max(14, size * 0.74), weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.ink)
+                Text(scoreLabel(score))
+                    .font(.system(size: size >= 24 ? 16 : 13, weight: score >= 4 ? .semibold : .regular))
+                    .foregroundStyle(score >= 4 ? Theme.ink : Theme.sub)
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("蜂集评分 \(score) 档")
+            .accessibilityLabel(scoreLabel(score))
             .onAppear { schedule(score) }
             .onDisappear { waiting?.cancel() }
         }
@@ -372,7 +380,7 @@ struct ScoreBadge: View {
 
     /// 等一下还在屏幕上才飞，快速滚动时不飞
     private func schedule(_ score: Int) {
-        guard plays, score >= 5, !reduceMotion else { return }
+        guard plays, score >= 4, !reduceMotion else { return }
         if let id = playID, BeeSeen.ids.contains(id) { return }
         waiting = Task {
             try? await Task.sleep(nanoseconds: 180_000_000)

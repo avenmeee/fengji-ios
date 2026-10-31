@@ -107,8 +107,12 @@ final class API: @unchecked Sendable {
     }
     func create(_ input: ListingInput) async throws -> Listing { try await post("POST", "/v1/listings", input) }
     func update(_ id: String, _ input: ListingInput) async throws -> Listing { try await post("PUT", "/v1/listings/\(id)", input) }
-    func setStatus(_ id: String, _ status: String) async throws -> Listing {
-        try await post("POST", "/v1/listings/\(id)/status", ["status": status])
+    private struct StatusBody: Encodable {
+        let status: String
+        let soldPrice: Int?
+    }
+    func setStatus(_ id: String, _ status: String, soldPrice: Int? = nil) async throws -> Listing {
+        try await post("POST", "/v1/listings/\(id)/status", StatusBody(status: status, soldPrice: soldPrice))
     }
     func setPrice(_ id: String, _ price: Int) async throws {
         let _: Listing = try await post("POST", "/v1/listings/\(id)/price", ["price": price])

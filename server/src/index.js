@@ -224,7 +224,7 @@ async function feed(req, env, url) {
   }
   const offset = Math.max(0, Math.floor(Number(p.get("offset")) || 0));
   if (viewer) { where.push("l.user_id NOT IN (SELECT blocked_id FROM blocks WHERE user_id = ?)"); args.push(viewer.id); }
-  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY COALESCE(l.score, 3) DESC, l.bumped_at DESC LIMIT ? OFFSET ?`).bind(...args, PAGE, offset).all()).results;
+  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY COALESCE(l.score, 2) DESC, l.bumped_at DESC LIMIT ? OFFSET ?`).bind(...args, PAGE, offset).all()).results;
   return json({ items: rows.map(r => view(r, url.origin, viewer)), next: rows.length === PAGE ? offset + PAGE : null });
 }
 
@@ -290,9 +290,12 @@ async function setStatus(req, env, url, id) {
   const u = await needUser(req, env);
   const row = await ownedOrFail(env, id, u);
   if (row.status === "hidden") throw new Fail(403, "hidden");
-  const { status } = await bodyOf(req);
+  const { status, soldPrice } = await bodyOf(req);
   if (!["on", "reserved", "off"].includes(status)) throw new Fail(400, "bad_status");
-  await env.DB.prepare("UPDATE listings SET status=?, updated_at=? WHERE id=?").bind(status, Date.now(), id).run();
+  // 成交价选填，重新上架就作废
+  if (soldPrice !== undefined && soldPrice !== null && (!Number.isInteger(soldPrice) || soldPrice < 0 || soldPrice > 1_000_000)) throw new Fail(400, "bad_price");
+  const sold = status === "off" ? (soldPrice ?? null) : null;
+  await env.DB.prepare("UPDATE listings SET status=?, sold_price=?, updated_at=? WHERE id=?").bind(status, sold, Date.now(), id).run();
   if (status === "off" && row.status !== "off") await bump(env, "*", "sold");
   const next = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
   return json(view(next, url.origin, u));
@@ -796,7 +799,7 @@ async function unscored(req, env) {
   const origin = new URL(req.url).origin;
   const comps = {};
   for (const cat of new Set(rows.map(r => r.cat))) {
-    comps[cat] = (await env.DB.prepare("SELECT id, title, price FROM listings WHERE kind = 'goods' AND cat = ? AND bumped_at >= ? ORDER BY bumped_at DESC LIMIT 30").bind(cat, now - 90 * 86400000).all()).results;
+    comps[cat] = (await env.DB.prepare("SELECT id, title, price, sold_price FROM listings WHERE kind = 'goods' AND cat = ? AND bumped_at >= ? ORDER BY sold_price IS NOT NULL DESC, bumped_at DESC LIMIT 30").bind(cat, now - 90 * 86400000).all()).results;
   }
   return json({
     items: rows.map(r => {
@@ -804,7 +807,7 @@ async function unscored(req, env) {
       return {
         id: r.id, title: r.title, price: r.price, cat: r.cat, cond: r.cond, place: r.place,
         photo: first ? `${origin}/p/${first}` : null,
-        comps: comps[r.cat].filter(c => c.id !== r.id).map(c => ({ title: c.title, price: c.price }))
+        comps: comps[r.cat].filter(c => c.id !== r.id).map(c => c.sold_price === null ? { title: c.title, price: c.price, sold: false } : { title: c.title, price: c.sold_price, listed: c.price, sold: true })
       };
     })
   });
@@ -816,7 +819,7 @@ async function setScores(req, env) {
   const list = Array.isArray(b) ? b : b.scores;
   if (!Array.isArray(list) || !list.length || list.length > 200) throw new Fail(400, "bad_scores");
   for (const x of list) {
-    if (typeof x?.id !== "string" || !Number.isInteger(x.score) || x.score < 1 || x.score > 5) throw new Fail(400, "bad_score");
+    if (typeof x?.id !== "string" || !Number.isInteger(x.score) || x.score < 1 || x.score > 4) throw new Fail(400, "bad_score");
   }
   const now = Date.now();
   const done = await env.DB.batch(list.map(x => env.DB.prepare("UPDATE listings SET score = ?, scored_at = ? WHERE id = ? AND kind = 'goods'").bind(x.score, now, x.id)));

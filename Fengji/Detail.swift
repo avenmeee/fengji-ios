@@ -172,7 +172,7 @@ struct DetailView: View {
                     .foregroundStyle(Theme.ink)
                 if item.isRent { Text("/月").font(.subheadline).foregroundStyle(Theme.sub) }
                 Spacer(minLength: 8)
-                ScoreBadge(score: item.score, size: 24)
+                ScoreBadge(score: item.score, size: 26)
             }
             .padding(.top, 6)
             sellerRow

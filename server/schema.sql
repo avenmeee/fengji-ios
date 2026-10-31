@@ -50,8 +50,9 @@ CREATE TABLE IF NOT EXISTS listings (
   pets TEXT,                     -- rent：宠物
   roommates TEXT,                -- rent：室友情况
   furnished INTEGER NOT NULL DEFAULT 0,     -- rent：可拎包入住
-  score INTEGER,                 -- AI 五档 1～5，后台打；没打是空。卖家看不到自己的
+  score INTEGER,                 -- 四档：1 偏贵 2 价格合理 3 有性价比 4 捡漏，后台打；没打是空。卖家看不到自己的
   scored_at INTEGER,
+  sold_price INTEGER,            -- 卖家选填的成交价，只用于比价和汇总，不公开
   source_type TEXT NOT NULL DEFAULT 'self', -- self 自己发；group 群里搬来
   source_id TEXT,                -- 群里搬来的去重编号
   source_group TEXT,             -- 去哪个群找

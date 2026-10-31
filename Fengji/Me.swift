@@ -14,6 +14,8 @@ struct MeView: View {
     @State private var afterActing: (() -> Void)?
     @State private var pricing: Listing?
     @State private var newPrice = ""
+    @State private var selling: Listing?
+    @State private var soldPrice = ""
     @State private var wants: [Want] = []
     @State private var loadedKey: LoadKey?
     @State private var editingProfile = Demo.scene == "profile"
@@ -43,6 +45,7 @@ struct MeView: View {
         }
         .onChange(of: items) { _, list in
             if Demo.scene == "mine-actions", acting == nil { acting = list.first }
+            if Demo.scene == "sold-ask", selling == nil { selling = list.first }
             if Demo.scene == "undo", state.pendingDelete == nil, let first = list.first { state.softDelete(first) }
         }
         .sheet(isPresented: $claiming) { ClaimView() }
@@ -68,6 +71,13 @@ struct MeView: View {
             Button("取消", role: .cancel) {}
         } message: { _ in
             Text("他的留言会删掉，也收不到他的新留言。")
+        }
+        .alert("卖了多少钱？", isPresented: Binding(get: { selling != nil }, set: { if !$0 { selling = nil } }), presenting: selling) { item in
+            TextField("美元", text: $soldPrice).keyboardType(.numberPad)
+            Button("保存") { Task { await setStatus(item, "off", soldPrice: Int(soldPrice.trimmingCharacters(in: .whitespaces))) } }
+            Button("跳过", role: .cancel) { Task { await setStatus(item, "off") } }
+        } message: { _ in
+            Text("选填，只用来比价，不公开")
         }
         .alert("改价", isPresented: Binding(get: { pricing != nil }, set: { if !$0 { pricing = nil } }), presenting: pricing) { item in
             TextField("美元", text: $newPrice).keyboardType(.numberPad)
@@ -219,6 +229,9 @@ struct MeView: View {
 
     private func run(_ action: MineActions.Action, _ item: Listing) {
         switch action {
+        case .status("off") where !item.isRent:
+            soldPrice = ""
+            selling = item
         case .status(let status): Task { await setStatus(item, status) }
         case .price:
             newPrice = String(item.price)
@@ -229,9 +242,9 @@ struct MeView: View {
         }
     }
 
-    private func setStatus(_ item: Listing, _ status: String) async {
+    private func setStatus(_ item: Listing, _ status: String, soldPrice: Int? = nil) async {
         do {
-            _ = try await API.shared.setStatus(item.id, status)
+            _ = try await API.shared.setStatus(item.id, status, soldPrice: soldPrice)
             state.changed()
         } catch {
             state.toast(error.localizedDescription)

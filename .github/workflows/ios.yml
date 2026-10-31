@@ -120,6 +120,7 @@ jobs:
           shot "37-设置-邮箱" settings-contact light
           shot "38-返回手势自查" pop-check light
           shot "39-改昵称" profile light
+          shot "40-卖了多少钱" sold-ask light
 
       - name: 商店截图
         if: inputs.mode == 'sim' && inputs.store
