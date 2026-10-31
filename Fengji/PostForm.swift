@@ -243,27 +243,16 @@ struct PostForm: View {
     private var tile: CGFloat { 76 }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if posted {
-                    postedView
-                } else if isRent {
-                    rentForm
-                } else {
-                    goodsForm
-                }
-            }
-            .background(Theme.bg)
-            .toolbar(.hidden, for: .navigationBar)
-            .toolbar {
-                // 数字键盘没有回车，都靠这个收
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("完成") { focus = nil }
-                        .font(.body.weight(.semibold))
-                }
+        Group {
+            if posted {
+                postedView
+            } else if isRent {
+                rentForm
+            } else {
+                goodsForm
             }
         }
+        .background(Theme.bg)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(busy)
         .onChange(of: picked) { _, items in
@@ -799,16 +788,26 @@ struct PostForm: View {
 
     /// 发布按钮固定在底部；必填没齐时变淡，点了会说缺什么
     private var publishBar: some View {
-        Button {
-            Task { await submit() }
-        } label: {
-            HStack(spacing: 8) {
-                if busy { HoneyLoader(size: 22) }
-                Text(busy ? "正在发" : (editing == nil ? "发布" : "保存"))
+        HStack(spacing: 10) {
+            Button {
+                Task { await submit() }
+            } label: {
+                HStack(spacing: 8) {
+                    if busy { HoneyLoader(size: 22) }
+                    Text(busy ? "正在发" : (editing == nil ? "发布" : "保存"))
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle(act: formAct, dimmed: !requiredFilled))
+            .disabled(busy)
+            // 数字键盘没有回车，打字时这里能收
+            if focus != nil {
+                Button("完成") { focus = nil }
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+                    .frame(width: 72, height: 54)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 17))
             }
         }
-        .buttonStyle(PrimaryButtonStyle(act: formAct, dimmed: !requiredFilled))
-        .disabled(busy)
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 8)
