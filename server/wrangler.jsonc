@@ -1,0 +1,11 @@
+{
+  // 部署前：建 D1 和 R2，把 database_id 填到下面（要用户点头才部署）
+  "name": "fengji",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "routes": [{ "pattern": "fengji.sinantrails.com", "custom_domain": true }],
+  "d1_databases": [{ "binding": "DB", "database_name": "fengji", "database_id": "00000000-0000-0000-0000-000000000000" }],
+  "r2_buckets": [{ "binding": "PHOTOS", "bucket_name": "fengji-photos" }],
+  "vars": { "APPLE_AUDIENCE": "com.avenmeee.fengji" }
+}

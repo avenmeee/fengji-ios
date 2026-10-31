@@ -1,0 +1,15 @@
+*.xcodeproj/
+*.xcworkspace/
+build/
+DerivedData/
+shots/
+*.log
+*.p8
+*.p12
+*.mobileprovision
+.asc/
+.DS_Store
+node_modules/
+.wrangler/
+.dev.vars
+视觉/
