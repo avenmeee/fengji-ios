@@ -363,6 +363,7 @@ struct ListingImage: View {
     let item: Listing
     var index = 0
     var maxPixel: CGFloat = 600
+    var showTag = true
 
     var body: some View {
         let tint = Tint.of(item)
@@ -379,7 +380,9 @@ struct ListingImage: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            if item.isReserved {
+            if !showTag {
+                EmptyView()
+            } else if item.isReserved {
                 PhotoTag(text: "已预订")
             } else if item.isGroup {
                 PhotoTag(text: "群里搬来")

@@ -84,12 +84,12 @@ struct DetailView: View {
                 if item.photos.count > 1 {
                     TabView {
                         ForEach(item.photos.indices, id: \.self) { i in
-                            ListingImage(item: item, index: i, maxPixel: 1600).clipped()
+                            ListingImage(item: item, index: i, maxPixel: 1600, showTag: false).clipped()
                         }
                     }
                     .tabViewStyle(.page)
                 } else {
-                    ListingImage(item: item, maxPixel: 1600)
+                    ListingImage(item: item, maxPixel: 1600, showTag: false)
                 }
             }
             .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28))

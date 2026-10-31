@@ -175,7 +175,7 @@ struct MineRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .opacity(item.isOn ? 1 : 0.55)
+            .opacity(item.status == "off" ? 0.55 : 1)
 
             FlowLayout {
                 if item.status != "hidden" {
