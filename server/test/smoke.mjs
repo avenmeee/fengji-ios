@@ -125,13 +125,15 @@ ok("普通人进不了管理", r.status === 403, r);
 
 const cPhoto = async () => [(await call("POST", "/v1/photos", { token: c.token, raw: jpeg })).data.key];
 const rentPhoto = async () => [(await call("POST", "/v1/photos", { token: b.token, raw: jpeg })).data.key];
-const rent = { kind: "rent", title: "一室一厅", price: 800, unitType: "both", from: "2027-01-01", to: "2027-05-01", leaseEnd: "2027-06-30", utilities: true, privateBath: true, place: "Starland", contact: "wx_rent", photos: await rentPhoto() };
+const rent = { kind: "rent", title: "一室一厅", price: 800, unitType: "room", from: "2027-01-01", to: "2027-05-01", leaseEnd: "2027-06-30", utilities: true, privateBath: true, place: "Starland", contact: "wx_rent", photos: await rentPhoto() };
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, from: "2027-06-01" } });
 ok("起止日期反了拒", r.status === 400, r);
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, utilities: undefined } });
 ok("水电必须选", r.status === 400 && r.data.error === "need_utilities", r);
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, to: "" } });
 ok("没结束日期又不是长租拒", r.status === 400, r);
+r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, unitType: "both" } });
+ok("整套单间只能选一个", r.status === 400 && r.data.error === "need_unit", r);
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, unitType: undefined } });
 ok("整套或单间必选", r.status === 400 && r.data.error === "need_unit", r);
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, photos: [] } });
@@ -143,8 +145,8 @@ ok("长租", r.status === 201 && r.data.longTerm === true && r.data.furnished ==
 await call("DELETE", "/v1/listings/" + r.data.id, { token: b.token });
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, price: 0 } });
 ok("租金 0 拒", r.status === 400, r);
-r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, desc: "长".repeat(3500), roomType: "2室1卫", unitType: "both", internet: false, furniture: "部分有", deposit: 500, appFee: 30, parking: "路边", pets: "可养猫", roommates: "两位同学" } });
-ok("房源详细字段", r.data.roomType === "2室1卫" && r.data.unitType === "both" && r.data.internet === false && r.data.furniture === "部分有" && r.data.deposit === 500 && r.data.appFee === 30 && r.data.parking === "路边" && r.data.pets === "可养猫" && r.data.roommates === "两位同学" && r.data.desc.length === 3500, r.data);
+r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, desc: "长".repeat(3500), roomType: "2室1卫", unitType: "room", internet: false, furniture: "部分有", deposit: 500, appFee: 30, parking: "路边", pets: "可养猫", roommates: "两位同学" } });
+ok("房源详细字段", r.data.roomType === "2室1卫" && r.data.unitType === "room" && r.data.internet === false && r.data.furniture === "部分有" && r.data.deposit === 500 && r.data.appFee === 30 && r.data.parking === "路边" && r.data.pets === "可养猫" && r.data.roommates === "两位同学" && r.data.desc.length === 3500, r.data);
 ok("发房源", r.status === 201 && !("rtype" in r.data) && r.data.utilities === true && r.data.privateBath === true && r.data.leaseEnd === "2027-06-30", r);
 const rid = r.data.id;
 r = await call("GET", "/v1/listings?kind=rent");
@@ -505,7 +507,7 @@ r = await call("POST", `/v1/listings/${soldGoods.id}/status`, { token: c.token, 
 ok("不填也能标已卖", r.status === 200 && r.data.status === "off", r);
 r = await call("POST", `/v1/listings/${soldGoods.id}/status`, { token: c.token, body: { status: "on" } });
 r = await call("POST", `/v1/listings/${soldGoods.id}/status`, { token: c.token, body: { status: "off", soldPrice: 35 } });
-ok("填成交价，公开数据里没有", r.status === 200 && !JSON.stringify(r.data).includes("35") && !("soldPrice" in r.data), r);
+ok("填成交价，公开数据里没有", r.status === 200 && !Object.values(r.data).includes(35) && !("soldPrice" in r.data), r);
 const artWaiting = (await call("POST", "/v1/listings", { token: c.token, body: { ...goods, photos: await cPhoto(), title: "待比价", price: 60, cat: "art" } })).data;
 r = await call("GET", "/v1/admin/unscored", { token: ADMIN });
 const withComps = r.data.items.find(x => x.id === artWaiting.id);

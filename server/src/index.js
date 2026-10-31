@@ -162,7 +162,7 @@ function checkListing(b, userId, existing = []) {
   } else {
     if (!photos.length) throw new Fail(400, "need_photo");
     if (typeof b.utilities !== "boolean") throw new Fail(400, "need_utilities");
-    if (!["whole", "room", "both"].includes(b.unitType)) throw new Fail(400, "need_unit");
+    if (!["whole", "room"].includes(b.unitType)) throw new Fail(400, "need_unit");
     const money = v => {
       if (v == null || v === "") return null;
       const n = Number(v);
@@ -751,7 +751,7 @@ async function importOne(env, b) {
 
   const id = newId();
   await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, unit_type, place, descr, contact, photos, status, created_at, updated_at, bumped_at, source_type, source_id, source_group, source_poster, source_posted_at, merge_key, sender_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, owner ? owner.id : GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, kind === "rent" && ["whole", "room", "both"].includes(b.unitType) ? b.unitType : null, place, descr, owner?.contact || "", JSON.stringify(keys), now, now, postedAt, owner ? "claimed" : "group", sourceId, group, poster, postedAt, mergeKey, senderHash).run();
+    .bind(id, owner ? owner.id : GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, kind === "rent" && ["whole", "room"].includes(b.unitType) ? b.unitType : null, place, descr, owner?.contact || "", JSON.stringify(keys), now, now, postedAt, owner ? "claimed" : "group", sourceId, group, poster, postedAt, mergeKey, senderHash).run();
   return { status: 201, data: { id } };
 }
 

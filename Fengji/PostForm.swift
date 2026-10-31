@@ -191,7 +191,8 @@ struct PostForm: View {
         _bedrooms = State(initialValue: room.0 ?? (filled && isRent ? "1" : nil))
         _baths = State(initialValue: room.1 ?? (filled && isRent ? "1" : nil))
         let unit = editing?.unitType ?? (filled && isRent ? "room" : nil)
-        _unitWhole = State(initialValue: unit == "whole" || unit == "both")
+        // 二选一。以前存的“都可以”按单间
+        _unitWhole = State(initialValue: unit == "whole")
         _unitRoom = State(initialValue: unit == "room" || unit == "both")
         _priceSuggested = State(initialValue: filled && !isRent)
         _internet = State(initialValue: editing?.internet)
@@ -568,8 +569,8 @@ struct PostForm: View {
                         }
                         row("出租") {
                             FlowLayout(spacing: 6) {
-                                Chip(text: "整套", on: unitWhole, act: formAct, surface: Theme.bg) { unitWhole.toggle() }
-                                Chip(text: "单间", on: unitRoom, act: formAct, surface: Theme.bg) { unitRoom.toggle() }
+                                Chip(text: "整套", on: unitWhole, act: formAct, surface: Theme.bg) { unitWhole = true; unitRoom = false }
+                                Chip(text: "单间", on: unitRoom, act: formAct, surface: Theme.bg) { unitRoom = true; unitWhole = false }
                             }
                         }
                         row("地段") { placeChips(surface: Theme.bg) }
@@ -831,7 +832,7 @@ struct PostForm: View {
         guard !t.isEmpty else { error = isRent ? "写一下标题。" : "写一下卖什么。"; return }
         if isRent {
             if money == 0 { error = "租金要大于 0。"; return }
-            if !unitWhole, !unitRoom { error = "选整套或单间，都可以就都选。"; return }
+            if !unitWhole, !unitRoom { error = "选整套或单间。两种都租就分开发两条。"; return }
             if p.isEmpty { error = "选一下地段。"; return }
             guard let start = from else { error = "选一下起始日期。"; return }
             if let end = to, start > end { error = "止要晚于起。"; return }
@@ -867,7 +868,7 @@ struct PostForm: View {
                 input.privateBath = privateBath
                 input.internet = internet
                 input.furniture = furniture
-                input.unitType = unitWhole && unitRoom ? "both" : (unitWhole ? "whole" : "room")
+                input.unitType = unitWhole ? "whole" : "room"
                 input.deposit = Int(dep)
                 input.appFee = Int(app)
                 input.parking = parking
