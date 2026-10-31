@@ -443,7 +443,7 @@ struct PostForm: View {
                 } else {
                     ZStack {
                         Hexagon().fill(Theme.accent).frame(width: 26, height: 26)
-                        Image(systemName: "sparkle").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.onAccent)
+                        Image(systemName: "sparkle").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.onBuy)
                     }
                 }
                 Text(aiLoading ? "AI 正在认\n也可以自己写" : (aiGuessed ? "AI 填好了\n可以改" : "放上照片\nAI 填名字和分类"))
@@ -984,7 +984,7 @@ private struct CalendarSheet: View {
                 if selected { Hexagon().fill(Theme.accent).frame(width: 40, height: 40) }
                 Text("\(calendar.component(.day, from: day))")
                     .font(.system(size: 16, weight: selected ? .bold : .regular))
-                    .foregroundStyle(selected ? Theme.onAccent : Theme.ink)
+                    .foregroundStyle(selected ? Theme.onBuy : Theme.ink)
             }
             .frame(maxWidth: .infinity, minHeight: 44)
             .contentShape(Rectangle())
