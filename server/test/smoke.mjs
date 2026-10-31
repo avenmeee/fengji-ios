@@ -568,4 +568,12 @@ ok("撤掉的头像也删了", r.status === 404);
 r = await fetch(BASE + "/rules");
 ok("举报规则页", r.status === 200 && (await r.text()).includes("24 小时"));
 
+// 取认领码不能误删留言和推送设备
+const g = await login("g");
+await call("POST", "/v1/me/agree", { token: g.token });
+await call("POST", "/v1/me/device", { token: g.token, body: { token: "ab".repeat(32) } });
+r = await call("POST", "/v1/claim/code", { token: g.token });
+const devs = execSync(`npx wrangler d1 execute fengji --local --json --command "SELECT COUNT(*) AS n FROM devices WHERE user_id = '${g.me.id}'"`).toString();
+ok("取认领码不删设备", /"n":\s*1/.test(devs), devs);
+
 console.log(`全部通过：${n} 项`);

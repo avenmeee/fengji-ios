@@ -923,8 +923,6 @@ async function newClaimCode(req, env) {
   const expiresAt = Date.now() + CODE_TTL;
   await env.DB.batch([
     env.DB.prepare("DELETE FROM claim_codes WHERE user_id = ?").bind(u.id),
-    env.DB.prepare("DELETE FROM wants WHERE seller_id = ? OR buyer_id = ?").bind(u.id, u.id),
-    env.DB.prepare("DELETE FROM devices WHERE user_id = ?").bind(u.id),
     env.DB.prepare("INSERT INTO claim_codes (code_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256(code), u.id, expiresAt)
   ]);
   return json({ code, expiresAt }, 201);
