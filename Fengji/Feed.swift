@@ -159,10 +159,14 @@ struct TopBar<Filters: View>: View {
 /// 分类：只有图标。选中的垫六边形，并展开写出名字，一屏放下。
 struct CategoryBar: View {
     @Binding var selected: String
+    var options: [Option] = [ALL_OPTION] + CATS
+    var act: Act = .buy
+    /// 选项对应的图标
+    var icon: (String) -> String = { $0 }
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach([ALL_OPTION] + CATS, id: \.key) { opt in
+            ForEach(options, id: \.key) { opt in
                 let on = selected == opt.key
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -170,9 +174,9 @@ struct CategoryBar: View {
                 } label: {
                     HStack(spacing: 4) {
                         ZStack {
-                            if on { Hexagon().fill(Theme.buy).frame(width: 36, height: 36) }
-                            CategoryIcon(key: opt.key, size: on ? 20 : 24)
-                                .foregroundStyle(on ? Theme.onBuy : Theme.sub)
+                            if on { Hexagon().fill(act.fill).frame(width: 36, height: 36) }
+                            CategoryIcon(key: icon(opt.key), size: on ? 20 : 24)
+                                .foregroundStyle(on ? act.on : Theme.sub)
                         }
                         .frame(width: 36, height: 44)
                         if on {
@@ -289,7 +293,7 @@ struct RentView: View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 TopBar(placeholder: "搜地段", query: $model.q) {
-                    Spacer()
+                    CategoryBar(selected: $model.filter, options: [ALL_OPTION] + UNIT_OPTIONS, act: .rent) { $0 == "all" ? "all" : "rent-\($0)" }
                 }
                 ScrollViewReader { proxy in
                     ScrollView {

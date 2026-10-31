@@ -108,7 +108,10 @@ struct PostForm: View {
     @State private var utilities: Bool?
     @State private var bedrooms: String?
     @State private var baths: String?
-    @State private var unitType: String?
+    @State private var unitWhole: Bool
+    @State private var unitRoom: Bool
+    @State private var priceSuggested: Bool
+    @State private var priceTouched = false
     @State private var internet: Bool?
     @State private var deposit: String
     @State private var appFee: String
@@ -179,7 +182,10 @@ struct PostForm: View {
         let room = Self.parseRoom(editing?.roomType)
         _bedrooms = State(initialValue: room.0 ?? (filled && isRent ? "1" : nil))
         _baths = State(initialValue: room.1 ?? (filled && isRent ? "1" : nil))
-        _unitType = State(initialValue: editing?.unitType ?? (filled && isRent ? "whole" : nil))
+        let unit = editing?.unitType ?? (filled && isRent ? "room" : nil)
+        _unitWhole = State(initialValue: unit == "whole" || unit == "both")
+        _unitRoom = State(initialValue: unit == "room" || unit == "both")
+        _priceSuggested = State(initialValue: filled && !isRent)
         _internet = State(initialValue: editing?.internet)
         _deposit = State(initialValue: editing?.deposit.map { String($0) } ?? "")
         _appFee = State(initialValue: editing?.appFee.map { String($0) } ?? "")
@@ -297,6 +303,8 @@ struct PostForm: View {
                 cond = nil
                 aiGuessed = false
                 nameTouched = false
+                priceTouched = false
+                priceSuggested = false
                 pickupBefore = nil
                 pickupAfter = nil
                 askContact = false
@@ -325,7 +333,7 @@ struct PostForm: View {
                         aiHint
                         Spacer(minLength: 0)
                     }
-                    HStack(alignment: .bottom, spacing: 14) {
+                    HStack(alignment: .top, spacing: 14) {
                         priceField.frame(width: 118)
                         nameField
                     }
@@ -458,11 +466,25 @@ struct PostForm: View {
 
     private var priceField: some View {
         VStack(spacing: 6) {
-            TextField(isRent ? "$ 月租" : "$ 价格", text: $price)
-                .keyboardType(.numberPad)
-                .font(.system(size: 22, weight: .bold))
-                .monospacedDigit()
+            TextField(isRent ? "$ 月租" : "$ 价格", text: Binding(
+                get: { price },
+                set: {
+                    price = $0
+                    priceTouched = true
+                    priceSuggested = false
+                }
+            ))
+            .keyboardType(.numberPad)
+            .font(.system(size: 22, weight: .bold))
+            .monospacedDigit()
             Theme.line.frame(height: 0.5)
+            if priceSuggested {
+                Text("AI 建议价，可以改")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Theme.warn)
+                    .fixedSize()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -547,6 +569,12 @@ struct PostForm: View {
                         nameField
                     }
                     contactField
+                    row("出租") {
+                        FlowLayout(spacing: 6) {
+                            Chip(text: "整套", on: unitWhole, act: formAct, surface: Theme.bg) { unitWhole.toggle() }
+                            Chip(text: "单间", on: unitRoom, act: formAct, surface: Theme.bg) { unitRoom.toggle() }
+                        }
+                    }
                     row("地段") { placeChips(surface: Theme.bg) }
                     HStack(spacing: 10) {
                         DateTile(label: "起", value: from, empty: "选日期", act: formAct, surface: Theme.bg) { dateField = .from }
@@ -564,12 +592,6 @@ struct PostForm: View {
                 section("房型") {
                     row("几室") { oneOf(["1", "2", "3", "4+"], $bedrooms) }
                     row("几卫") { oneOf(["1", "2", "3"], $baths) }
-                    row("出租") {
-                        FlowLayout(spacing: 6) {
-                            Chip(text: "整套", on: unitType == "whole", act: formAct) { unitType = unitType == "whole" ? nil : "whole" }
-                            Chip(text: "单间", on: unitType == "room", act: formAct) { unitType = unitType == "room" ? nil : "room" }
-                        }
-                    }
                 }
                 section("费用") {
                     row("网费") { yesNo("包", "不包", $internet) }
@@ -718,7 +740,7 @@ struct PostForm: View {
         guard !photos.isEmpty, Int(price.trimmingCharacters(in: .whitespaces)) != nil else { return false }
         guard !title.trimmingCharacters(in: .whitespaces).isEmpty || aiLoading else { return false }
         guard !contact.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        if isRent { return !place.trimmingCharacters(in: .whitespaces).isEmpty && from != nil && utilities != nil }
+        if isRent { return (unitWhole || unitRoom) && !place.trimmingCharacters(in: .whitespaces).isEmpty && from != nil && utilities != nil }
         return true
     }
 
@@ -758,6 +780,10 @@ struct PostForm: View {
             }
             if cat == nil { cat = guess.cat }
             if cond == nil { cond = guess.cond }
+            if !priceTouched, price.isEmpty, let suggested = guess.price {
+                price = String(suggested)
+                priceSuggested = true
+            }
         }
     }
 
@@ -778,6 +804,7 @@ struct PostForm: View {
         guard !c.isEmpty else { error = "留个微信号。"; return }
         if isRent {
             if money == 0 { error = "租金要大于 0。"; return }
+            if !unitWhole, !unitRoom { error = "选整套或单间，都可以就都选。"; return }
             if p.isEmpty { error = "选一下地段。"; return }
             guard let start = from else { error = "选一下起始日期。"; return }
             if let end = to, start > end { error = "止要晚于起。"; return }
@@ -812,7 +839,7 @@ struct PostForm: View {
                 input.privateBath = privateBath
                 input.internet = internet
                 input.furniture = furniture
-                input.unitType = unitType
+                input.unitType = unitWhole && unitRoom ? "both" : (unitWhole ? "whole" : "room")
                 input.deposit = Int(dep)
                 input.appFee = Int(app)
                 input.parking = parking

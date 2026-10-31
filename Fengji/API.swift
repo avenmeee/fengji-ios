@@ -81,7 +81,7 @@ final class API: @unchecked Sendable {
     // 条目
     func feed(kind: String, filter: String, q: String, offset: Int?) async throws -> ListingPage {
         var items = [URLQueryItem(name: "kind", value: kind)]
-        if filter != "all" { items.append(URLQueryItem(name: "cat", value: filter)) }
+        if filter != "all" { items.append(URLQueryItem(name: kind == "rent" ? "unit" : "cat", value: filter)) }
         if !q.isEmpty { items.append(URLQueryItem(name: "q", value: q)) }
         if let offset { items.append(URLQueryItem(name: "offset", value: String(offset))) }
         var c = URLComponents()

@@ -101,7 +101,7 @@ struct CategoryIcon: View {
     var size: CGFloat = 24
 
     var body: some View {
-        Image("cat-\(key)")
+        Image(key.hasPrefix("rent-") ? key : "cat-\(key)")
             .renderingMode(.template)
             .resizable()
             .aspectRatio(contentMode: .fit)

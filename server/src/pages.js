@@ -20,7 +20,7 @@ function daysAgo(t) {
 
 function facts(row) {
   if (row.kind !== "rent") return [row.place, { pickup: "自取", deliver: "可配送", both: "自取或配送" }[row.delivery] || ""].filter(Boolean).join(" · ");
-  return [row.place, row.unit_type === "whole" ? "整套" : row.unit_type === "room" ? "单间" : "", row.room_type, row.utilities ? "包水电" : "不包水电", row.internet === 1 ? "包网" : row.internet === 2 ? "不包网" : "", row.private_bath === 1 ? "独卫" : row.private_bath === 2 ? "没有独卫" : "", row.furniture ? `家具：${row.furniture}` : "", row.lease_end ? `租约到 ${row.lease_end}` : "", row.deposit != null ? `押金 $${row.deposit}` : "", row.app_fee != null ? `申请费 $${row.app_fee}` : "", row.parking ? `停车：${row.parking}` : "", row.pets ? `宠物：${row.pets}` : "", row.roommates ? `室友：${row.roommates}` : ""].filter(Boolean).join(" · ");
+  return [row.place, { whole: "整套", room: "单间", both: "可整套可单间" }[row.unit_type] || "", row.room_type, row.utilities ? "包水电" : "不包水电", row.internet === 1 ? "包网" : row.internet === 2 ? "不包网" : "", row.private_bath === 1 ? "独卫" : row.private_bath === 2 ? "没有独卫" : "", row.furniture ? `家具：${row.furniture}` : "", row.lease_end ? `租约到 ${row.lease_end}` : "", row.deposit != null ? `押金 $${row.deposit}` : "", row.app_fee != null ? `申请费 $${row.app_fee}` : "", row.parking ? `停车：${row.parking}` : "", row.pets ? `宠物：${row.pets}` : "", row.roommates ? `室友：${row.roommates}` : ""].filter(Boolean).join(" · ");
 }
 
 export async function listingPage(env, url, id) {

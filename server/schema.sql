@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS listings (
   pickup_after TEXT,             -- goods：几号后可取，选填
   long_term INTEGER NOT NULL DEFAULT 0,     -- rent：长租，没有结束日期
   room_type TEXT,                -- rent：房型，比如 2室1卫
-  unit_type TEXT,                -- rent：whole 整套；room 单间
+  unit_type TEXT,                -- rent：whole 整套；room 单间；both 都可
   internet INTEGER NOT NULL DEFAULT 0,      -- rent：0 没填，1 包网，2 不包
   furniture TEXT,                -- rent：有、部分有、没有
   deposit INTEGER,               -- rent：押金
@@ -122,3 +122,14 @@ CREATE TABLE IF NOT EXISTS claim_attempts (
   PRIMARY KEY (sender_hash, hour)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS users_sender ON users(sender_hash) WHERE sender_hash IS NOT NULL;
+
+-- AI 建议价的参考表：群数据汇总的中位价和高低价。内容不进仓库，单独导入。
+CREATE TABLE IF NOT EXISTS price_refs (
+  item TEXT NOT NULL,
+  cat TEXT NOT NULL DEFAULT '',
+  n INTEGER,
+  median INTEGER,
+  low INTEGER,
+  high INTEGER,
+  PRIMARY KEY (item, cat)
+);

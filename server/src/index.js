@@ -157,14 +157,14 @@ function checkListing(b, userId, existing = []) {
   } else {
     if (!photos.length) throw new Fail(400, "need_photo");
     if (typeof b.utilities !== "boolean") throw new Fail(400, "need_utilities");
-    if (b.unitType != null && b.unitType !== "" && !["whole", "room"].includes(b.unitType)) throw new Fail(400, "bad_unit");
+    if (!["whole", "room", "both"].includes(b.unitType)) throw new Fail(400, "need_unit");
     const money = v => {
       if (v == null || v === "") return null;
       const n = Number(v);
       if (!Number.isInteger(n) || n < 0 || n > 1_000_000) throw new Fail(400, "bad_price");
       return n;
     };
-    out.room_type = clean(b.roomType, 40) || null; out.unit_type = b.unitType || null; out.internet = triOf(b.internet); out.furniture = ["有", "部分有", "没有"].includes(b.furniture) ? b.furniture : null;
+    out.room_type = clean(b.roomType, 40) || null; out.unit_type = b.unitType; out.internet = triOf(b.internet); out.furniture = ["有", "部分有", "没有"].includes(b.furniture) ? b.furniture : null;
     out.deposit = money(b.deposit); out.app_fee = money(b.appFee);
     out.parking = clean(b.parking, 60) || null; out.pets = clean(b.pets, 60) || null; out.roommates = clean(b.roommates, 300) || null;
     const roomText = [out.room_type, out.parking, out.pets, out.roommates].filter(Boolean).join(" ");
@@ -204,6 +204,8 @@ async function feed(req, env, url) {
   const p = url.searchParams, kind = p.get("kind") === "rent" ? "rent" : "goods";
   const where = ["l.kind = ?", "l.status IN ('on', 'reserved')", "(l.source_type != 'group' OR l.source_posted_at >= ?)"], args = [kind, Date.now() - GROUP_MAX_AGE];
   if (kind === "goods" && CATS.includes(p.get("cat"))) { where.push("l.cat = ?"); args.push(p.get("cat")); }
+  const unit = p.get("unit");
+  if (kind === "rent" && (unit === "whole" || unit === "room")) { where.push("l.unit_type IN (?, 'both')"); args.push(unit); }
   const q = clean(p.get("q"), 40);
   if (q) {
     const like = "%" + q.replace(/[\\%_]/g, c => "\\" + c) + "%";
@@ -480,6 +482,7 @@ async function adminStats(req, env) {
 
 // ---- 发布时 AI 看照片。Worker 变量 AI_DESCRIBE 关掉，App 自动变手填 ----
 const AI_PER_DAY = 30;
+let priceRefs = null;  // 参考表不常变，存在实例里
 const aiEnabled = env => env.AI_DESCRIBE === "on" && (!!env.ANTHROPIC_API_KEY || env.AI_MOCK === "1");
 
 async function bumpBy(env, userId, what, by) {
@@ -506,14 +509,18 @@ async function aiDescribe(req, env, url) {
   if (await monthSum(env, "ai_microusd") >= Number(env.AI_MONTHLY_USD || 5) * 1e6) throw new Fail(503, "ai_budget");
   let r;
   try {
-    r = await describePhoto(env, bytes, CATS, CONDS);
+    if (!priceRefs) priceRefs = (await env.DB.prepare("SELECT item, cat, n, median, low, high FROM price_refs ORDER BY n DESC, item").all()).results;
+    // 站内最近的同类价，示例帖不算
+    const recent = (await env.DB.prepare("SELECT title, price FROM listings WHERE kind = 'goods' AND title NOT LIKE '示例%' ORDER BY bumped_at DESC LIMIT 40").all()).results;
+    r = await describePhoto(env, bytes, CATS, CONDS, priceRefs, recent);
   } catch (e) {
     console.error("ai failed", e && e.message);
     throw new Fail(503, "ai_failed");
   }
   await bumpBy(env, "*", "ai_microusd", r.microUsd);
   await bump(env, "*", "ai_describe");
-  return json({ name: clean(r.name, 40), cat: r.cat, cond: r.cond });
+  const price = Number.isInteger(r.price) && r.price >= 0 && r.price <= 100000 ? r.price : null;
+  return json({ name: clean(r.name, 40), cat: r.cat, cond: r.cond, price });
 }
 
 async function aiCost(req, env) {
@@ -602,8 +609,8 @@ async function importOne(env, b) {
   }
 
   const id = newId();
-  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, place, descr, contact, photos, status, created_at, updated_at, bumped_at, source_type, source_id, source_group, source_poster, source_posted_at, merge_key, sender_hash) VALUES (?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, owner ? owner.id : GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, place, descr, owner?.contact || "", JSON.stringify(keys), now, now, postedAt, owner ? "claimed" : "group", sourceId, group, poster, postedAt, mergeKey, senderHash).run();
+  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, unit_type, place, descr, contact, photos, status, created_at, updated_at, bumped_at, source_type, source_id, source_group, source_poster, source_posted_at, merge_key, sender_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, owner ? owner.id : GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, kind === "rent" && ["whole", "room", "both"].includes(b.unitType) ? b.unitType : null, place, descr, owner?.contact || "", JSON.stringify(keys), now, now, postedAt, owner ? "claimed" : "group", sourceId, group, poster, postedAt, mergeKey, senderHash).run();
   return { status: 201, data: { id } };
 }
 

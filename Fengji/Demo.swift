@@ -68,7 +68,7 @@ enum DemoServer {
     }
 
     static func rent(_ id: Int, _ title: String, _ price: Int, _ place: String, photos: [Photo] = []) -> Listing {
-        Listing(id: "r\(id)", uid: "u\(id + 20)", kind: "rent", title: title, price: price, cat: nil, cond: nil, from: "2027-01-05", to: "2027-05-20", place: place, desc: "", status: "on", contact: "wx_rent\(id)", photos: photos, createdAt: now - Int64(id) * 7_000_000, mine: false, leaseEnd: "2027-05-31", utilities: id == 1, privateBath: id != 2, furnished: id == 1)
+        Listing(id: "r\(id)", uid: "u\(id + 20)", kind: "rent", title: title, price: price, cat: nil, cond: nil, from: "2027-01-05", to: "2027-05-20", place: place, desc: "", status: "on", contact: "wx_rent\(id)", photos: photos, createdAt: now - Int64(id) * 7_000_000, mine: false, leaseEnd: "2027-05-31", utilities: id == 1, privateBath: id != 2, unitType: id == 3 ? "whole" : "room")
     }
 
     static let goodsList: [Listing] = [
@@ -134,12 +134,13 @@ enum DemoServer {
         if method == "GET", path == "/v1/admin/stats" { return (200, encode(Stats(posts: 12, views: 340, sold: 5, copies: 40, groupClicks: 18)), json) }
         if method == "GET", path == "/v1/me/claim" { return (200, encode(ClaimStatus(claimed: false, count: 0, contact: nil)), json) }
         if method == "POST", path == "/v1/claim/code" { return (200, encode(ClaimCode(code: "K7M2QX", expiresAt: now + 900_000)), json) }
-        if method == "POST", path == "/v1/ai/describe" { return (200, encode(AIGuess(name: "宜家小书桌", cat: "furn", cond: "几乎全新")), json) }
+        if method == "POST", path == "/v1/ai/describe" { return (200, encode(AIGuess(name: "宜家小书桌", cat: "furn", cond: "几乎全新", price: 30)), json) }
         if method == "GET", path == "/v1/config" { return (200, encode(AppConfig(opsWechat: "demo_ops", aiDescribe: true)), json) }
         if method == "GET", path == "/v1/me/blocks" { return (200, encode(BlockList(items: [])), json) }
         if method == "GET", path == "/v1/listings" {
             var list = param("kind") == "rent" ? rentList : (Demo.scene == "group" ? [groupItem] + goodsList : goodsList)
             if let c = param("cat") { list = list.filter { $0.cat == c } }
+            if let u = param("unit") { list = list.filter { $0.unitType == u || $0.unitType == "both" } }
             if let q = param("q") { list = list.filter { $0.title.contains(q) || $0.place.contains(q) } }
             return (200, encode(ListingPage(items: list, next: nil)), json)
         }

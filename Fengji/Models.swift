@@ -10,6 +10,8 @@ func plainOptions(_ list: [String]) -> [Option] {
 }
 
 let CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"]
+let UNIT_OPTIONS: [Option] = [("whole", "整套"), ("room", "单间")]
+
 /// 热门地点，卖东西和房子都用；选了存文字
 let PLACES = ["Monty", "TP", "Mark", "大中超", "Riverchase", "Arcadia"]
 let REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"]
@@ -121,6 +123,7 @@ struct Listing: Codable, Identifiable, Hashable {
         var parts: [String] = []
         if unitType == "whole" { parts.append("整套") }
         if unitType == "room" { parts.append("单间") }
+        if unitType == "both" { parts.append("可整套可单间") }
         if let roomType { parts.append(roomType) }
         if let utilities { parts.append(utilities ? "包水电" : "不包水电") }
         if let internet { parts.append(internet ? "包网" : "不包网") }
@@ -179,6 +182,8 @@ struct AIGuess: Codable {
     let name: String
     let cat: String
     let cond: String
+    /// 建议价；AI 没把握就是空
+    let price: Int?
 }
 
 struct ClaimCode: Codable {
