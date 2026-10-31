@@ -7,6 +7,10 @@
     "test": "node --test test/apple.test.js",
     "deploy": "wrangler deploy"
   },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "zod": "^4.6.7"
+  },
   "devDependencies": {
     "wrangler": "^4"
   }

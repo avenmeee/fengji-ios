@@ -4,11 +4,22 @@ struct SettingsView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var confirmDelete = false
+    @AppStorage("defaultPlace") private var defaultPlace = ""
+    @AppStorage("defaultDelivery") private var defaultDelivery = ""
     @State private var error: String?
 
     var body: some View {
         List {
             Group {
+                Section("发布默认，不填也能发") {
+                    TextField("默认地点", text: $defaultPlace)
+                    Picker("默认取货", selection: $defaultDelivery) {
+                        Text("不写").tag("")
+                        Text("自取").tag("pickup")
+                        Text("可配送").tag("deliver")
+                        Text("都可").tag("both")
+                    }
+                }
                 Section {
                     NavigationLink("用户协议") { TermsView() }
                     if let url = URL(string: Config.base + "/privacy") { Link("隐私政策", destination: url) }
@@ -85,7 +96,7 @@ struct TermsView: View {
 
                 你发的微信号，所有人都能看到。
 
-                东西的名字、价格、分类、成色、地点和第一张照片会发给 AI（Anthropic 的 Claude）打分。
+                放上的照片会发给 AI（Anthropic 的 Claude）自动填名字、分类和成色；东西的名字、价格、分类、成色、地点和第一张照片也会发给 AI 打分。
 
                 举报在详情页右上角“…”里。
 

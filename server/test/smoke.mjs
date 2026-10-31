@@ -53,11 +53,16 @@ for (const word of ["代办成绩单", "学历认证", "毕业证", "换汇 7.2"
   r = await call("POST", "/v1/listings", { token: a.token, body: { ...goods, photos: [key], title: word } });
   ok("拦下：" + word, r.status === 422, r);
 }
-r = await call("POST", "/v1/listings", { token: a.token, body: { ...goods, photos: [key], delivery: undefined } });
-ok("要选自取或配送", r.status === 400, r);
+r = await call("POST", "/v1/listings", { token: a.token, body: { ...goods, photos: [key], delivery: "x" } });
+ok("取货方式要对", r.status === 400, r);
+r = await call("POST", "/v1/listings", { token: a.token, body: { kind: "goods", title: "最少字段", price: 5, contact: "wx_seller", aiConsent: true, photos: [key] } });
+ok("只要照片、名字、价格、微信号", r.status === 201 && r.data.cat === "other" && r.data.cond === null && r.data.delivery === null && r.data.place === "", r);
+await call("DELETE", "/v1/listings/" + r.data.id, { token: a.token });
+r = await call("POST", "/v1/photos", { token: a.token, raw: jpeg });
+const keyBack = r.data.key;
 
-r = await call("POST", "/v1/listings", { token: a.token, body: { ...goods, photos: [key] } });
-ok("发布", r.status === 201 && r.data.photos[0].key === key, r);
+r = await call("POST", "/v1/listings", { token: a.token, body: { ...goods, photos: [keyBack] } });
+ok("发布", r.status === 201 && r.data.photos[0].key === keyBack, r);
 const id = r.data.id;
 
 r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("宜家"));
@@ -364,6 +369,33 @@ r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, ...se
 ok("删号后不再搬他的", r.data.skipped === "taken_down", r);
 r = await call("GET", "/v1/listings/" + own4);
 ok("删号带走认领的条目", r.status === 404, r);
+
+// AI 填名字（本机是模拟返回）
+r = await call("GET", "/v1/config");
+ok("配置报 AI 开着", r.data.aiDescribe === true, r);
+const aiUser = await login("ai");
+await call("POST", "/v1/me/agree", { token: aiUser.token });
+const describe = (token, q = "") => call("POST", "/v1/ai/describe" + q, { token, raw: jpeg });
+r = await describe();
+ok("AI 要登录", r.status === 401, r);
+r = await describe(aiUser.token);
+ok("AI 要先同意", r.status === 400 && r.data.error === "need_ai_consent", r);
+r = await describe(aiUser.token, "?consent=1");
+ok("AI 返回三项，分类成色在范围内", r.status === 200 && r.data.name && r.data.cat === "furn" && r.data.cond === "几乎全新", r);
+r = await describe(aiUser.token);
+ok("同意过不用再带", r.status === 200, r);
+r = await call("GET", "/v1/admin/ai-cost", { token: ADMIN });
+ok("费用有记录", r.data.calls >= 2 && r.data.usd > 0 && r.data.perCallUsd > 0, r);
+for (let i = 0; i < 28; i++) await describe(aiUser.token);
+r = await describe(aiUser.token);
+ok("每人每天有上限", r.status === 429 && r.data.error === "ai_limit", r);
+const ai2 = await login("ai2");
+await call("POST", "/v1/me/agree", { token: ai2.token });
+const day = new Date().toISOString().slice(0, 10);
+execSync(`npx wrangler d1 execute fengji --local --command "INSERT INTO daily_counts (day, user_id, what, n) VALUES ('${day}', '*', 'ai_microusd', 99000000) ON CONFLICT (day, user_id, what) DO UPDATE SET n = n + 99000000"`, { stdio: "ignore" });
+r = await describe(ai2.token, "?consent=1");
+ok("超预算走兜底", r.status === 503 && r.data.error === "ai_budget", r);
+execSync(`npx wrangler d1 execute fengji --local --command "UPDATE daily_counts SET n = 0 WHERE day = '${day}' AND user_id = '*' AND what = 'ai_microusd'"`, { stdio: "ignore" });
 
 // 点击
 const before = (await call("GET", "/v1/admin/stats", { token: c.token })).data;

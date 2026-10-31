@@ -153,6 +153,14 @@ struct ListingPage: Codable {
 
 struct AppConfig: Codable {
     let opsWechat: String?
+    let aiDescribe: Bool?
+}
+
+/// AI 看照片填的三项
+struct AIGuess: Codable {
+    let name: String
+    let cat: String
+    let cond: String
 }
 
 struct ClaimCode: Codable {

@@ -1,4 +1,5 @@
 // 蜂集后端：买、卖、租房的条目，登录，照片，举报、屏蔽、删号、管理。
+import { describePhoto } from "./ai.js";
 import { exchangeCode, fetchAppleKeys, revokeToken, verifyIdentityToken } from "./apple.js";
 import { listingPage, privacyPage, supportPage } from "./pages.js";
 
@@ -121,7 +122,7 @@ function checkListing(b, userId, existing = []) {
   if (!title) throw new Fail(400, "need_title");
   if (!Number.isInteger(price) || price < 0 || price > 1_000_000) throw new Fail(400, "bad_price");
   if (kind === "rent" && price === 0) throw new Fail(400, "bad_price");
-  if (!place) throw new Fail(400, "need_place");
+  if (kind === "rent" && !place) throw new Fail(400, "need_place");
   if (!contact) throw new Fail(400, "need_contact");
   const text = [title, place, descr].join(" ");
   if (BANNED.some(r => r.test(text))) throw new Fail(422, "not_allowed");
@@ -135,12 +136,16 @@ function checkListing(b, userId, existing = []) {
 
   const out = { kind, title, price, place, descr, contact, photos: JSON.stringify(photos), cat: null, cond: null, rtype: null, from_date: null, to_date: null, lease_end: null, utilities: 0, private_bath: 0, delivery: null, delivery_fee: null, pickup_before: null, pickup_after: null, long_term: 0, furnished: 0 };
   if (kind === "goods") {
-    if (!CATS.includes(b.cat)) throw new Fail(400, "bad_cat");
-    if (!CONDS.includes(b.cond)) throw new Fail(400, "bad_cond");
+    // 只有照片、名字、价格、微信号是必须的；分类没选归其他，其余没填就不显示
+    const cat = b.cat == null || b.cat === "" ? "other" : b.cat;
+    if (!CATS.includes(cat)) throw new Fail(400, "bad_cat");
+    const cond = b.cond == null || b.cond === "" ? null : b.cond;
+    if (cond && !CONDS.includes(cond)) throw new Fail(400, "bad_cond");
     if (!photos.length) throw new Fail(400, "need_photo");
-    if (!["pickup", "deliver", "both"].includes(b.delivery)) throw new Fail(400, "bad_delivery");
-    out.cat = b.cat; out.cond = b.cond; out.delivery = b.delivery;
-    if (b.delivery !== "pickup" && b.deliveryFee != null) {
+    const delivery = b.delivery == null || b.delivery === "" ? null : b.delivery;
+    if (delivery && !["pickup", "deliver", "both"].includes(delivery)) throw new Fail(400, "bad_delivery");
+    out.cat = cat; out.cond = cond; out.delivery = delivery;
+    if (delivery && delivery !== "pickup" && b.deliveryFee != null) {
       const fee = Number(b.deliveryFee);
       if (!Number.isInteger(fee) || fee < 0 || fee > 10000) throw new Fail(400, "bad_fee");
       out.delivery_fee = fee;
@@ -457,6 +462,50 @@ async function adminStats(req, env) {
   return json({ posts: of("post"), views: of("view"), sold: of("sold"), copies: of("copy"), groupClicks: of("group_click") });
 }
 
+// ---- 发布时 AI 看照片。Worker 变量 AI_DESCRIBE 关掉，App 自动变手填 ----
+const AI_PER_DAY = 30;
+const aiEnabled = env => env.AI_DESCRIBE === "on" && (!!env.ANTHROPIC_API_KEY || env.AI_MOCK === "1");
+
+async function bumpBy(env, userId, what, by) {
+  await env.DB.prepare("INSERT INTO daily_counts (day, user_id, what, n) VALUES (?, ?, ?, ?) ON CONFLICT (day, user_id, what) DO UPDATE SET n = n + excluded.n").bind(today(), userId, what, by).run();
+}
+
+async function monthSum(env, what) {
+  const r = await env.DB.prepare("SELECT COALESCE(SUM(n), 0) AS n FROM daily_counts WHERE user_id = '*' AND what = ? AND day LIKE ?").bind(what, today().slice(0, 7) + "%").first();
+  return r.n;
+}
+
+async function aiDescribe(req, env, url) {
+  if (!aiEnabled(env)) throw new Fail(503, "ai_off");
+  const u = await needAgreed(req, env);
+  // 发给 AI 之前要有同意（5.1.2(i)）
+  if (!u.ai_consent_at) {
+    if (url.searchParams.get("consent") !== "1") throw new Fail(400, "need_ai_consent");
+    await env.DB.prepare("UPDATE users SET ai_consent_at = ? WHERE id = ?").bind(Date.now(), u.id).run();
+  }
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  if (bytes.length > 500_000) throw new Fail(413, "photo_too_big");
+  if (!(bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)) throw new Fail(415, "not_jpeg");
+  if (await bump(env, u.id, "ai_describe") > AI_PER_DAY) throw new Fail(429, "ai_limit");
+  if (await monthSum(env, "ai_microusd") >= Number(env.AI_MONTHLY_USD || 5) * 1e6) throw new Fail(503, "ai_budget");
+  let r;
+  try {
+    r = await describePhoto(env, bytes, CATS, CONDS);
+  } catch (e) {
+    console.error("ai failed", e && e.message);
+    throw new Fail(503, "ai_failed");
+  }
+  await bumpBy(env, "*", "ai_microusd", r.microUsd);
+  await bump(env, "*", "ai_describe");
+  return json({ name: clean(r.name, 40), cat: r.cat, cond: r.cond });
+}
+
+async function aiCost(req, env) {
+  needOperator(req, env);
+  const calls = await monthSum(env, "ai_describe"), micro = await monthSum(env, "ai_microusd");
+  return json({ month: today().slice(0, 7), calls, usd: micro / 1e6, perCallUsd: calls ? micro / 1e6 / calls : null, budgetUsd: Number(env.AI_MONTHLY_USD || 5) });
+}
+
 // ---- 后台接口：导入、打分。用 ADMIN_TOKEN，不走用户登录 ----
 function needOperator(req, env) {
   const m = /^Bearer (\S+)$/.exec(req.headers.get("authorization") || "");
@@ -705,7 +754,7 @@ async function route(req, env) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
   let m;
   if (method === "GET" && path === "/health") return json({ ok: true });
-  if (method === "GET" && path === "/v1/config") return json({ opsWechat: env.OPS_WECHAT || null });
+  if (method === "GET" && path === "/v1/config") return json({ opsWechat: env.OPS_WECHAT || null, aiDescribe: aiEnabled(env) });
   if (method === "GET" && path === "/privacy") return privacyPage(env);
   if (method === "GET" && path === "/support") return supportPage(env);
   if (method === "GET" && (m = /^\/l\/([0-9a-f]+)$/.exec(path))) return listingPage(env, url, m[1]);
@@ -739,6 +788,8 @@ async function route(req, env) {
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/report$/.exec(path))) return report(req, env, m[1]);
 
   if (method === "POST" && path === "/v1/photos") return uploadPhoto(req, env);
+  if (method === "POST" && path === "/v1/ai/describe") return aiDescribe(req, env, url);
+  if (method === "GET" && path === "/v1/admin/ai-cost") return aiCost(req, env);
 
   if ((m = /^\/v1\/blocks\/([0-9a-f]+)$/.exec(path))) {
     if (method === "POST") return block(req, env, m[1]);

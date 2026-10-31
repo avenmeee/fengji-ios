@@ -13,6 +13,8 @@ final class AppState: ObservableObject {
     @Published private(set) var version = 0
     /// 运营微信，后端配置；没配是空
     @Published private(set) var opsWechat: String?
+    /// 后端开着 AI 生成才走；关了发布页就是手填名字
+    @Published private(set) var aiDescribe = false
     /// 再点底栏当前图标：各页看到加一就回顶部
     @Published private(set) var topTicks: [AppTab: Int] = [:]
     /// 左滑删了、还能撤销的那条
@@ -94,7 +96,10 @@ final class AppState: ObservableObject {
     }
 
     func loadConfig() async {
-        if let c = try? await API.shared.config() { opsWechat = c.opsWechat }
+        if let c = try? await API.shared.config() {
+            opsWechat = c.opsWechat
+            aiDescribe = c.aiDescribe == true
+        }
     }
 
     func refreshMe() async {

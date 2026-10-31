@@ -111,6 +111,10 @@ final class API: @unchecked Sendable {
     }
     func config() async throws -> AppConfig { try await get("/v1/config") }
     func bump(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/bump") }
+    func describe(jpeg: Data, consent: Bool) async throws -> AIGuess {
+        let data = try await send("POST", "/v1/ai/describe" + (consent ? "?consent=1" : ""), body: jpeg, contentType: "image/jpeg")
+        return try JSONDecoder().decode(AIGuess.self, from: data)
+    }
     func countClick(_ id: String, _ what: String) async throws {
         let _: OK = try await post("POST", "/v1/listings/\(id)/click", ["what": what])
     }

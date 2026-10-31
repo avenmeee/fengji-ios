@@ -7,6 +7,6 @@
   "routes": [{ "pattern": "fengji.sinantrails.com", "custom_domain": true }],
   "d1_databases": [{ "binding": "DB", "database_name": "fengji", "database_id": "31c22576-325b-432d-8f1d-bf460c101bb8" }],
   "r2_buckets": [{ "binding": "PHOTOS", "bucket_name": "fengji-photos" }],
-  "vars": { "APPLE_AUDIENCE": "com.avenmeee.fengji", "CONTACT_EMAIL": "avenmeee@gmail.com" },
+  "vars": { "APPLE_AUDIENCE": "com.avenmeee.fengji", "CONTACT_EMAIL": "avenmeee@gmail.com", "AI_DESCRIBE": "on", "AI_MONTHLY_USD": "5" },
   "triggers": { "crons": ["17 9 * * *"] }  // 每天清过期的群里搬来的条目
 }

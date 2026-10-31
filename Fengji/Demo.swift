@@ -133,7 +133,8 @@ enum DemoServer {
         if method == "GET", path == "/v1/admin/stats" { return (200, encode(Stats(posts: 12, views: 340, sold: 5, copies: 40, groupClicks: 18)), json) }
         if method == "GET", path == "/v1/me/claim" { return (200, encode(ClaimStatus(claimed: false, count: 0, contact: nil)), json) }
         if method == "POST", path == "/v1/claim/code" { return (200, encode(ClaimCode(code: "K7M2QX", expiresAt: now + 900_000)), json) }
-        if method == "GET", path == "/v1/config" { return (200, encode(AppConfig(opsWechat: "demo_ops")), json) }
+        if method == "POST", path == "/v1/ai/describe" { return (200, encode(AIGuess(name: "宜家小书桌", cat: "furn", cond: "几乎全新")), json) }
+        if method == "GET", path == "/v1/config" { return (200, encode(AppConfig(opsWechat: "demo_ops", aiDescribe: true)), json) }
         if method == "GET", path == "/v1/me/blocks" { return (200, encode(BlockList(items: [])), json) }
         if method == "GET", path == "/v1/listings" {
             var list = param("kind") == "rent" ? rentList : (Demo.scene == "group" ? [groupItem] + goodsList : goodsList)
