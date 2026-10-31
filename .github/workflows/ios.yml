@@ -102,6 +102,7 @@ jobs:
           shot "37-日历-选天" rentcal-day light
           shot "38-日历-选旬" rentcal-xun light
           shot "39-日历-选旬-深" rentcal-xun dark
+          shot "40-日历-止" rentcal-to light
           shot "29-加号弹层" plus-open light
           shot "30-加号弹层-深" plus-open dark
           shot "31-蜂巢1件" posted light

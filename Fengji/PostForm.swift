@@ -144,7 +144,7 @@ struct PostForm: View {
     @State private var posted = Demo.scene?.hasPrefix("posted") == true
     @State private var hive: [HiveItem] = Demo.scene == "posted" ? Demo.sampleHive(1) : (Demo.scene == "posted-3" ? Demo.sampleHive(3) : (Demo.scene == "posted-10" ? Demo.sampleHive(10) : []))
     @State private var hiveShare: ShareImage?
-    @State private var dateField: DateField? = Demo.scene?.hasPrefix("rentcal") == true ? .from : nil
+    @State private var dateField: DateField? = Demo.scene == "rentcal-to" ? .to : (Demo.scene?.hasPrefix("rentcal") == true ? .from : nil)
     @State private var picked: [PhotosPickerItem] = []
     @State private var error: String?
     @State private var busy = false
@@ -1090,6 +1090,10 @@ private struct CalendarSheet: View {
     /// 弹层里当前选的：某一天，或者某一旬（存该旬的起或止那天）
     @State private var chosen: Date?
     @State private var chosenXun = false
+    /// 量出来的：日历本身多高、弹层里能用多高，用来把弹层收到刚好
+    @State private var detent: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
+    @State private var boxHeight: CGFloat = 0
 
     private static let xuns = [(1, "上旬"), (11, "中旬"), (21, "下旬")]
 
@@ -1106,7 +1110,7 @@ private struct CalendarSheet: View {
         return Array(repeating: nil, count: blanks) + range.map { calendar.date(byAdding: .day, value: $0 - 1, to: first) }
     }
 
-    /// 刚好放下日历：标题、旬、星期、几行日子、清空按钮，再加底下的安全区
+    /// 先估一个高度，弹出来后按量到的改
     private var sheetHeight: CGFloat {
         let rows = CGFloat((days.count + 6) / 7)
         var h: CGFloat = 20 + 44 + 8 + 26 + rows * 46 + 8
@@ -1164,18 +1168,30 @@ private struct CalendarSheet: View {
                 .foregroundStyle(Theme.ink)
                 .frame(maxWidth: .infinity, minHeight: 44)
             }
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.top, 20)
+        .padding(.bottom, 12)
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0; fit() }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { boxHeight = $0; fit() }
         .background(Theme.bg)
-        .presentationDetents([.height(sheetHeight)])
+        .presentationDetents([.height(detent > 0 ? detent : sheetHeight)])
         .presentationDragIndicator(.visible)
         .onAppear {
             month = start ?? Date()
             chosen = start
             chosenXun = xun && start != nil
         }
+    }
+
+    /// 弹层高度比能用的高度多出来的那截（安全区、圆角）是固定的，补上它刚好装下日历
+    private func fit() {
+        guard contentHeight > 0, boxHeight > 0 else { return }
+        let current = detent > 0 ? detent : sheetHeight
+        let want = (contentHeight + current - boxHeight).rounded()
+        if abs(want - current) > 1 { detent = want }
     }
 
     /// 选月份加旬。起存该旬第一天，止存最后一天，排序和过期用这个。
