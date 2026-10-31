@@ -10,6 +10,17 @@ enum Config {
 @main
 struct FengjiApp: App {
     @StateObject private var state = AppState()
+    /// 外观：默认浅色，不跟随手机；存在本机
+    @AppStorage("appearance") private var appearance = "light"
+
+    private var colorScheme: ColorScheme? {
+        if Demo.isOn { return nil }  // 模拟器截图由 simctl 切深浅
+        switch appearance {
+        case "dark": return .dark
+        case "system": return nil
+        default: return .light
+        }
+    }
 
     init() {
         Demo.install()
@@ -27,6 +38,7 @@ struct FengjiApp: App {
             }
             .environmentObject(state)
             .tint(Theme.tint)
+            .preferredColorScheme(colorScheme)
             .scrollIndicators(.hidden)   // 全 App 不显示滚动条
         }
     }

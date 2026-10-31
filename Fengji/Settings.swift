@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var confirmDelete = false
+    @AppStorage("appearance") private var appearance = "light"
     @AppStorage("defaultPlace") private var defaultPlace = ""
     @AppStorage("defaultDelivery") private var defaultDelivery = ""
     @State private var error: String?
@@ -11,6 +12,13 @@ struct SettingsView: View {
     var body: some View {
         List {
             Group {
+                Section {
+                    Picker("外观", selection: $appearance) {
+                        Text("浅色").tag("light")
+                        Text("深色").tag("dark")
+                        Text("跟随手机").tag("system")
+                    }
+                }
                 Section("发布默认，不填也能发") {
                     TextField("默认地点", text: $defaultPlace)
                     Picker("默认取货", selection: $defaultDelivery) {
