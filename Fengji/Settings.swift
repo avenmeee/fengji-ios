@@ -4,6 +4,8 @@ struct SettingsView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var confirmDelete = false
+    /// 邮箱点一下才显示
+    @State private var showEmail = Demo.scene == "settings-contact"
     @AppStorage("appearance") private var appearance = "light"
     @AppStorage("defaultPlace") private var defaultPlace = ""
     @AppStorage("defaultDelivery") private var defaultDelivery = ""
@@ -33,7 +35,22 @@ struct SettingsView: View {
                     if let url = URL(string: Config.base + "/privacy") { Link("隐私政策", destination: url) }
                     if let url = URL(string: Config.base + "/support") { Link("帮助与支持", destination: url) }
                     if !Config.contactEmail.isEmpty, let url = URL(string: "mailto:\(Config.contactEmail)") {
-                        Link("联系我们：\(Config.contactEmail)", destination: url)
+                        Button("联系我们") { withAnimation(.snappy(duration: 0.18)) { showEmail.toggle() } }
+                            .foregroundStyle(Theme.ink)
+                        if showEmail {
+                            HStack {
+                                Link(Config.contactEmail, destination: url).buttonStyle(.borderless)
+                                Spacer()
+                                Button {
+                                    UIPasteboard.general.string = Config.contactEmail
+                                    state.toast("已复制")
+                                } label: {
+                                    Image(systemName: "doc.on.doc").foregroundStyle(Theme.sub)
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("复制邮箱")
+                            }
+                        }
                     }
                 }
                 if state.isLoggedIn {
