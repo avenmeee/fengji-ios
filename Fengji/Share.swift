@@ -29,8 +29,9 @@ struct ShareCard: View {
                 Text(item.isRent ? [item.place, item.period].filter { !$0.isEmpty }.joined(separator: " · ") : [item.place, item.pickupText].filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.subheadline)
                     .foregroundStyle(Theme.sub)
-                if item.isGroup {
+                if item.findInGroup {
                     Text("去 \(item.sourceGroup ?? "") 群找 \(item.sourcePoster ?? "")").font(.subheadline.weight(.semibold))
+                    Text("\(item.groupAge)发在群里").font(.footnote).foregroundStyle(Theme.sub)
                 } else if let contact = item.contact {
                     Text("微信 " + contact).font(.subheadline.weight(.semibold))
                 }

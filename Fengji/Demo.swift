@@ -14,7 +14,7 @@ enum Demo {
 
     static var initialTab: AppTab {
         switch scene {
-        case "me", "form", "posted", "rentform", "settings": return .me
+        case "me", "form", "posted", "rentform", "settings", "claim": return .me
         case "rent", "rentdetail": return .rent
         default: return .buy
         }
@@ -82,7 +82,7 @@ enum DemoServer {
     ]
 
     /// 群里搬来的样子
-    static let groupItem = Listing(id: "g20", uid: "0", kind: "goods", title: "落地灯，搬家出", price: 15, cat: "furn", cond: nil, rtype: nil, from: nil, to: nil, place: "downtown", desc: "", status: "on", contact: nil, photos: [photo("c2")], createdAt: now - 900_000, mine: false, score: 4, sourceType: "group", sourceGroup: "二手群 3", sourcePoster: "小林")
+    static let groupItem = Listing(id: "g20", uid: "0", kind: "goods", title: "落地灯，搬家出", price: 15, cat: "furn", cond: nil, rtype: nil, from: nil, to: nil, place: "downtown", desc: "", status: "on", contact: nil, photos: [photo("c2")], createdAt: now - 900_000, mine: false, score: 4, sourceType: "group", sourceGroup: "二手群 3", sourcePoster: "小林", sourcePostedAt: now - 3 * 86_400_000)
 
     static let rentList: [Listing] = [
         rent(1, "一室一厅，走路到学校 10 分钟", 950, "转租", "Starland 附近", photos: [photo("d1")]),
@@ -130,7 +130,9 @@ enum DemoServer {
 
         if method == "GET", path == "/v1/me" { return (200, encode(Me(id: "me", isAdmin: false, agreed: true)), json) }
         if method == "GET", path == "/v1/me/listings" { return (200, encode(ListingList(items: mineList)), json) }
-        if method == "GET", path == "/v1/admin/stats" { return (200, encode(Stats(posts: 12, views: 340, sold: 5)), json) }
+        if method == "GET", path == "/v1/admin/stats" { return (200, encode(Stats(posts: 12, views: 340, sold: 5, copies: 40, groupClicks: 18)), json) }
+        if method == "GET", path == "/v1/me/claim" { return (200, encode(ClaimStatus(claimed: false, count: 0, contact: nil)), json) }
+        if method == "POST", path == "/v1/claim/code" { return (200, encode(ClaimCode(code: "K7M2QX", expiresAt: now + 900_000)), json) }
         if method == "GET", path == "/v1/config" { return (200, encode(AppConfig(opsWechat: "demo_ops")), json) }
         if method == "GET", path == "/v1/me/blocks" { return (200, encode(BlockList(items: [])), json) }
         if method == "GET", path == "/v1/listings" {

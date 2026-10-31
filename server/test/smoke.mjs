@@ -214,7 +214,7 @@ r = await call("GET", "/v1/listings/" + scored.id);
 ok("改价后分作废", r.data.score === null, r);
 
 // 群里搬来
-const imp = { sourceId: "test-" + stamp, kind: "goods", title: "搬来的台灯", price: 8, cat: "furn", place: "downtown", group: "二手群 3", poster: "小林" };
+const imp = { sourceId: "test-" + stamp, kind: "goods", title: "搬来的台灯" + stamp, price: 8, cat: "furn", place: "downtown", group: "二手群 3", poster: "小林", postedAt: Date.now() - 2 * 86400000 };
 r = await call("POST", "/v1/admin/import", { token: c.token, body: imp });
 ok("普通登录不能导入", r.status === 403, r);
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, desc: "微信 abc12345" } });
@@ -236,20 +236,8 @@ ok("详情给群和人，不给微信", r.data.sourceType === "group" && r.data.
 const gPhoto = r.data.photos[0].key;
 r = await call("GET", "/l/" + gid);
 ok("分享页写明未确认", Buffer.from(r.data).toString().includes("未经发布者确认"), r.status);
-r = await call("POST", `/v1/listings/${gid}/claim`, { body: { contact: "wx" } });
-ok("认领要登录", r.status === 401, r);
-r = await call("POST", `/v1/listings/${gid}/claim`, { token: b.token, body: { contact: "wx_b" } });
-ok("认领", r.status === 200, r);
-r = await call("GET", "/v1/listings/" + gid);
-ok("认领确认前不变", r.data.sourceType === "group", r);
-r = await call("GET", "/v1/admin/claims", { token: c.token });
-const cl = r.data.items.find(x => x.listing.id === gid);
-ok("管理员看到认领", !!cl && cl.contact === "wx_b", r);
-r = await call("POST", `/v1/admin/claims/${cl.id}/approve`, { token: c.token });
-r = await call("GET", "/v1/listings/" + gid, { token: b.token });
-ok("确认后归认领人", r.data.mine === true && r.data.contact === "wx_b" && r.data.sourceType === "self", r);
-await call("DELETE", "/v1/listings/" + gid, { token: b.token });
-const imp2 = { ...imp, sourceId: "test2-" + stamp };
+await call("POST", `/v1/listings/${gid}/takedown`);
+const imp2 = { ...imp, sourceId: "test2-" + stamp, title: "搬来的台灯二" + stamp };
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp2, photos: [b64], photosChecked: true } });
 const gid2 = r.data.id;
 const gp2 = (await call("GET", "/v1/listings/" + gid2)).data.photos[0].key;
@@ -263,5 +251,119 @@ r = await call("POST", "/v1/admin/import", { token: ADMIN, body: imp2 });
 ok("下架的不能再导入", r.data.skipped === "taken_down", r);
 r = await call("POST", `/v1/listings/${scored.id}/takedown`);
 ok("自己发的不能被要求下架", r.status === 404, r);
+
+// 超过 10 天
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, sourceId: "old-" + stamp, title: "旧帖", postedAt: Date.now() - 11 * 86400000 } });
+ok("超过 10 天不导入", r.status === 422 && r.data.error === "too_old", r);
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, sourceId: "nodate-" + stamp, title: "没时间", postedAt: undefined } });
+ok("要发帖时间", r.status === 400, r);
+
+// 一条多件拆开
+const poster = "拆分" + stamp;
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "multi-" + stamp, kind: "goods", place: "monty", group: "二手群 1", poster, postedAt: Date.now() - 86400000, cat: "furn", items: [{ title: "小桌子", price: 10 }, { title: "小 椅子！", price: 5, cat: "furn" }, { title: "代考", price: 1 }] } });
+ok("一条拆多条", r.data.results.length === 3 && r.data.results[0].id && r.data.results[1].id && r.data.results[2].error === "not_allowed", r);
+const [desk, chair] = r.data.results.map(x => x.id);
+r = await call("GET", "/v1/listings/" + chair);
+ok("拆出来的带发帖时间", r.data.sourcePostedAt > 0 && r.data.price === 5, r);
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "again-" + stamp, kind: "goods", title: "小椅子", price: 3, cat: "furn", place: "monty", group: "二手群 2", poster, postedAt: Date.now() - 3600000 } });
+ok("同人同物合并", r.data.merged === true && r.data.id === chair, r);
+r = await call("GET", "/v1/listings/" + chair);
+ok("留最新价", r.data.price === 3 && r.data.sourceGroup === "二手群 2", r);
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "older-" + stamp, kind: "goods", title: "小椅子", price: 99, cat: "furn", place: "monty", group: "二手群 2", poster, postedAt: Date.now() - 5 * 86400000 } });
+ok("更旧的不覆盖", r.data.stale === true, r);
+r = await call("GET", "/v1/listings/" + chair);
+ok("价没变", r.data.price === 3, r);
+r = await call("POST", `/v1/listings/${chair}/takedown`);
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "repost-" + stamp, kind: "goods", title: "小椅子", price: 2, cat: "furn", place: "monty", group: "二手群 2", poster, postedAt: Date.now() } });
+ok("下架后同物换编号也不再导入", r.data.skipped === "taken_down", r);
+
+// 过期隐藏和清理
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "exp-" + stamp, kind: "goods", title: "快过期", price: 7, cat: "furn", place: "monty", group: "二手群 1", poster, postedAt: Date.now() - 86400000, photos: [b64], photosChecked: true } });
+const exp = r.data.id;
+const expPhoto = (await call("GET", "/v1/listings/" + exp)).data.photos[0].key;
+execSync(`npx wrangler d1 execute fengji --local --command "UPDATE listings SET source_posted_at = ${Date.now() - 11 * 86400000} WHERE id = '${exp}'"`, { stdio: "ignore" });
+r = await call("GET", "/v1/listings?kind=goods&cat=furn");
+ok("过 10 天不在列表", !r.data.items.some(x => x.id === exp));
+r = await call("GET", "/v1/listings/" + exp);
+ok("过 10 天详情也没有", r.status === 404, r);
+r = await call("GET", "/l/" + exp);
+ok("过 10 天分享页也没有", r.status === 404, r.status);
+await call("GET", "/__scheduled");
+await call("GET", "/cdn-cgi/handler/scheduled");
+r = await call("GET", "/p/" + expPhoto);
+ok("定时清理删掉照片", r.status === 404, r.status);
+
+// 认领：验证码
+const owner = await login("owner");
+await call("POST", "/v1/me/agree", { token: owner.token });
+const sender = { senderId: "wxid_" + stamp };
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, ...sender, sourceId: "own1-" + stamp, title: "认领样品一", poster: "昵称甲", postedAt: Date.now() - 3600000 } });
+const own1 = r.data.id;
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, ...sender, sourceId: "own2-" + stamp, title: "认领样品二", poster: "昵称乙", postedAt: Date.now() - 3600000 } });
+const own2 = r.data.id;
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, ...sender, sourceId: "own3-" + stamp, title: "认领样品一", poster: "昵称乙", price: 6, postedAt: Date.now() - 1800000 } });
+ok("换了昵称也算同一人", r.data.merged === true && r.data.id === own1, r);
+r = await call("GET", "/v1/listings/" + own1);
+ok("不返回微信 ID", !JSON.stringify(r.data).includes(sender.senderId) && !("senderHash" in r.data) && !("sender_hash" in r.data), r);
+r = await call("POST", "/v1/claim/code");
+ok("要登录才给验证码", r.status === 401, r);
+r = await call("POST", "/v1/claim/code", { token: owner.token });
+ok("验证码", r.status === 201 && /^[2-9A-HJKMNP-Z]{6}$/.test(r.data.code), r);
+const code = r.data.code;
+r = await call("POST", "/v1/admin/claim/verify", { token: owner.token, body: { ...sender, code } });
+ok("普通登录不能核对", r.status === 403, r);
+const guesser = { senderId: "guesser_" + stamp };
+for (let i = 0; i < 5; i++) {
+  r = await call("POST", "/v1/admin/claim/verify", { token: ADMIN, body: { ...guesser, code: "AAAAAA" } });
+  ok("猜错" + (i + 1), r.status === 404, r);
+}
+r = await call("POST", "/v1/admin/claim/verify", { token: ADMIN, body: { ...guesser, code } });
+ok("猜多了封一小时，对的也不行", r.status === 429, r);
+r = await call("POST", "/v1/admin/claim/verify", { token: ADMIN, body: { ...sender, code: code.toLowerCase() } });
+ok("核对通过，一次转走", r.status === 200 && r.data.count === 2, r);
+r = await call("POST", "/v1/admin/claim/verify", { token: ADMIN, body: { ...sender, code } });
+ok("验证码一次性", r.status === 404, r);
+r = await call("GET", "/v1/listings/" + own1, { token: owner.token });
+ok("归他，还没公开微信号", r.data.mine === true && r.data.sourceType === "claimed" && r.data.contact === null && r.data.sourceGroup === "二手群 3", r);
+r = await call("POST", `/v1/listings/${own2}/price`, { token: owner.token, body: { price: 1 } });
+ok("认领后能改价", r.data.price === 1, r);
+r = await call("POST", `/v1/listings/${own2}/status`, { token: owner.token, body: { status: "off" } });
+ok("认领后能标已售", r.data.status === "off", r);
+r = await call("GET", "/v1/listings/" + own1);
+const ownPhotos = r.data.photos.map(p => p.key);
+r = await call("POST", `/v1/listings/${own1}/takedown`);
+ok("认领后不能被别人一键下架", r.status === 404, r);
+r = await call("POST", "/v1/me/contact", { token: b.token, body: { contact: "x" } });
+ok("没认领不能设公开微信", r.status === 403, r);
+r = await call("POST", "/v1/me/contact", { token: owner.token, body: { contact: "wx_public" } });
+r = await call("GET", "/v1/listings/" + own1);
+ok("填了才公开", r.data.contact === "wx_public", r);
+r = await call("GET", "/v1/me/claim", { token: owner.token });
+ok("认领状态", r.data.claimed === true && r.data.count === 2 && r.data.contact === "wx_public", r);
+r = await call("POST", "/v1/claim/code", { token: owner.token });
+ok("认领过不再发验证码", r.status === 409, r);
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, ...sender, sourceId: "own4-" + stamp, title: "认领后新帖", postedAt: Date.now() } });
+const own4 = r.data.id;
+r = await call("GET", "/v1/listings/" + own4, { token: owner.token });
+ok("认领后的新帖直接进账号", r.data.mine === true && r.data.contact === "wx_public", r);
+const other = await login("other");
+await call("POST", "/v1/me/agree", { token: other.token });
+r = await call("POST", "/v1/claim/code", { token: other.token });
+r = await call("POST", "/v1/admin/claim/verify", { token: ADMIN, body: { ...sender, code: r.data.code } });
+ok("一个微信不能认领两次", r.status === 409 && r.data.error === "sender_taken", r);
+r = await call("DELETE", "/v1/me", { token: owner.token });
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, ...sender, sourceId: "own5-" + stamp, title: "删号后新帖", postedAt: Date.now() } });
+ok("删号后不再搬他的", r.data.skipped === "taken_down", r);
+r = await call("GET", "/v1/listings/" + own4);
+ok("删号带走认领的条目", r.status === 404, r);
+
+// 点击
+const before = (await call("GET", "/v1/admin/stats", { token: c.token })).data;
+await call("POST", `/v1/listings/${desk}/click`, { body: { what: "copy" } });
+await call("POST", `/v1/listings/${desk}/click`, { body: { what: "group" } });
+r = await call("POST", `/v1/listings/${desk}/click`, { body: { what: "other" } });
+ok("点击类型要对", r.status === 400, r);
+r = await call("GET", "/v1/admin/stats", { token: c.token });
+ok("点击只加总数", r.data.copies === before.copies + 1 && r.data.groupClicks === before.groupClicks + 1, r);
 
 console.log(`全部通过：${n} 项`);

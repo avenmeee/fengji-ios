@@ -13,13 +13,19 @@ img{width:100%;border-radius:14px;display:block;margin-bottom:8px}
 
 const contactLine = env => env.CONTACT_EMAIL ? `<a href="mailto:${esc(env.CONTACT_EMAIL)}">${esc(env.CONTACT_EMAIL)}</a>` : "（待公布）";
 
+function daysAgo(t) {
+  const d = Math.floor((Date.now() - t) / 86400000);
+  return d < 1 ? "今天" : `${d} 天前`;
+}
+
 function facts(row) {
   if (row.kind !== "rent") return [row.place, { pickup: "自取", deliver: "可配送", both: "自取或配送" }[row.delivery] || ""].filter(Boolean).join(" · ");
   return [row.rtype, row.place, row.utilities ? "包水电" : "不包水电", row.private_bath ? "独卫" : "", row.furnished ? "可拎包入住" : "", row.lease_end ? `租约到 ${row.lease_end}` : ""].filter(Boolean).join(" · ");
 }
 
 export async function listingPage(env, url, id) {
-  const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ? AND status IN ('on', 'reserved')").bind(id).first();
+  let row = await env.DB.prepare("SELECT * FROM listings WHERE id = ? AND status IN ('on', 'reserved')").bind(id).first();
+  if (row && row.source_type === "group" && !(row.source_posted_at >= Date.now() - 10 * 86400000)) row = null;
   if (!row) return new Response(page("蜂集", "<h1>这条已经没有了</h1>").body, { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
   const photos = JSON.parse(row.photos).map(k => `${url.origin}/p/${k}`);
   const price = row.price === 0 ? "免费" : "$" + row.price.toLocaleString("en-US") + (row.kind === "rent" ? " /月" : "");
@@ -30,7 +36,7 @@ export async function listingPage(env, url, id) {
     <p class="sub">${esc(facts(row))}</p>
     ${row.descr ? `<p>${esc(row.descr)}</p>` : ""}
     ${row.source_type === "group"
-      ? `<p>去 <b>${esc(row.source_group)}</b> 群找 <b>${esc(row.source_poster)}</b></p><p class="sub">来自微信群，未经发布者确认。</p>`
+      ? `<p>去 <b>${esc(row.source_group)}</b> 群找 <b>${esc(row.source_poster)}</b></p><p class="sub">${daysAgo(row.source_posted_at)}发在群里。来自微信群，未经发布者确认。</p>`
       : `<p>微信号：<b>${esc(row.contact)}</b></p>`}
     <p class="sub">同学自办，非学校官方。不经手钱，当面看过再付。</p>${app}`, head);
 }
@@ -42,8 +48,9 @@ export function privacyPage(env) {
   <p>只在你发布时才要登录。登录用“通过 Apple 登录”，我们只拿到苹果给的匿名编号，拿不到你的姓名和邮箱。</p>
   <p>你主动发布的内容：照片、标题、价格、地点、备注、微信号。这些内容所有人都能看到，包括没有登录的人和看到分享链接的人。</p>
   <p>屏蔽和举报记录。不登录举报时不记录你是谁。</p>
-  <p>部分条目来自微信群，只有物品信息、群名和群昵称，不存微信号和电话，房源不写门牌。发布者可以在详情页一键要求下架，立刻生效，照片一起删除；也可以认领。</p>
+  <p>部分条目来自微信群，只有物品信息、群名和群昵称，不存微信号和电话，房源不写门牌。发布者可以在详情页一键要求下架，立刻生效，照片一起删除。</p>
   <p>发布、浏览、成交的每日总数，只是数字，不关联到个人。</p>
+  <p>认领：把 App 给的验证码用自己的微信发出来，核对发送者后，这个人名下的条目一次转到你的账号。我们只存发送者编号的带密钥哈希用来匹配，不存也不显示微信 ID 明文。认领后你填的微信号才会公开。</p>
   <h2>不做什么</h2>
   <p>不追踪你，不放广告，不卖数据。照片上传前去掉定位信息。App 不读你的相册，只拿到你选中的照片。</p>
   <h2>存在哪</h2>

@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
   is_admin INTEGER NOT NULL DEFAULT 0,
   banned INTEGER NOT NULL DEFAULT 0,
   agreed_at INTEGER,             -- 同意用户协议的时间
+  sender_hash TEXT,              -- 认领后：他在微信群里的发送者哈希
+  contact TEXT,                  -- 认领后：他愿意公开的微信号
   created_at INTEGER NOT NULL
 );
 
@@ -42,6 +44,9 @@ CREATE TABLE IF NOT EXISTS listings (
   source_id TEXT,                -- 群里搬来的去重编号
   source_group TEXT,             -- 去哪个群找
   source_poster TEXT,            -- 找谁（群昵称）
+  source_posted_at INTEGER,      -- 发在群里的时间，超过 10 天隐藏
+  merge_key TEXT,                -- 同一人同一物品合并用
+  sender_hash TEXT,              -- 发送者的带密钥哈希，只用来匹配，不存不显示明文
   place TEXT NOT NULL,
   descr TEXT NOT NULL DEFAULT '',
   contact TEXT NOT NULL,         -- 微信号，只给登录的人看
@@ -54,6 +59,8 @@ CREATE TABLE IF NOT EXISTS listings (
 CREATE INDEX IF NOT EXISTS listings_feed ON listings(kind, status, bumped_at DESC);
 CREATE INDEX IF NOT EXISTS listings_user ON listings(user_id, created_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS listings_source ON listings(source_id) WHERE source_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS listings_sender ON listings(sender_hash) WHERE sender_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS listings_merge ON listings(merge_key) WHERE merge_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS reports (
   id TEXT PRIMARY KEY,
@@ -83,18 +90,25 @@ CREATE TABLE IF NOT EXISTS daily_counts (
   PRIMARY KEY (day, user_id, what)
 );
 
--- 群里搬来的条目被要求下架后留下编号，防止再次导入
+-- 群里搬来的条目被要求下架后留下编号和合并键（key: 开头），防止再次导入
 CREATE TABLE IF NOT EXISTS import_tombstones (
   source_id TEXT PRIMARY KEY,
   created_at INTEGER NOT NULL
 );
 
--- 卖家认领群里搬来的条目，管理员确认
-CREATE TABLE IF NOT EXISTS claims (
-  id TEXT PRIMARY KEY,
-  listing_id TEXT NOT NULL,
+-- 认领验证码：只存哈希，一次性，15 分钟过期
+CREATE TABLE IF NOT EXISTS claim_codes (
+  code_hash TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
-  contact TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  UNIQUE (listing_id, user_id)
+  expires_at INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS claim_codes_user ON claim_codes(user_id);
+
+-- 猜验证码的失败次数，按发送者和小时算；sender_hash 为 '*' 是全站
+CREATE TABLE IF NOT EXISTS claim_attempts (
+  sender_hash TEXT NOT NULL,
+  hour INTEGER NOT NULL,
+  n INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (sender_hash, hour)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS users_sender ON users(sender_hash) WHERE sender_hash IS NOT NULL;

@@ -80,6 +80,7 @@ jobs:
           shot "8-发布-浅色" form light
           shot "15-再发一件" posted light
           shot "16-群里搬来" group light
+          shot "17-认领" claim light
           shot "9-租房-浅色" rent light
           shot "10-租房-深色" rent dark
           shot "11-房源详情" rentdetail light

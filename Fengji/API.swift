@@ -101,11 +101,18 @@ final class API: @unchecked Sendable {
         let _: Listing = try await post("POST", "/v1/listings/\(id)/price", ["price": price])
     }
     func takedown(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/takedown") }
-    func claim(_ id: String, contact: String) async throws {
-        let _: OK = try await post("POST", "/v1/listings/\(id)/claim", ["contact": contact])
+    func claimCode() async throws -> ClaimCode {
+        try JSONDecoder().decode(ClaimCode.self, from: await send("POST", "/v1/claim/code"))
+    }
+    func claimStatus() async throws -> ClaimStatus { try await get("/v1/me/claim") }
+    func setPublicContact(_ contact: String) async throws {
+        let _: OK = try await post("POST", "/v1/me/contact", ["contact": contact])
     }
     func config() async throws -> AppConfig { try await get("/v1/config") }
     func bump(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/bump") }
+    func countClick(_ id: String, _ what: String) async throws {
+        let _: OK = try await post("POST", "/v1/listings/\(id)/click", ["what": what])
+    }
     func countView(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/view") }
     func delete(_ id: String) async throws { try await act("DELETE", "/v1/listings/\(id)") }
     func upload(jpeg: Data) async throws -> String {
@@ -128,13 +135,6 @@ final class API: @unchecked Sendable {
     func adminReports() async throws -> [AdminReport] {
         let r: AdminReportList = try await get("/v1/admin/reports")
         return r.items
-    }
-    func adminClaims() async throws -> [AdminClaim] {
-        let r: AdminClaimList = try await get("/v1/admin/claims")
-        return r.items
-    }
-    func adminDecideClaim(_ id: String, approve: Bool) async throws {
-        try await act("POST", "/v1/admin/claims/\(id)/\(approve ? "approve" : "reject")")
     }
     func adminStats() async throws -> Stats { try await get("/v1/admin/stats") }
     func adminRestore(_ listingId: String) async throws { try await act("POST", "/v1/admin/listings/\(listingId)/restore") }

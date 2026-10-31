@@ -7,6 +7,7 @@ struct MeView: View {
     @State private var phase: FeedModel.Phase = .loading
     @State private var postingGoods = Demo.scene == "form" || Demo.scene == "posted"
     @State private var postingRent = Demo.scene == "rentform"
+    @State private var claiming = Demo.scene == "claim"
     @State private var editing: Listing?
     @State private var deleting: Listing?
     @State private var pricing: Listing?
@@ -27,6 +28,15 @@ struct MeView: View {
                         }
                         .buttonStyle(PrimaryButtonStyle(act: .rent))
                     }
+
+                    Button("认领我在群里发的东西") {
+                        if state.needLogin() { claiming = true }
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Theme.ink)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 14))
 
                     HStack {
                         Text("我发的").font(.footnote).foregroundStyle(Theme.sub)
@@ -70,6 +80,7 @@ struct MeView: View {
             .onChange(of: path) { _, p in state.setPushed(.me, !p.isEmpty) }
             .sheet(isPresented: $postingGoods) { PostForm(kind: "goods") }
             .sheet(isPresented: $postingRent) { PostForm(kind: "rent") }
+            .sheet(isPresented: $claiming) { ClaimView() }
             .sheet(item: $editing) { item in PostForm(kind: item.kind, editing: item) }
             .alert("改价", isPresented: Binding(get: { pricing != nil }, set: { if !$0 { pricing = nil } }), presenting: pricing) { item in
                 TextField("美元", text: $newPrice).keyboardType(.numberPad)

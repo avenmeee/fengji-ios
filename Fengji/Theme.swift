@@ -385,7 +385,7 @@ struct ListingImage: View {
             } else if item.isReserved {
                 PhotoTag(text: "已预订")
             } else if item.isGroup {
-                PhotoTag(text: "群里搬来")
+                PhotoTag(text: "群里 · " + item.groupAge)
             }
         }
     }

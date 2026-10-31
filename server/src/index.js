@@ -12,6 +12,7 @@ const AUTO_HIDE_REPORTS = 3;
 const LIMITS = { post: 10, photo: 30 }, SITE_PHOTO_LIMIT = 2000;
 const MAX_LIVE_LISTINGS = 50;
 const PAGE = 40;
+const GROUP_MAX_AGE = 10 * 86400 * 1000;  // 群里搬来的超过 10 天隐藏：旧帖多半卖掉了
 const GROUP_UID = "0".repeat(32);  // 群里搬来的条目挂在这个编号下，不对应真人
 // 导入时拦下联系方式和门牌：这类信息不能存
 const CONTACT_PATTERNS = [/微信号?\s*[:：]?\s*[A-Za-z][-_A-Za-z0-9]{5,}/, /\b(wx|vx|wechat)\s*[:：]?\s*[-_A-Za-z0-9]{5,}/i, /(?<!\d)1\d{10}(?!\d)/, /(?<!\d)(\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}(?!\d)/];
@@ -112,7 +113,7 @@ function dayOf(v) {
   return v;
 }
 
-function checkListing(b, userId) {
+function checkListing(b, userId, existing = []) {
   const kind = b.kind;
   if (kind !== "goods" && kind !== "rent") throw new Fail(400, "bad_kind");
   const title = clean(b.title, 40), place = clean(b.place, 40), descr = clean(b.desc, 500), contact = clean(b.contact, 40);
@@ -128,6 +129,7 @@ function checkListing(b, userId) {
   const photos = Array.isArray(b.photos) ? b.photos : [];
   if (photos.length > MAX_PHOTOS) throw new Fail(400, "too_many_photos");
   for (const k of photos) {
+    if (existing.includes(k)) continue;
     if (typeof k !== "string" || !k.startsWith(userId + "/") || !/^[0-9a-f]+\/[0-9a-f]+\.jpg$/.test(k)) throw new Fail(400, "bad_photo");
   }
 
@@ -165,8 +167,8 @@ function view(row, origin, viewer) {
     cat: row.cat, cond: row.cond, rtype: row.rtype, from: row.from_date, to: row.to_date,
     leaseEnd: row.lease_end, utilities: !!row.utilities, privateBath: !!row.private_bath, delivery: row.delivery,
     place: row.place, desc: row.descr, status: row.status,
-    contact: group ? null : row.contact,
-    sourceType: row.source_type || "self", sourceGroup: row.source_group || null, sourcePoster: row.source_poster || null,
+    contact: group || !row.contact ? null : row.contact,
+    sourceType: row.source_type || "self", sourceGroup: row.source_group || null, sourcePoster: row.source_poster || null, sourcePostedAt: row.source_posted_at ?? null,
     score: mine ? null : (row.score ?? null),  // 卖家看不到自己的分
     deliveryFee: row.delivery_fee ?? null, pickupBefore: row.pickup_before || null, pickupAfter: row.pickup_after || null,
     longTerm: !!row.long_term, furnished: !!row.furnished,
@@ -178,7 +180,7 @@ function view(row, origin, viewer) {
 async function feed(req, env, url) {
   const viewer = await currentUser(req, env);
   const p = url.searchParams, kind = p.get("kind") === "rent" ? "rent" : "goods";
-  const where = ["l.kind = ?", "l.status IN ('on', 'reserved')"], args = [kind];
+  const where = ["l.kind = ?", "l.status IN ('on', 'reserved')", "(l.source_type != 'group' OR l.source_posted_at >= ?)"], args = [kind, Date.now() - GROUP_MAX_AGE];
   if (kind === "goods" && CATS.includes(p.get("cat"))) { where.push("l.cat = ?"); args.push(p.get("cat")); }
   if (kind === "rent" && RTYPES.includes(p.get("rtype"))) { where.push("l.rtype = ?"); args.push(p.get("rtype")); }
   const q = clean(p.get("q"), 40);
@@ -193,11 +195,13 @@ async function feed(req, env, url) {
   return json({ items: rows.map(r => view(r, url.origin, viewer)), next: rows.length === PAGE ? offset + PAGE : null });
 }
 
+const groupExpired = row => row.source_type === "group" && !(row.source_posted_at >= Date.now() - GROUP_MAX_AGE);
+
 async function oneListing(req, env, url, id) {
   const viewer = await currentUser(req, env);
   const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
   const canSeeHidden = viewer && row && (viewer.id === row.user_id || viewer.is_admin);
-  if (!row || (row.status === "hidden" && !canSeeHidden)) throw new Fail(404, "not_found");
+  if (!row || (row.status === "hidden" && !canSeeHidden) || groupExpired(row)) throw new Fail(404, "not_found");
   return json(view(row, url.origin, viewer));
 }
 
@@ -232,7 +236,7 @@ async function updateListing(req, env, url, id) {
   const u = await needAgreed(req, env);
   const row = await ownedOrFail(env, id, u);
   if (row.status === "hidden") throw new Fail(403, "hidden");
-  const v = checkListing(await bodyOf(req), u.id);
+  const v = checkListing(await bodyOf(req), u.id, JSON.parse(row.photos));
   if (v.kind !== row.kind) throw new Fail(400, "bad_kind");
   await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, rtype=?, from_date=?, to_date=?, lease_end=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
     .bind(v.title, v.price, v.cat, v.cond, v.rtype, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.place, v.descr, v.contact, v.photos, Date.now(), id).run();
@@ -378,7 +382,9 @@ async function wipeUser(env, u) {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(u.id),
     env.DB.prepare("DELETE FROM blocks WHERE user_id = ? OR blocked_id = ?").bind(u.id, u.id),
-    env.DB.prepare("DELETE FROM claims WHERE user_id = ?").bind(u.id),
+    env.DB.prepare("DELETE FROM claim_codes WHERE user_id = ?").bind(u.id),
+    // 删过号的人，之后群里的帖子也不再搬
+    ...(u.sender_hash ? [env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind("sender:" + u.sender_hash, Date.now())] : []),
     env.DB.prepare("DELETE FROM reports WHERE reporter_id = ?").bind(u.id),
     env.DB.prepare("DELETE FROM daily_counts WHERE user_id = ?").bind(u.id),
     env.DB.prepare("DELETE FROM users WHERE id = ?").bind(u.id)
@@ -401,7 +407,7 @@ async function logout(req, env) {
 // ---- 管理 ----
 async function adminReports(req, env, url) {
   await needAdmin(req, env);
-  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.rtype, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.score, l.source_type, l.source_group, l.source_poster, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
+  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.rtype, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
     FROM reports r JOIN listings l ON l.id = r.listing_id WHERE r.status = 'open' ORDER BY r.created_at DESC LIMIT 100`).all()).results;
   return json({ items: rows.map(r => ({ id: r.id, reason: r.reason, note: r.note, at: r.at, reporter: r.reporter, listing: view({ ...r, id: r.lid }, url.origin, { id: "admin" }) })) });
 }
@@ -442,7 +448,7 @@ async function adminStats(req, env) {
   const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const rows = (await env.DB.prepare("SELECT what, SUM(n) AS n FROM daily_counts WHERE user_id = '*' AND day >= ? GROUP BY what").bind(since).all()).results;
   const of = w => (rows.find(r => r.what === w) || { n: 0 }).n;
-  return json({ posts: of("post"), views: of("view"), sold: of("sold") });
+  return json({ posts: of("post"), views: of("view"), sold: of("sold"), copies: of("copy"), groupClicks: of("group_click") });
 }
 
 // ---- 后台接口：导入、打分。用 ADMIN_TOKEN，不走用户登录 ----
@@ -459,19 +465,31 @@ function decodeJpeg(b64) {
   return bytes;
 }
 
+// 发送者的带密钥哈希：明文微信 ID 只在这一步经过，不落库、不打日志
+async function senderHashOf(env, senderId) {
+  if (!env.SENDER_HASH_KEY) throw new Fail(500, "no_hash_key");
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.SENDER_HASH_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(String(senderId)));
+  return [...new Uint8Array(sig)].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+
+// 同一人同一物品：发送者（没有就用昵称）+ 去掉空格标点的名字
+const mergeKeyOf = (who, title) => who.toLowerCase() + "|" + title.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+
 // 群里搬来的：不存微信号、电话、门牌。照片要导入方先按内容筛过（人脸、二维码、微信截图、门牌），用 photosChecked 表明。
-async function importListing(req, env, url) {
-  needOperator(req, env);
-  const b = await bodyOf(req);
+// 一条多件：body 里放 items，公共字段放外面，每件可覆盖。
+async function importOne(env, b) {
   const sourceId = clean(b.sourceId, 80);
   if (!sourceId) throw new Fail(400, "need_source_id");
   const kind = b.kind;
   if (kind !== "goods" && kind !== "rent") throw new Fail(400, "bad_kind");
   const title = clean(b.title, 40), place = clean(b.place, 40), descr = clean(b.desc, 500);
   const group = clean(b.group, 40), poster = clean(b.poster, 40);
-  const price = Number(b.price);
+  const price = Number(b.price), postedAt = Number(b.postedAt), now = Date.now();
   if (!title || !group || !poster) throw new Fail(400, "need_fields");
   if (!Number.isInteger(price) || price < 0 || price > 1_000_000) throw new Fail(400, "bad_price");
+  if (!Number.isFinite(postedAt) || postedAt <= 0 || postedAt > now + 3600 * 1000) throw new Fail(400, "bad_posted_at");
+  if (now - postedAt > GROUP_MAX_AGE) throw new Fail(422, "too_old");
   const text = [title, place, descr].join(" ");
   if (BANNED.some(r => r.test(text))) throw new Fail(422, "not_allowed");
   if (CONTACT_PATTERNS.some(r => r.test(text))) throw new Fail(422, "has_contact");
@@ -479,10 +497,18 @@ async function importListing(req, env, url) {
   if (kind === "goods" && !CATS.includes(b.cat)) throw new Fail(400, "bad_cat");
   if (kind === "rent" && !RTYPES.includes(b.rtype)) throw new Fail(400, "bad_rtype");
 
-  const dead = await env.DB.prepare("SELECT 1 AS x FROM import_tombstones WHERE source_id = ?").bind(sourceId).first();
-  if (dead) return json({ skipped: "taken_down" });
+  const senderHash = b.senderId ? await senderHashOf(env, b.senderId) : null;
+  const mergeKey = mergeKeyOf(senderHash || poster, title);
+  const dead = await env.DB.prepare("SELECT 1 AS x FROM import_tombstones WHERE source_id IN (?, ?, ?)").bind(sourceId, "key:" + mergeKey, "sender:" + senderHash).first();
+  if (dead) return { status: 200, data: { skipped: "taken_down" } };
   const dup = await env.DB.prepare("SELECT id FROM listings WHERE source_id = ?").bind(sourceId).first();
-  if (dup) return json({ id: dup.id, duplicate: true });
+  if (dup) return { status: 200, data: { id: dup.id, duplicate: true } };
+  const same = await env.DB.prepare("SELECT * FROM listings WHERE merge_key = ? AND source_type IN ('group', 'claimed')").bind(mergeKey).first();
+  // 已认领的条目归本人管，群里再发也不改
+  if (same && (same.source_type === "claimed" || postedAt <= same.source_posted_at)) return { status: 200, data: { id: same.id, merged: true, stale: true } };
+  // 这个人已经认领过：新帖直接进他账号
+  const owner = senderHash ? await env.DB.prepare("SELECT id, contact, banned FROM users WHERE sender_hash = ?").bind(senderHash).first() : null;
+  if (owner && owner.banned) return { status: 200, data: { skipped: "banned" } };
 
   const shots = Array.isArray(b.photos) ? b.photos : [];
   if (shots.length > MAX_PHOTOS) throw new Fail(400, "too_many_photos");
@@ -494,10 +520,57 @@ async function importListing(req, env, url) {
     await env.PHOTOS.put(key, bytes, { httpMetadata: { contentType: "image/jpeg", cacheControl: "public, max-age=31536000, immutable" } });
     keys.push(key);
   }
-  const id = newId(), now = Date.now();
-  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, rtype, place, descr, contact, photos, status, created_at, updated_at, bumped_at, source_type, source_id, source_group, source_poster) VALUES (?,?,?,?,?,?,?,?,?,'',?, 'on', ?, ?, ?, 'group', ?, ?, ?)")
-    .bind(id, GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, kind === "rent" ? b.rtype : null, place, descr, JSON.stringify(keys), now, now, now, sourceId, group, poster).run();
-  return json({ id }, 201);
+
+  // 同一人又发了同一件：留最新的价和时间；新帖没带照片就用旧照片
+  if (same) {
+    const photos = keys.length ? keys : JSON.parse(same.photos);
+    await env.DB.prepare("UPDATE listings SET price=?, place=?, descr=?, source_group=?, source_id=?, source_posted_at=?, bumped_at=?, photos=?, updated_at=? WHERE id=?")
+      .bind(price, place || same.place, descr || same.descr, group, sourceId, postedAt, postedAt, JSON.stringify(photos), now, same.id).run();
+    if (keys.length) await removePhotos(env, JSON.parse(same.photos));
+    if (price !== same.price) await clearScore(env, same.id);
+    return { status: 200, data: { id: same.id, merged: true } };
+  }
+
+  const id = newId();
+  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, rtype, place, descr, contact, photos, status, created_at, updated_at, bumped_at, source_type, source_id, source_group, source_poster, source_posted_at, merge_key, sender_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, owner ? owner.id : GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, kind === "rent" ? b.rtype : null, place, descr, owner?.contact || "", JSON.stringify(keys), now, now, postedAt, owner ? "claimed" : "group", sourceId, group, poster, postedAt, mergeKey, senderHash).run();
+  return { status: 201, data: { id } };
+}
+
+async function importListing(req, env) {
+  needOperator(req, env);
+  const b = await bodyOf(req);
+  if (!Array.isArray(b.items)) {
+    const r = await importOne(env, b);
+    return json(r.data, r.status);
+  }
+  if (!b.items.length || b.items.length > 30) throw new Fail(400, "bad_items");
+  const { items, ...common } = b;
+  const results = [];
+  for (let i = 0; i < items.length; i++) {
+    try {
+      results.push((await importOne(env, { ...common, ...items[i], sourceId: `${clean(common.sourceId, 70)}#${i}` })).data);
+    } catch (e) {
+      if (!(e instanceof Fail)) throw e;
+      results.push({ error: e.code });
+    }
+  }
+  return json({ results });
+}
+
+// 每天清掉过期的群里搬来的条目和照片，不留着
+async function purgeExpired(env) {
+  const rows = (await env.DB.prepare("SELECT id, photos FROM listings WHERE source_type = 'group' AND (source_posted_at IS NULL OR source_posted_at < ?) LIMIT 200").bind(Date.now() - GROUP_MAX_AGE).all()).results;
+  await deleteRows(env, rows);
+  await env.DB.prepare("DELETE FROM claim_codes WHERE expires_at < ?").bind(Date.now()).run();
+}
+
+// 最接近成交的两个动作，只记每日总数
+async function countClick(req, env) {
+  const { what } = await bodyOf(req);
+  if (what !== "copy" && what !== "group") throw new Fail(400, "bad_click");
+  await bump(env, "*", what === "copy" ? "copy" : "group_click");
+  return json({ ok: true });
 }
 
 async function setScore(req, env, id) {
@@ -512,7 +585,7 @@ async function setScore(req, env, id) {
 // 还没打分的在售东西，打分任务来取
 async function unscored(req, env, url) {
   needOperator(req, env);
-  const rows = (await env.DB.prepare("SELECT * FROM listings WHERE kind = 'goods' AND status IN ('on','reserved') AND score IS NULL ORDER BY bumped_at DESC LIMIT 50").all()).results;
+  const rows = (await env.DB.prepare("SELECT * FROM listings WHERE kind = 'goods' AND status IN ('on','reserved') AND score IS NULL AND (source_type != 'group' OR source_posted_at >= ?) ORDER BY bumped_at DESC LIMIT 50").bind(Date.now() - GROUP_MAX_AGE).all()).results;
   return json({ items: rows.map(r => view(r, url.origin, null)) });
 }
 
@@ -520,41 +593,85 @@ async function unscored(req, env, url) {
 async function takedown(env, id) {
   const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ? AND source_type = 'group'").bind(id).first();
   if (!row) throw new Fail(404, "not_found");
-  await env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind(row.source_id, Date.now()).run();
-  await env.DB.prepare("DELETE FROM claims WHERE listing_id = ?").bind(id).run();
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind(row.source_id, Date.now()),
+    env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind("key:" + row.merge_key, Date.now())
+  ]);
   await deleteRows(env, [row]);
   return json({ ok: true });
 }
 
-// 认领：谁都可能点，所以等管理员确认；确认前条目不变
-async function claim(req, env, id) {
+// ---- 认领：用自己的微信把验证码发出来，导入流程核对发送者 ----
+const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+const CODE_TTL = 15 * 60 * 1000, CODE_PER_DAY = 10, FAILS_PER_HOUR = 5, SITE_FAILS_PER_HOUR = 200;
+
+async function newClaimCode(req, env) {
   const u = await needAgreed(req, env);
+  if (u.sender_hash) throw new Fail(409, "already_claimed");
+  if (await bump(env, u.id, "claim_code") > CODE_PER_DAY) throw new Fail(429, "daily_limit");
+  const raw = crypto.getRandomValues(new Uint8Array(32));
+  let code = "";
+  for (const x of raw) {
+    if (x >= 248) continue;  // 248 = 31 × 8，丢掉尾数才均匀
+    code += CODE_CHARS[x % 31];
+    if (code.length === 6) break;
+  }
+  const expiresAt = Date.now() + CODE_TTL;
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM claim_codes WHERE user_id = ?").bind(u.id),
+    env.DB.prepare("INSERT INTO claim_codes (code_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256(code), u.id, expiresAt)
+  ]);
+  return json({ code, expiresAt }, 201);
+}
+
+async function claimStatus(req, env) {
+  const u = await needUser(req, env);
+  const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM listings WHERE user_id = ? AND source_type = 'claimed'").bind(u.id).first();
+  return json({ claimed: !!u.sender_hash, count: c.n, contact: u.contact || null });
+}
+
+// 导入流程读到“发送者 + 验证码”后调这里
+async function verifyClaim(req, env) {
+  needOperator(req, env);
+  const b = await bodyOf(req);
+  if (!b.senderId) throw new Fail(400, "need_sender");
+  const senderHash = await senderHashOf(env, b.senderId);
+  const hour = Math.floor(Date.now() / 3600000);
+  const tried = await env.DB.prepare("SELECT sender_hash, n FROM claim_attempts WHERE hour = ? AND sender_hash IN (?, '*')").bind(hour, senderHash).all();
+  for (const r of tried.results) {
+    if (r.n >= (r.sender_hash === "*" ? SITE_FAILS_PER_HOUR : FAILS_PER_HOUR)) throw new Fail(429, "too_many_tries");
+  }
+  const code = String(b.code || "").trim().toUpperCase();
+  // 删除并返回，保证一次性
+  const hit = await env.DB.prepare("DELETE FROM claim_codes WHERE code_hash = ? AND expires_at > ? RETURNING user_id").bind(await sha256(code), Date.now()).first();
+  if (!hit) {
+    const up = "INSERT INTO claim_attempts (sender_hash, hour, n) VALUES (?, ?, 1) ON CONFLICT (sender_hash, hour) DO UPDATE SET n = n + 1";
+    await env.DB.batch([env.DB.prepare(up).bind(senderHash, hour), env.DB.prepare(up).bind("*", hour)]);
+    throw new Fail(404, "bad_code");
+  }
+  const taken = await env.DB.prepare("SELECT id FROM users WHERE sender_hash = ?").bind(senderHash).first();
+  if (taken && taken.id !== hit.user_id) throw new Fail(409, "sender_taken");
+  const u = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(hit.user_id).first();
+  if (!u || u.banned) throw new Fail(404, "bad_code");
+  const now = Date.now();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE users SET sender_hash = ? WHERE id = ?").bind(senderHash, u.id),
+    // 过期的不转，等定时清理
+    env.DB.prepare("UPDATE listings SET user_id = ?, contact = ?, source_type = 'claimed', updated_at = ? WHERE sender_hash = ? AND source_type = 'group' AND source_posted_at >= ?").bind(u.id, u.contact || "", now, senderHash, now - GROUP_MAX_AGE)
+  ]);
+  const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM listings WHERE user_id = ? AND source_type = 'claimed'").bind(u.id).first();
+  return json({ ok: true, count: c.n });
+}
+
+// 认领后填愿意公开的微信号；只进他认领来的条目，不碰他自己发的
+async function setPublicContact(req, env) {
+  const u = await needUser(req, env);
+  if (!u.sender_hash) throw new Fail(403, "not_claimed");
   const contact = clean((await bodyOf(req)).contact, 40);
-  if (!contact) throw new Fail(400, "need_contact");
-  const row = await env.DB.prepare("SELECT id FROM listings WHERE id = ? AND source_type = 'group'").bind(id).first();
-  if (!row) throw new Fail(404, "not_found");
-  await env.DB.prepare("INSERT OR REPLACE INTO claims (id, listing_id, user_id, contact, created_at) VALUES (?, ?, ?, ?, ?)").bind(newId(), id, u.id, contact, Date.now()).run();
-  return json({ ok: true });
-}
-async function adminClaims(req, env, url) {
-  await needAdmin(req, env);
-  const rows = (await env.DB.prepare("SELECT c.id AS cid, c.contact AS claim_contact, c.created_at AS at, l.* FROM claims c JOIN listings l ON l.id = c.listing_id ORDER BY c.created_at DESC LIMIT 100").all()).results;
-  return json({ items: rows.map(r => ({ id: r.cid, contact: r.claim_contact, at: r.at, listing: view(r, url.origin, null) })) });
-}
-async function adminDecideClaim(req, env, id, ok) {
-  await needAdmin(req, env);
-  const c = await env.DB.prepare("SELECT * FROM claims WHERE id = ?").bind(id).first();
-  if (!c) throw new Fail(404, "not_found");
-  if (!ok) {
-    await env.DB.prepare("DELETE FROM claims WHERE id = ?").bind(id).run();
-    return json({ ok: true });
-  }
-  const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(c.listing_id).first();
-  if (row) {
-    // 留下去重编号，免得之后又搬一次；照片留在原来的路径，改归认领人
-    await env.DB.prepare("UPDATE listings SET user_id=?, contact=?, source_type='self', source_group=NULL, source_poster=NULL, updated_at=? WHERE id=?").bind(c.user_id, c.contact, Date.now(), c.listing_id).run();
-  }
-  await env.DB.prepare("DELETE FROM claims WHERE listing_id = ?").bind(c.listing_id).run();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE users SET contact = ? WHERE id = ?").bind(contact || null, u.id),
+    env.DB.prepare("UPDATE listings SET contact = ?, updated_at = ? WHERE user_id = ? AND source_type = 'claimed'").bind(contact, Date.now(), u.id)
+  ]);
   return json({ ok: true });
 }
 
@@ -577,6 +694,9 @@ async function route(req, env) {
   if (method === "DELETE" && path === "/v1/me") return deleteAccount(req, env);
   if (method === "GET" && path === "/v1/me/listings") return mine(req, env, url);
   if (method === "GET" && path === "/v1/me/blocks") return blockList(req, env);
+  if (method === "GET" && path === "/v1/me/claim") return claimStatus(req, env);
+  if (method === "POST" && path === "/v1/me/contact") return setPublicContact(req, env);
+  if (method === "POST" && path === "/v1/claim/code") return newClaimCode(req, env);
 
   if (method === "GET" && path === "/v1/listings") return feed(req, env, url);
   if (method === "POST" && path === "/v1/listings") return createListing(req, env, url);
@@ -588,8 +708,8 @@ async function route(req, env) {
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/status$/.exec(path))) return setStatus(req, env, url, m[1]);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/price$/.exec(path))) return setPrice(req, env, url, m[1]);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/takedown$/.exec(path))) return takedown(env, m[1]);
-  if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/claim$/.exec(path))) return claim(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/bump$/.exec(path))) return bumpListing(req, env, url, m[1]);
+  if (method === "POST" && /^\/v1\/listings\/[0-9a-f]+\/click$/.test(path)) return countClick(req, env);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/view$/.exec(path))) return countView(env, m[1]);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/report$/.exec(path))) return report(req, env, m[1]);
 
@@ -600,12 +720,10 @@ async function route(req, env) {
     if (method === "DELETE") return unblock(req, env, m[1]);
   }
 
-  if (method === "POST" && path === "/v1/admin/import") return importListing(req, env, url);
+  if (method === "POST" && path === "/v1/admin/import") return importListing(req, env);
   if (method === "GET" && path === "/v1/admin/unscored") return unscored(req, env, url);
   if (method === "POST" && (m = /^\/v1\/admin\/listings\/([0-9a-f]+)\/score$/.exec(path))) return setScore(req, env, m[1]);
-  if (method === "GET" && path === "/v1/admin/claims") return adminClaims(req, env, url);
-  if (method === "POST" && (m = /^\/v1\/admin\/claims\/([0-9a-f]+)\/approve$/.exec(path))) return adminDecideClaim(req, env, m[1], true);
-  if (method === "POST" && (m = /^\/v1\/admin\/claims\/([0-9a-f]+)\/reject$/.exec(path))) return adminDecideClaim(req, env, m[1], false);
+  if (method === "POST" && path === "/v1/admin/claim/verify") return verifyClaim(req, env);
   if (method === "GET" && path === "/v1/admin/stats") return adminStats(req, env);
   if (method === "GET" && path === "/v1/admin/reports") return adminReports(req, env, url);
   if (method === "POST" && (m = /^\/v1\/admin\/reports\/([0-9a-f]+)\/close$/.exec(path))) return adminCloseReport(req, env, m[1]);
@@ -616,6 +734,9 @@ async function route(req, env) {
 }
 
 export default {
+  async scheduled(event, env) {
+    await purgeExpired(env);
+  },
   async fetch(req, env) {
     try {
       return await route(req, env);

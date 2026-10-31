@@ -13,7 +13,6 @@ struct DetailView: View {
     @State private var shareImage: ShareImage?
     @State private var confirmTakedown = false
     @State private var claiming = false
-    @State private var claimContact = UserDefaults.standard.string(forKey: "contact") ?? ""
 
     private var line: String {
         let parts = item.isRent ? [item.rtype ?? "", item.place, item.period, item.rentFacts] : [item.cond ?? "", item.catLabel, item.place, item.pickupText]
@@ -59,15 +58,7 @@ struct DetailView: View {
         } message: {
             Text("立刻下架，照片一起删除。")
         }
-        .alert("认领这条", isPresented: $claiming) {
-            TextField("你的微信号", text: $claimContact)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            Button("提交") { Task { await claim() } }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("确认后归你管，微信号所有人能看到。")
-        }
+        .sheet(isPresented: $claiming) { ClaimView() }
         .alert("屏蔽这个人？", isPresented: $confirmBlock) {
             Button("屏蔽", role: .destructive) { Task { await block() } }
             Button("取消", role: .cancel) {}
@@ -117,7 +108,7 @@ struct DetailView: View {
             } else if !item.isOn {
                 Warn(text: item.statusText)
             }
-            if item.isGroup, !gone { groupBlock }
+            if item.findInGroup, !gone { groupBlock }
             if !item.desc.isEmpty {
                 Text(item.desc)
                     .foregroundStyle(Theme.ink)
@@ -125,7 +116,7 @@ struct DetailView: View {
                     .padding(.top, 6)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if let contact = item.contact, !gone {
+            if let contact = item.contact, !contact.isEmpty, !gone {
                 HStack(spacing: 8) {
                     Hexagon().fill(Theme.accent).frame(width: 18, height: 18)
                     Text("微信 " + contact)
@@ -136,10 +127,12 @@ struct DetailView: View {
                 .padding(.top, 8)
             }
             if item.isRent, !gone { Warn(text: "看房前别转押金，合同和房东身份自己核对。").padding(.top, 6) }
-            Text("发布于 " + item.ago)
-                .font(.caption)
-                .foregroundStyle(Theme.sub)
-                .padding(.top, 6)
+            if !item.isGroup {
+                Text("发布于 " + item.ago)
+                    .font(.caption)
+                    .foregroundStyle(Theme.sub)
+                    .padding(.top, 6)
+            }
             if item.mine, !gone {
                 HStack(spacing: 6) {
                     ActionChip(text: "改") { editing = true }
@@ -160,9 +153,11 @@ struct DetailView: View {
             Text("去 \(item.sourceGroup ?? "") 群找 \(item.sourcePoster ?? "")")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.ink)
-            Text("来自微信群，未经发布者确认。")
-                .font(.footnote)
-                .foregroundStyle(Theme.sub)
+            if item.isGroup {
+                Text("\(item.groupAge)发在群里。来自微信群，未经发布者确认。")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.sub)
+            }
             if let ops = state.opsWechat {
                 HStack(spacing: 8) {
                     Text("还没进群？加运营微信拉你")
@@ -175,11 +170,13 @@ struct DetailView: View {
                     }
                 }
             }
-            HStack(spacing: 6) {
-                ActionChip(text: "是我的，认领") {
-                    if state.needLogin() { claiming = true }
+            if item.isGroup {
+                HStack(spacing: 6) {
+                    ActionChip(text: "是我的，认领") {
+                        if state.needLogin() { claiming = true }
+                    }
+                    ActionChip(text: "要求下架", danger: true) { confirmTakedown = true }
                 }
-                ActionChip(text: "要求下架", danger: true) { confirmTakedown = true }
             }
         }
         .padding(12)
@@ -237,10 +234,37 @@ struct DetailView: View {
 
     @ViewBuilder
     private var contactBar: some View {
-        if let contact = item.contact {
-            Button("复制微信号") {
-                UIPasteboard.general.string = contact
-                state.toast("已复制，去微信加对方")
+        if let contact = item.contact, !contact.isEmpty {
+            HStack(spacing: 10) {
+                Button("复制微信号") {
+                    UIPasteboard.general.string = contact
+                    state.toast("已复制，去微信加对方")
+                    Task { try? await API.shared.countClick(item.id, "copy") }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                Button("打开微信") {
+                    UIPasteboard.general.string = contact
+                    Task { try? await API.shared.countClick(item.id, "copy") }
+                    if let url = URL(string: "weixin://") { UIApplication.shared.open(url) }
+                }
+                .font(.body.weight(.medium))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 100, height: 54)
+                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 17))
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+            .background(Theme.bg)
+        } else if item.findInGroup {
+            Button("去群里找") {
+                UIPasteboard.general.string = "\(item.sourceGroup ?? "") \(item.sourcePoster ?? "")"
+                Task { try? await API.shared.countClick(item.id, "group") }
+                if let url = URL(string: "weixin://") {
+                    UIApplication.shared.open(url) { opened in
+                        if !opened { state.toast("已复制群名和昵称") }
+                    }
+                }
             }
             .buttonStyle(PrimaryButtonStyle())
             .padding(.horizontal, 16)
@@ -264,21 +288,6 @@ struct DetailView: View {
             state.changed()
             state.toast("已下架")
             dismiss()
-        } catch {
-            state.toast(error.localizedDescription)
-        }
-    }
-
-    private func claim() async {
-        let contact = claimContact.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !contact.isEmpty else {
-            state.toast("留个微信号")
-            return
-        }
-        do {
-            try await API.shared.claim(item.id, contact: contact)
-            UserDefaults.standard.set(contact, forKey: "contact")
-            state.toast("提交了，确认后归你")
         } catch {
             state.toast(error.localizedDescription)
         }

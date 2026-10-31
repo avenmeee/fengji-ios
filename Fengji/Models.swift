@@ -51,12 +51,21 @@ struct Listing: Codable, Identifiable, Hashable {
     var sourceType: String?
     var sourceGroup: String?
     var sourcePoster: String?
+    var sourcePostedAt: Int64?
 
     var isRent: Bool { kind == "rent" }
     var isOn: Bool { status == "on" }
     var isReserved: Bool { status == "reserved" }
     /// 群里搬来的
     var isGroup: Bool { sourceType == "group" }
+    /// 没有公开微信号的群帖子（包括认领了还没填的）：只能去群里找
+    var findInGroup: Bool { (contact ?? "").isEmpty && sourceGroup != nil }
+    /// “3 天前发在群里”里的前半句
+    var groupAge: String {
+        guard let t = sourcePostedAt else { return "" }
+        let days = Int((Date().timeIntervalSince1970 * 1000 - Double(t)) / 86_400_000)
+        return days < 1 ? "今天" : "\(days) 天前"
+    }
     var shareURL: String { "\(Config.base)/l/\(id)" }
 
     var priceText: String {
@@ -133,15 +142,15 @@ struct AppConfig: Codable {
     let opsWechat: String?
 }
 
-struct AdminClaim: Codable, Identifiable {
-    let id: String
-    let contact: String
-    let at: Int64
-    let listing: Listing
+struct ClaimCode: Codable {
+    let code: String
+    let expiresAt: Int64
 }
 
-struct AdminClaimList: Codable {
-    let items: [AdminClaim]
+struct ClaimStatus: Codable {
+    let claimed: Bool
+    let count: Int
+    let contact: String?
 }
 
 struct ListingList: Codable {
@@ -213,6 +222,8 @@ struct Stats: Codable {
     let posts: Int
     let views: Int
     let sold: Int
+    let copies: Int
+    let groupClicks: Int
 }
 
 struct OK: Codable {

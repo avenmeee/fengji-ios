@@ -22,7 +22,7 @@ struct SettingsView: View {
                     Section {
                         NavigationLink("屏蔽名单") { BlockedView() }
                         if state.isAdmin {
-                            NavigationLink("举报和认领") { AdminReportsView() }
+                            NavigationLink("举报处理") { AdminReportsView() }
                         }
                     }
                     Section {
@@ -144,31 +144,17 @@ struct AdminReportsView: View {
     @State private var items: [AdminReport] = []
     @State private var loaded = false
     @State private var stats: Stats?
-    @State private var claims: [AdminClaim] = []
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 10) {
                 if let stats {
-                    Text("近 30 天：发布 \(stats.posts)，浏览 \(stats.views)，成交 \(stats.sold)")
+                    Text("近 30 天：发布 \(stats.posts)，浏览 \(stats.views)，成交 \(stats.sold)，复制微信 \(stats.copies)，去群里 \(stats.groupClicks)")
                         .font(.footnote)
                         .foregroundStyle(Theme.sub)
                 }
-                if loaded, items.isEmpty, claims.isEmpty {
+                if loaded, items.isEmpty {
                     EmptyBlock(text: "没有待处理的。")
-                }
-                ForEach(claims) { c in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("认领：" + c.listing.title).font(.body.weight(.semibold)).foregroundStyle(Theme.ink)
-                        Text("微信 " + c.contact).font(.subheadline).foregroundStyle(Theme.sub)
-                        HStack(spacing: 6) {
-                            ActionChip(text: "同意") { run { try await API.shared.adminDecideClaim(c.id, approve: true) } }
-                            ActionChip(text: "拒绝", danger: true) { run { try await API.shared.adminDecideClaim(c.id, approve: false) } }
-                        }
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 18))
                 }
                 ForEach(items) { r in
                     VStack(alignment: .leading, spacing: 8) {
@@ -202,7 +188,6 @@ struct AdminReportsView: View {
     private func load() async {
         items = (try? await API.shared.adminReports()) ?? []
         stats = try? await API.shared.adminStats()
-        claims = (try? await API.shared.adminClaims()) ?? []
         loaded = true
     }
 
