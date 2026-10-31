@@ -15,7 +15,7 @@ let UNIT_OPTIONS: [Option] = [("whole", "整套"), ("room", "单间")]
 /// 热门地点，卖东西和房子都用；选了存文字
 let PLACES = ["Monty", "TP", "Mark", "大中超"]
 /// 房子地段：群里出现最多的三个
-let RENT_PLACES = ["Monty", "大中超", "Mark"]
+let RENT_PLACES = ["Monty", "大中超", "四大"]
 let REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"]
 
 struct Photo: Codable, Hashable {

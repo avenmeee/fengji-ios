@@ -144,7 +144,7 @@ struct PostForm: View {
     @State private var posted = Demo.scene?.hasPrefix("posted") == true
     @State private var hive: [HiveItem] = Demo.scene == "posted" ? Demo.sampleHive(1) : (Demo.scene == "posted-3" ? Demo.sampleHive(3) : (Demo.scene == "posted-10" ? Demo.sampleHive(10) : []))
     @State private var hiveShare: ShareImage?
-    @State private var dateField: DateField?
+    @State private var dateField: DateField? = Demo.scene?.hasPrefix("rentcal") == true ? .from : nil
     @State private var picked: [PhotosPickerItem] = []
     @State private var error: String?
     @State private var busy = false
@@ -168,7 +168,7 @@ struct PostForm: View {
         self.onSaved = onSaved
         let source = editing ?? prefill
         _status = State(initialValue: startStatus ?? source?.status ?? "on")
-        let filled = Demo.scene == "form-filled" || Demo.scene == "rentform-filled"
+        let filled = Demo.scene == "form-filled" || Demo.scene == "rentform-filled" || Demo.scene?.hasPrefix("rentcal") == true
         let isRent = kind == "rent"
 
         _title = State(initialValue: source?.title ?? (filled ? (isRent ? "一室一厅，走路到学校" : "榉木画架") : ""))
@@ -193,7 +193,7 @@ struct PostForm: View {
         _place = State(initialValue: startPlace)
         _desc = State(initialValue: source?.desc ?? (filled && !isRent ? "搬家出，自己来拿" : ""))
 
-        _from = State(initialValue: Self.date(source?.from) ?? (filled && isRent ? Date() : nil))
+        _from = State(initialValue: Self.date(source?.from) ?? (filled && isRent ? Self.demoFrom : nil))
         _to = State(initialValue: Self.date(source?.to) ?? (filled && isRent ? Date().addingTimeInterval(120 * 86400) : nil))
         _utilities = State(initialValue: source?.utilities ?? (filled && isRent ? true : nil))
         let room = Self.parseRoom(source?.roomType)
@@ -201,7 +201,7 @@ struct PostForm: View {
         _baths = State(initialValue: room.1 ?? (filled && isRent ? "1" : nil))
         let unit = source?.unitType ?? (filled && isRent ? "room" : nil)
         _unitWhole = State(initialValue: unit == "whole" || unit == "both")
-        _fromXun = State(initialValue: source?.fromPrec == "xun")
+        _fromXun = State(initialValue: source?.fromPrec == "xun" || Demo.scene == "rentcal-xun")
         _toXun = State(initialValue: source?.toPrec == "xun")
         _unitRoom = State(initialValue: unit == "room" || unit == "both")
         _priceSuggested = State(initialValue: filled && !isRent)
@@ -305,8 +305,15 @@ struct PostForm: View {
                 if field == .from { fromXun = xun && value != nil }
                 if field == .to { toXun = xun && value != nil }
             }
-            .presentationDetents([.height(field == .from || field == .to ? 530 : 480)])
         }
+    }
+
+    /// 截图用：选旬那张落在本月中旬
+    private static var demoFrom: Date {
+        guard Demo.scene == "rentcal-xun" else { return Date() }
+        var c = Calendar(identifier: .gregorian).dateComponents([.year, .month], from: Date())
+        c.day = 11
+        return Calendar(identifier: .gregorian).date(from: c) ?? Date()
     }
 
     private func dateValue(_ field: DateField) -> Date? {
@@ -1066,7 +1073,8 @@ private struct DateTile: View {
     }
 }
 
-/// 自己画的月历：选中的垫六边形；底下的“不限”就是清空
+/// 自己画的月历：选中的垫六边形；底下的“不限”就是清空。
+/// 房子的起止还能点上中下旬：选了就把那几天铺一层浅绿，和点某一天互斥。
 private struct CalendarSheet: View {
     let title: String
     let start: Date?
@@ -1079,7 +1087,11 @@ private struct CalendarSheet: View {
     let pick: (Date?, Bool) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var month: Date = Date()
-    @State private var xunMode = false
+    /// 弹层里当前选的：某一天，或者某一旬（存该旬的起或止那天）
+    @State private var chosen: Date?
+    @State private var chosenXun = false
+
+    private static let xuns = [(1, "上旬"), (11, "中旬"), (21, "下旬")]
 
     private var calendar: Calendar {
         var c = Calendar(identifier: .gregorian)
@@ -1092,6 +1104,22 @@ private struct CalendarSheet: View {
               let range = calendar.range(of: .day, in: .month, for: first) else { return [] }
         let blanks = calendar.component(.weekday, from: first) - 1
         return Array(repeating: nil, count: blanks) + range.map { calendar.date(byAdding: .day, value: $0 - 1, to: first) }
+    }
+
+    /// 刚好放下日历：标题、旬、星期、几行日子、清空按钮，再加底下的安全区
+    private var sheetHeight: CGFloat {
+        let rows = CGFloat((days.count + 6) / 7)
+        var h: CGFloat = 20 + 44 + 8 + 26 + rows * 46 + 8
+        if allowXun { h += 34 + 8 }
+        if clearLabel != nil { h += 0.5 + 8 + 44 }
+        let bottom = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.keyWindow?.safeAreaInsets.bottom ?? 34
+        return h + max(bottom, 8)
+    }
+
+    /// 选中的旬在当前这个月里，就返回它的名字
+    private var chosenXunName: String? {
+        guard chosenXun, let chosen, calendar.isDate(chosen, equalTo: month, toGranularity: .month) else { return nil }
+        return Listing.xunName(calendar.component(.day, from: chosen))
     }
 
     var body: some View {
@@ -1108,19 +1136,12 @@ private struct CalendarSheet: View {
             }
             if allowXun {
                 HStack(spacing: 6) {
-                    Chip(text: "具体日期", on: !xunMode, act: .rent) { xunMode = false }
-                    Chip(text: "上中下旬", on: xunMode, act: .rent) { xunMode = true }
+                    ForEach(Self.xuns, id: \.0) { first, name in
+                        Chip(text: name, on: chosenXunName == name, act: .rent) { pickXun(first) }
+                    }
                     Spacer()
                 }
             }
-            if xunMode {
-                HStack(spacing: 10) {
-                    ForEach([(1, "上旬"), (11, "中旬"), (21, "下旬")], id: \.0) { first, name in
-                        xunCell(first, name)
-                    }
-                }
-                .padding(.top, 12)
-            } else {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 2) {
                 ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { d in
                     Text(d).font(.system(size: 13)).foregroundStyle(Theme.sub).frame(height: 26)
@@ -1133,10 +1154,8 @@ private struct CalendarSheet: View {
                     }
                 }
             }
-            }
-            Spacer(minLength: 0)
             if let clearLabel {
-                Theme.line.frame(height: 0.5)
+                Theme.line.frame(height: 0.5).padding(.top, 8)
                 Button(clearLabel) {
                     pick(nil, false)
                     dismiss()
@@ -1145,50 +1164,63 @@ private struct CalendarSheet: View {
                 .foregroundStyle(Theme.ink)
                 .frame(maxWidth: .infinity, minHeight: 44)
             }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.top, 20)
-        .padding(.bottom, 8)
         .background(Theme.bg)
+        .presentationDetents([.height(sheetHeight)])
         .presentationDragIndicator(.visible)
         .onAppear {
             month = start ?? Date()
-            xunMode = xun
+            chosen = start
+            chosenXun = xun && start != nil
         }
     }
 
     /// 选月份加旬。起存该旬第一天，止存最后一天，排序和过期用这个。
-    private func xunCell(_ first: Int, _ name: String) -> some View {
+    private func pickXun(_ first: Int) {
         let comps = calendar.dateComponents([.year, .month], from: month)
         let startDay = calendar.date(from: DateComponents(year: comps.year, month: comps.month, day: first)) ?? month
         let lastInMonth = calendar.range(of: .day, in: .month, for: startDay)?.count ?? 30
         let lastDay = calendar.date(from: DateComponents(year: comps.year, month: comps.month, day: first == 21 ? lastInMonth : first + 9)) ?? startDay
-        let value = xunEnd ? lastDay : startDay
-        let selected = xun && start.map { calendar.isDate($0, equalTo: startDay, toGranularity: .month) && Listing.xunName(calendar.component(.day, from: $0)) == name } ?? false
-        return Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            pick(value, true)
-            dismiss()
-        } label: {
-            Text(name)
-                .font(.system(size: 17, weight: selected ? .bold : .medium))
-                .foregroundStyle(selected ? Theme.onBuy : Theme.ink)
-                .frame(maxWidth: .infinity, minHeight: 64)
-                .background(selected ? Theme.accent : Theme.fill, in: RoundedRectangle(cornerRadius: 14))
+        choose(xunEnd ? lastDay : startDay, xun: true)
+    }
+
+    /// 先在弹层里显示选中，停一下再收起，看得到选了什么
+    private func choose(_ value: Date, xun: Bool) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.easeOut(duration: 0.15)) {
+            chosen = value
+            chosenXun = xun
         }
-        .buttonStyle(.plain)
+        pick(value, xun)
+        Task {
+            try? await Task.sleep(nanoseconds: 280_000_000)
+            dismiss()
+        }
     }
 
     private func dayCell(_ day: Date) -> some View {
-        let selected = !xun && (start.map { calendar.isDate($0, inSameDayAs: day) } ?? false)
+        let n = calendar.component(.day, from: day)
+        let selected = !chosenXun && (chosen.map { calendar.isDate($0, inSameDayAs: day) } ?? false)
+        let inXun = chosenXunName == Listing.xunName(n)
+        let weekday = calendar.component(.weekday, from: day)
+        let last = calendar.range(of: .day, in: .month, for: day)?.count ?? 30
+        // 浅绿底连成一条：这一旬的头尾和每行的头尾是圆角
+        let lead: CGFloat = n == 1 || n == 11 || n == 21 || weekday == 1 ? 12 : 0
+        let trail: CGFloat = n == 10 || n == 20 || n == last || weekday == 7 ? 12 : 0
         return Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            pick(day, false)
-            dismiss()
+            choose(day, xun: false)
         } label: {
             ZStack {
+                if inXun {
+                    UnevenRoundedRectangle(topLeadingRadius: lead, bottomLeadingRadius: lead,
+                                           bottomTrailingRadius: trail, topTrailingRadius: trail)
+                        .fill(Theme.rentSoft)
+                }
                 if selected { Hexagon().fill(Theme.accent).frame(width: 40, height: 40) }
-                Text("\(calendar.component(.day, from: day))")
+                Text("\(n)")
                     .font(.system(size: 16, weight: selected ? .bold : .regular))
                     .foregroundStyle(selected ? Theme.onBuy : Theme.ink)
             }
@@ -1196,6 +1228,7 @@ private struct CalendarSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected || inXun ? .isSelected : [])
     }
 
     private func arrow(_ symbol: String, _ label: String, _ by: Int) -> some View {

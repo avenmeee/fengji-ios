@@ -99,6 +99,9 @@ jobs:
           shot "21-发布填好" form-filled light
           shot "22-发布填好-深" form-filled dark
           shot "23-出租填好" rentform-filled light
+          shot "37-日历-选天" rentcal-day light
+          shot "38-日历-选旬" rentcal-xun light
+          shot "39-日历-选旬-深" rentcal-xun dark
           shot "29-加号弹层" plus-open light
           shot "30-加号弹层-深" plus-open dark
           shot "31-蜂巢1件" posted light

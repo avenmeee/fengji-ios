@@ -28,7 +28,7 @@ enum Demo {
     static var initialPosting: PostKind? {
         guard let scene else { return nil }
         if scene.hasPrefix("posted") || scene == "form" || scene == "form-filled" || scene.hasPrefix("form-kb") { return .goods }
-        if scene == "rentform" || scene == "rentform-filled" || scene.hasPrefix("rent-kb") { return .rent }
+        if scene == "rentform" || scene == "rentform-filled" || scene.hasPrefix("rent-kb") || scene.hasPrefix("rentcal") { return .rent }
         return nil
     }
 
