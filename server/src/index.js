@@ -107,6 +107,10 @@ async function devLogin(req, env) {
 // ---- 条目 ----
 function clean(s, max) { return String(s ?? "").trim().slice(0, max); }
 
+// 选填的是否：没填 0，是 1，否 2；没填的详情不显示
+const triOf = v => (v === true ? 1 : v === false ? 2 : 0);
+const triView = v => (v === 1 ? true : v === 2 ? false : null);
+
 function dayOf(v) {
   if (v === "" || v == null) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Fail(400, "bad_date");
@@ -133,7 +137,7 @@ function checkListing(b, userId, existing = []) {
     if (typeof k !== "string" || !k.startsWith(userId + "/") || !/^[0-9a-f]+\/[0-9a-f]+\.jpg$/.test(k)) throw new Fail(400, "bad_photo");
   }
 
-  const out = { kind, title, price, place, descr, contact, photos: JSON.stringify(photos), cat: null, cond: null, from_date: null, to_date: null, lease_end: null, utilities: 0, private_bath: 0, delivery: null, delivery_fee: null, pickup_before: null, pickup_after: null, long_term: 0, furnished: 0, room_type: null, unit_type: null, internet: 0, deposit: null, app_fee: null, parking: null, pets: null, roommates: null };
+  const out = { kind, title, price, place, descr, contact, photos: JSON.stringify(photos), cat: null, cond: null, from_date: null, to_date: null, lease_end: null, utilities: 0, private_bath: 0, delivery: null, delivery_fee: null, pickup_before: null, pickup_after: null, long_term: 0, furnished: 0, room_type: null, unit_type: null, furniture: null, internet: 0, deposit: null, app_fee: null, parking: null, pets: null, roommates: null };
   if (kind === "goods") {
     // 只有照片、名字、价格、微信号是必须的；分类没选归其他，其余没填就不显示
     const cat = b.cat == null || b.cat === "" ? "other" : b.cat;
@@ -160,7 +164,7 @@ function checkListing(b, userId, existing = []) {
       if (!Number.isInteger(n) || n < 0 || n > 1_000_000) throw new Fail(400, "bad_price");
       return n;
     };
-    out.room_type = clean(b.roomType, 40) || null; out.unit_type = b.unitType || null; out.internet = b.internet ? 1 : 0;
+    out.room_type = clean(b.roomType, 40) || null; out.unit_type = b.unitType || null; out.internet = triOf(b.internet); out.furniture = ["有", "部分有", "没有"].includes(b.furniture) ? b.furniture : null;
     out.deposit = money(b.deposit); out.app_fee = money(b.appFee);
     out.parking = clean(b.parking, 60) || null; out.pets = clean(b.pets, 60) || null; out.roommates = clean(b.roommates, 300) || null;
     const roomText = [out.room_type, out.parking, out.pets, out.roommates].filter(Boolean).join(" ");
@@ -169,7 +173,7 @@ function checkListing(b, userId, existing = []) {
     if (!out.from_date) throw new Fail(400, "need_dates");
     if (!b.longTerm && !out.to_date) throw new Fail(400, "need_dates");
     out.long_term = b.longTerm ? 1 : 0; out.furnished = b.furnished ? 1 : 0;
-    out.utilities = b.utilities ? 1 : 0; out.private_bath = b.privateBath ? 1 : 0;
+    out.utilities = b.utilities ? 1 : 0; out.private_bath = triOf(b.privateBath);
     if (out.from_date && out.to_date && out.from_date > out.to_date) throw new Fail(400, "bad_date");
   }
   return out;
@@ -181,9 +185,9 @@ function view(row, origin, viewer) {
   return {
     id: row.id, uid: row.user_id, kind: row.kind, title: row.title, price: row.price,
     cat: row.cat, cond: row.cond, from: row.from_date,
-    roomType: row.room_type || null, unitType: row.unit_type || null, internet: !!row.internet, deposit: row.deposit ?? null, appFee: row.app_fee ?? null,
+    roomType: row.room_type || null, unitType: row.unit_type || null, internet: triView(row.internet), furniture: row.furniture || null, deposit: row.deposit ?? null, appFee: row.app_fee ?? null,
     parking: row.parking || null, pets: row.pets || null, roommates: row.roommates || null, to: row.to_date,
-    leaseEnd: row.lease_end, utilities: !!row.utilities, privateBath: !!row.private_bath, delivery: row.delivery,
+    leaseEnd: row.lease_end, utilities: !!row.utilities, privateBath: triView(row.private_bath), delivery: row.delivery,
     place: row.place, desc: row.descr, status: row.status,
     contact: group || !row.contact ? null : row.contact,
     sourceType: row.source_type || "self", sourceGroup: row.source_group || null, sourcePoster: row.source_poster || null, sourcePostedAt: row.source_posted_at ?? null,
@@ -242,8 +246,8 @@ async function createListing(req, env, url) {
   if (await bump(env, u.id, "post") > LIMITS.post) throw new Fail(429, "daily_limit");
   const id = newId(), now = Date.now();
   await bump(env, "*", "post");
-  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, from_date, to_date, lease_end, utilities, private_bath, delivery, delivery_fee, pickup_before, pickup_after, long_term, furnished, room_type, unit_type, internet, deposit, app_fee, parking, pets, roommates, place, descr, contact, photos, status, created_at, updated_at, bumped_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?)")
-    .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, now, now, now).run();
+  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, from_date, to_date, lease_end, utilities, private_bath, delivery, delivery_fee, pickup_before, pickup_after, long_term, furnished, room_type, unit_type, furniture, internet, deposit, app_fee, parking, pets, roommates, place, descr, contact, photos, status, created_at, updated_at, bumped_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?)")
+    .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, now, now, now).run();
   const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
   return json(view(row, url.origin, u), 201);
 }
@@ -261,8 +265,8 @@ async function updateListing(req, env, url, id) {
   if (row.status === "hidden") throw new Fail(403, "hidden");
   const v = checkListing(await bodyOf(req), u.id, JSON.parse(row.photos));
   if (v.kind !== row.kind) throw new Fail(400, "bad_kind");
-  await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, from_date=?, to_date=?, lease_end=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, room_type=?, unit_type=?, internet=?, deposit=?, app_fee=?, parking=?, pets=?, roommates=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
-    .bind(v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, Date.now(), id).run();
+  await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, from_date=?, to_date=?, lease_end=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, room_type=?, unit_type=?, furniture=?, internet=?, deposit=?, app_fee=?, parking=?, pets=?, roommates=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
+    .bind(v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, Date.now(), id).run();
   if (v.price !== row.price) await clearScore(env, id);
   const kept = new Set(JSON.parse(v.photos));
   await removePhotos(env, JSON.parse(row.photos).filter(k => !kept.has(k)));
@@ -430,7 +434,7 @@ async function logout(req, env) {
 // ---- 管理 ----
 async function adminReports(req, env, url) {
   await needAdmin(req, env);
-  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.room_type, l.unit_type, l.internet, l.deposit, l.app_fee, l.parking, l.pets, l.roommates, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
+  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.room_type, l.unit_type, l.furniture, l.internet, l.deposit, l.app_fee, l.parking, l.pets, l.roommates, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
     FROM reports r JOIN listings l ON l.id = r.listing_id WHERE r.status = 'open' ORDER BY r.created_at DESC LIMIT 100`).all()).results;
   return json({ items: rows.map(r => ({ id: r.id, reason: r.reason, note: r.note, at: r.at, reporter: r.reporter, listing: view({ ...r, id: r.lid }, url.origin, { id: "admin" }) })) });
 }

@@ -77,11 +77,41 @@ private struct FeedReload: ViewModifier {
     }
 }
 
+extension View {
+    /// 下拉刷新：藏掉系统转圈，顶上放蜂蜜动画
+    func honeyRefresh(_ action: @escaping () async -> Void) -> some View {
+        modifier(HoneyRefresh(action: action))
+    }
+}
+
+private struct HoneyRefresh: ViewModifier {
+    let action: () async -> Void
+    @State private var refreshing = false
+
+    func body(content: Content) -> some View {
+        content
+            .refreshable {
+                refreshing = true
+                await action()
+                refreshing = false
+            }
+            .overlay(alignment: .top) {
+                if refreshing {
+                    HoneyLoader(size: 26).padding(.top, 10).allowsHitTesting(false)
+                }
+            }
+    }
+}
+
 struct PhaseBlock: View {
     let phase: FeedModel.Phase
 
     var body: some View {
-        EmptyBlock(text: phase == .failed ? "没连上，下拉再试" : "")
+        if phase == .failed {
+            EmptyBlock(text: "没连上，下拉再试")
+        } else {
+            HoneyLoader().frame(maxWidth: .infinity).padding(.vertical, 60)
+        }
     }
 }
 
@@ -202,7 +232,7 @@ struct BuyView: View {
                         .padding(.bottom, Theme.barSpace)
                     }
                     .scrollDismissesKeyboard(.immediately)
-                    .refreshable { await model.load() }
+                    .honeyRefresh { await model.load() }
                     .onChange(of: state.topTicks[.buy] ?? 0) { _, _ in
                         withAnimation(.snappy) { proxy.scrollTo("top", anchor: .top) }
                     }
@@ -285,7 +315,7 @@ struct RentView: View {
                         .padding(.bottom, Theme.barSpace)
                     }
                     .scrollDismissesKeyboard(.immediately)
-                    .refreshable { await model.load() }
+                    .honeyRefresh { await model.load() }
                     .onChange(of: state.topTicks[.rent] ?? 0) { _, _ in
                         withAnimation(.snappy) { proxy.scrollTo("top", anchor: .top) }
                     }

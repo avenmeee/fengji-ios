@@ -20,7 +20,7 @@ struct SettingsView: View {
                     }
                 }
                 Section("发布默认，不填也能发") {
-                    TextField("默认地点", text: $defaultPlace)
+                    TextField("默认地点，比如 Monty", text: $defaultPlace)
                     Picker("默认取货", selection: $defaultDelivery) {
                         Text("不写").tag("")
                         Text("自取").tag("pickup")

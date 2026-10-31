@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS listings (
   to_date TEXT,
   lease_end TEXT,                -- rent：租约到期日
   utilities INTEGER NOT NULL DEFAULT 0,     -- rent：包水电
-  private_bath INTEGER NOT NULL DEFAULT 0,  -- rent：独卫
+  private_bath INTEGER NOT NULL DEFAULT 0,  -- rent：0 没填，1 独卫，2 没有
   delivery TEXT,                 -- goods：pickup 自取；deliver 可配送；both 都可
   delivery_fee INTEGER,          -- goods：配送费，选填
   pickup_before TEXT,            -- goods：几号前取走，选填
@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS listings (
   long_term INTEGER NOT NULL DEFAULT 0,     -- rent：长租，没有结束日期
   room_type TEXT,                -- rent：房型，比如 2室1卫
   unit_type TEXT,                -- rent：whole 整套；room 单间
-  internet INTEGER NOT NULL DEFAULT 0,      -- rent：包网
+  internet INTEGER NOT NULL DEFAULT 0,      -- rent：0 没填，1 包网，2 不包
+  furniture TEXT,                -- rent：有、部分有、没有
   deposit INTEGER,               -- rent：押金
   app_fee INTEGER,               -- rent：申请费
   parking TEXT,                  -- rent：停车

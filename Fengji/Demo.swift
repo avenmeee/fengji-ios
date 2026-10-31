@@ -15,7 +15,7 @@ enum Demo {
 
     static var initialTab: AppTab {
         switch scene {
-        case "me", "guest-me", "mine-actions", "undo", "form", "posted", "rentform", "settings", "claim": return .me
+        case "me", "guest-me", "mine-actions", "undo", "form", "form-filled", "posted", "rentform", "rentform-filled", "settings", "claim": return .me
         case "rent", "rentdetail", "live-rent", "live-rentdetail": return .rent
         default: return .buy
         }

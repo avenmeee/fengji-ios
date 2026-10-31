@@ -88,6 +88,9 @@ jobs:
           shot "18-我-没登录" guest-me light
           shot "19-我-操作" mine-actions light
           shot "20-左滑后撤销" undo light
+          shot "21-发布填好" form-filled light
+          shot "22-发布填好-深" form-filled dark
+          shot "23-出租填好" rentform-filled light
           shot "9-租房-浅色" rent light
           shot "10-租房-深色" rent dark
           shot "11-房源详情" rentdetail light
@@ -114,7 +117,7 @@ jobs:
           store "2-详情" live-detail
           store "3-租房子" live-rent
           store "4-房源详情" live-rentdetail
-          store "5-发布" form
+          store "5-发布" form-filled
 
       - name: 签名打包，传 TestFlight
         if: inputs.mode == 'testflight'

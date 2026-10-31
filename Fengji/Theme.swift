@@ -29,6 +29,7 @@ enum Theme {
     static let rent = dyn(0x4B7A55, 0x7FAE89)
     static let onRent = dyn(0xFFFFFF, 0x17241B)
     static let rentSoft = dyn(0xE6EFE8, 0x344036)
+    static let sellSoft = dyn(0xFAF0EB, 0x3D2C26)
 
     static let accent = buy
     /// 系统控件的强调色：黄字在白底上看不清，浅色下压深。
@@ -44,10 +45,12 @@ enum Theme {
 struct Act {
     let fill: Color
     let on: Color
+    /// 必填区的底
+    let soft: Color
 
-    static let buy = Act(fill: Theme.buy, on: Theme.onBuy)
-    static let sell = Act(fill: Theme.sell, on: Theme.onSell)
-    static let rent = Act(fill: Theme.rent, on: Theme.onRent)
+    static let buy = Act(fill: Theme.buy, on: Theme.onBuy, soft: Theme.accentSoft)
+    static let sell = Act(fill: Theme.sell, on: Theme.onSell, soft: Theme.sellSoft)
+    static let rent = Act(fill: Theme.rent, on: Theme.onRent, soft: Theme.rentSoft)
 }
 
 struct Tint {
@@ -69,23 +72,22 @@ struct Tint {
 
 // MARK: - 小部件
 
-/// 发布表单里的选项：没有框也没有胶囊，选中的用这一页的颜色加粗；分类带图标
+/// 发布表单里的选项：选中的涂这一页的颜色
 struct Chip: View {
     let text: String
     let on: Bool
     var act: Act = .buy
-    var icon: String?
+    var surface: Color = Theme.fill
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                if let icon { CategoryIcon(key: icon, size: 20) }
-                Text(text).font(.system(size: 16, weight: on ? .semibold : .regular))
-            }
-            .foregroundStyle(on ? act.fill : Theme.sub)
-            .frame(height: 36)
-            .contentShape(Rectangle())
+            Text(text)
+                .font(.system(size: 14, weight: on ? .semibold : .regular))
+                .foregroundStyle(on ? act.on : Theme.ink)
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background(on ? act.fill : surface, in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
@@ -109,6 +111,8 @@ struct CategoryIcon: View {
 
 struct PrimaryButtonStyle: ButtonStyle {
     var act: Act = .buy
+    /// 必填还没齐：看着淡，点了会说缺什么
+    var dimmed = false
     @Environment(\.isEnabled) private var enabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -117,7 +121,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(act.on)
             .frame(maxWidth: .infinity)
             .frame(height: 54)
-            .background(act.fill.opacity(enabled ? (configuration.isPressed ? 0.8 : 1) : 0.55), in: RoundedRectangle(cornerRadius: 17))
+            .background(act.fill.opacity(dimmed ? 0.4 : (enabled ? (configuration.isPressed ? 0.8 : 1) : 0.55)), in: RoundedRectangle(cornerRadius: 17))
     }
 }
 
@@ -271,6 +275,44 @@ struct ScoreBadge: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("蜂集评分 \(score) 档")
+        }
+    }
+}
+
+/// 加载动画：六边形慢慢灌满蜂蜜，循环。减弱动态效果时停在半满。
+struct HoneyLoader: View {
+    var size: CGFloat = 30
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var level: CGFloat = 0
+
+    var body: some View {
+        ZStack {
+            Hexagon().fill(Theme.buy.opacity(0.2))
+            Rectangle()
+                .fill(Theme.buy)
+                .frame(height: size * (reduceMotion ? 0.55 : level))
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .clipShape(Hexagon())
+        }
+        .frame(width: size, height: size)
+        .accessibilityLabel("正在加载")
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: false)) { level = 1 }
+        }
+    }
+}
+
+enum Haptics {
+    /// 发布成功：像蜜蜂振翅，连着四下轻触，很短。用系统触感，跟随系统设置。
+    @MainActor
+    static func beeBuzz() {
+        let gen = UIImpactFeedbackGenerator(style: .light)
+        gen.prepare()
+        for i in 0..<4 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.045) {
+                gen.impactOccurred(intensity: i == 3 ? 0.5 : 0.8)
+            }
         }
     }
 }

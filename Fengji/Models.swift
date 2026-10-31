@@ -10,6 +10,8 @@ func plainOptions(_ list: [String]) -> [Option] {
 }
 
 let CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"]
+/// 热门地点，卖东西和房子都用；选了存文字
+let PLACES = ["Monty", "TP", "Mark", "大中超", "Riverchase", "Arcadia"]
 let REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"]
 
 struct Photo: Codable, Hashable {
@@ -53,6 +55,7 @@ struct Listing: Codable, Identifiable, Hashable {
     var roomType: String?
     var unitType: String?
     var internet: Bool?
+    var furniture: String?
     var deposit: Int?
     var appFee: Int?
     var parking: String?
@@ -120,9 +123,9 @@ struct Listing: Codable, Identifiable, Hashable {
         if unitType == "room" { parts.append("单间") }
         if let roomType { parts.append(roomType) }
         if let utilities { parts.append(utilities ? "包水电" : "不包水电") }
-        if internet == true { parts.append("包网") }
-        if furnished == true { parts.append("带家具") }
-        if privateBath == true { parts.append("独卫") }
+        if let internet { parts.append(internet ? "包网" : "不包网") }
+        if let furniture { parts.append("家具：\(furniture)") }
+        if let privateBath { parts.append(privateBath ? "独卫" : "没有独卫") }
         if let end = Self.day(leaseEnd) { parts.append("租约到 \(end)") }
         if let deposit { parts.append("押金 $\(deposit)") }
         if let appFee { parts.append("申请费 $\(appFee)") }
@@ -218,6 +221,7 @@ struct ListingInput: Encodable {
     var roomType: String?
     var unitType: String?
     var internet: Bool?
+    var furniture: String?
     var deposit: Int?
     var appFee: Int?
     var parking: String?

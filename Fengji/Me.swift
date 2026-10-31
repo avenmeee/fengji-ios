@@ -7,8 +7,8 @@ struct MeView: View {
     @EnvironmentObject var state: AppState
     @State private var items: [Listing] = []
     @State private var phase: FeedModel.Phase = .loading
-    @State private var postingGoods = Demo.scene == "form" || Demo.scene == "posted"
-    @State private var postingRent = Demo.scene == "rentform"
+    @State private var postingGoods = Demo.scene == "form" || Demo.scene == "form-filled" || Demo.scene == "posted"
+    @State private var postingRent = Demo.scene == "rentform" || Demo.scene == "rentform-filled"
     @State private var claiming = Demo.scene == "claim"
     @State private var editing: Listing?
     @State private var acting: Listing?
@@ -87,7 +87,13 @@ struct MeView: View {
         ScrollViewReader { proxy in
             List {
                 if visible.isEmpty {
-                    EmptyBlock(text: phase == .failed ? "没连上，下拉再试" : (phase == .ok ? "还没发过" : ""))
+                    Group {
+                        if phase == .ok {
+                            EmptyBlock(text: "还没发过")
+                        } else {
+                            PhaseBlock(phase: phase)
+                        }
+                    }
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
@@ -112,7 +118,7 @@ struct MeView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .refreshable { await load() }
+            .honeyRefresh { await load() }
             .onChange(of: state.topTicks[.me] ?? 0) { _, _ in
                 if let first = visible.first {
                     withAnimation(.snappy) { proxy.scrollTo(first.id, anchor: .top) }

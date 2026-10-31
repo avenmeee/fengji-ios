@@ -141,8 +141,8 @@ ok("长租", r.status === 201 && r.data.longTerm === true && r.data.furnished ==
 await call("DELETE", "/v1/listings/" + r.data.id, { token: b.token });
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, price: 0 } });
 ok("租金 0 拒", r.status === 400, r);
-r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, desc: "长".repeat(3500), roomType: "2室1卫", unitType: "whole", internet: true, deposit: 500, appFee: 30, parking: "路边", pets: "可养猫", roommates: "两位同学" } });
-ok("房源详细字段", r.data.roomType === "2室1卫" && r.data.unitType === "whole" && r.data.internet === true && r.data.deposit === 500 && r.data.appFee === 30 && r.data.parking === "路边" && r.data.pets === "可养猫" && r.data.roommates === "两位同学" && r.data.desc.length === 3500, r.data);
+r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, desc: "长".repeat(3500), roomType: "2室1卫", unitType: "whole", internet: false, furniture: "部分有", deposit: 500, appFee: 30, parking: "路边", pets: "可养猫", roommates: "两位同学" } });
+ok("房源详细字段", r.data.roomType === "2室1卫" && r.data.unitType === "whole" && r.data.internet === false && r.data.furniture === "部分有" && r.data.deposit === 500 && r.data.appFee === 30 && r.data.parking === "路边" && r.data.pets === "可养猫" && r.data.roommates === "两位同学" && r.data.desc.length === 3500, r.data);
 ok("发房源", r.status === 201 && !("rtype" in r.data) && r.data.utilities === true && r.data.privateBath === true && r.data.leaseEnd === "2027-06-30", r);
 const rid = r.data.id;
 r = await call("GET", "/v1/listings?kind=rent");

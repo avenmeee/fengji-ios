@@ -26,6 +26,7 @@ struct FengjiApp: App {
     init() {
         Demo.install()
         UITabBar.appearance().isHidden = true
+        UIRefreshControl.appearance().tintColor = .clear  // 下拉刷新用自己的蜂蜜动画
     }
 
     var body: some Scene {
