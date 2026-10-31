@@ -27,6 +27,8 @@ struct ClaimView: View {
         .padding(.top, 28)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.bg)
+        .contentShape(Rectangle())
+        .onTapGesture { hideKeyboard() }
         .presentationDragIndicator(.visible)
         .task { await start() }
         .task(id: code?.code) { await watch() }

@@ -61,6 +61,7 @@ jobs:
         if: inputs.mode == 'sim' && inputs.shots
         run: |
           UDID=$(python3 tools/pick-sim.py)
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false  # 要弹软键盘才看得到挡不挡
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b > /dev/null
           xcrun simctl status_bar "$UDID" override --time 9:41 || true
@@ -91,6 +92,11 @@ jobs:
           shot "21-发布填好" form-filled light
           shot "22-发布填好-深" form-filled dark
           shot "23-出租填好" rentform-filled light
+          shot "24-键盘-搜索" search-kb light
+          shot "25-键盘-价格" form-kb-price light
+          shot "26-键盘-备注" form-kb-desc light
+          shot "27-键盘-押金" rent-kb-deposit light
+          shot "28-键盘-描述" rent-kb-desc light
           shot "9-租房-浅色" rent light
           shot "10-租房-深色" rent dark
           shot "11-房源详情" rentdetail light

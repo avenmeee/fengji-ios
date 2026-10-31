@@ -78,8 +78,14 @@ private enum DateField: String, Identifiable {
     }
 }
 
+/// 发布页能打字的地方：滚到可见、收键盘都靠它
+private enum Field: Hashable {
+    case price, name, contact, fee, place, desc, deposit, appFee, note
+}
+
 struct PostForm: View {
     @EnvironmentObject var state: AppState
+    @FocusState private var focus: Field?
     @Environment(\.dismiss) private var dismiss
 
     let kind: String
@@ -202,6 +208,17 @@ struct PostForm: View {
         _aiGuessed = State(initialValue: filled && !isRent)
     }
 
+    /// 模拟器截图：自动点进某个输入框，看键盘挡不挡
+    private static var demoFocus: Field? {
+        switch Demo.scene {
+        case "form-kb-price": return .price
+        case "form-kb-desc": return .desc
+        case "rent-kb-deposit": return .deposit
+        case "rent-kb-desc": return .desc
+        default: return nil
+        }
+    }
+
     private static let roommateCounts = ["没有室友", "1 人", "2 人", "3 人以上"]
 
     /// “2室1卫”拆回两个按钮
@@ -226,16 +243,27 @@ struct PostForm: View {
     private var tile: CGFloat { 76 }
 
     var body: some View {
-        Group {
-            if posted {
-                postedView
-            } else if isRent {
-                rentForm
-            } else {
-                goodsForm
+        NavigationStack {
+            Group {
+                if posted {
+                    postedView
+                } else if isRent {
+                    rentForm
+                } else {
+                    goodsForm
+                }
+            }
+            .background(Theme.bg)
+            .toolbar(.hidden, for: .navigationBar)
+            .toolbar {
+                // 数字键盘没有回车，都靠这个收
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") { focus = nil }
+                        .font(.body.weight(.semibold))
+                }
             }
         }
-        .background(Theme.bg)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(busy)
         .onChange(of: picked) { _, items in
@@ -244,6 +272,9 @@ struct PostForm: View {
         }
         .onAppear {
             if !isRent, editing == nil, !aiConsent { showConsent = true }
+            if let f = Self.demoFocus {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { focus = f }
+            }
         }
         .alert("照片会发给 AI", isPresented: $showConsent) {
             Button("同意") { aiConsent = true }
@@ -325,56 +356,71 @@ struct PostForm: View {
     // MARK: - 卖东西：一屏
 
     private var goodsForm: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                requiredBlock {
-                    HStack(spacing: 8) {
-                        goodsPhotos
-                        aiHint
-                        Spacer(minLength: 0)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    requiredBlock {
+                        HStack(spacing: 8) {
+                            goodsPhotos
+                            aiHint
+                            Spacer(minLength: 0)
+                        }
+                        HStack(alignment: .top, spacing: 14) {
+                            priceField.frame(width: 118)
+                            nameField
+                        }
+                        contactField
                     }
-                    HStack(alignment: .top, spacing: 14) {
-                        priceField.frame(width: 118)
-                        nameField
-                    }
-                    contactField
-                }
-                sectionLabel("选填")
-                row("分类") { categoryChips }
-                row("成色") {
-                    FlowLayout(spacing: 6) {
-                        ForEach(CONDS, id: \.self) { c in
-                            Chip(text: c, on: cond == c, act: formAct) { cond = cond == c ? nil : c }
+                    sectionLabel("选填")
+                    row("分类") { categoryChips }
+                    row("成色") {
+                        FlowLayout(spacing: 6) {
+                            ForEach(CONDS, id: \.self) { c in
+                                Chip(text: c, on: cond == c, act: formAct) { cond = cond == c ? nil : c }
+                            }
                         }
                     }
-                }
-                row("取货") {
-                    FlowLayout(spacing: 6) {
-                        ForEach([(key: "pickup", label: "自取"), (key: "deliver", label: "可配送"), (key: "both", label: "都可")], id: \.key) { opt in
-                            Chip(text: opt.label, on: delivery == opt.key, act: formAct) { delivery = delivery == opt.key ? nil : opt.key }
-                        }
-                        if let delivery, delivery != "pickup" {
-                            LineField(placeholder: "$ 配送费", text: $deliveryFee, dollar: true)
-                                .keyboardType(.numberPad)
-                                .frame(width: 90)
+                    row("取货") {
+                        FlowLayout(spacing: 6) {
+                            ForEach([(key: "pickup", label: "自取"), (key: "deliver", label: "可配送"), (key: "both", label: "都可")], id: \.key) { opt in
+                                Chip(text: opt.label, on: delivery == opt.key, act: formAct) { delivery = delivery == opt.key ? nil : opt.key }
+                            }
+                            if let delivery, delivery != "pickup" {
+                                LineField(placeholder: "$ 配送费", text: $deliveryFee, dollar: true)
+                                    .keyboardType(.numberPad)
+                                    .focused($focus, equals: .fee)
+                                    .id(Field.fee)
+                                    .frame(width: 90)
+                            }
                         }
                     }
+                    row("地点") { placeChips(surface: Theme.fill) }
+                    HStack(spacing: 10) {
+                        DateTile(label: "几号后可取", value: pickupAfter, empty: "不限", act: formAct) { dateField = .pickupAfter }
+                        DateTile(label: "几号前取走", value: pickupBefore, empty: "不限", act: formAct) { dateField = .pickupBefore }
+                    }
+                    row("备注") {
+                        LineField(placeholder: "写一句", text: $desc)
+                            .focused($focus, equals: .desc)
+                            .id(Field.desc)
+                    }
+                    errorLine
                 }
-                row("地点") { placeChips(surface: Theme.fill) }
-                HStack(spacing: 10) {
-                    DateTile(label: "几号后可取", value: pickupAfter, empty: "不限", act: formAct) { dateField = .pickupAfter }
-                    DateTile(label: "几号前取走", value: pickupBefore, empty: "不限", act: formAct) { dateField = .pickupBefore }
-                }
-                row("备注") {
-                    LineField(placeholder: "写一句", text: $desc)
-                }
-                errorLine
+                .padding(.horizontal, 16)
+                .padding(.top, 20)
+                .padding(.bottom, 12)
+                .contentShape(Rectangle())
+                .onTapGesture { focus = nil }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 20)
-            .padding(.bottom, 12)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: focus) { _, field in
+                guard let field else { return }
+                // 等键盘升起来再滚，免得算错位置
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation(.snappy) { proxy.scrollTo(field, anchor: .center) }
+                }
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom, spacing: 0) { publishBar }
     }
 
@@ -477,7 +523,9 @@ struct PostForm: View {
                     }
                 ))
                 .keyboardType(.numberPad)
+                .focused($focus, equals: .price)
             }
+            .id(Field.price)
             .font(.system(size: 22, weight: .bold))
             .monospacedDigit()
             .foregroundStyle(Theme.ink)
@@ -502,6 +550,8 @@ struct PostForm: View {
                 }
             ))
             .font(.system(size: 17))
+            .focused($focus, equals: .name)
+            .id(Field.name)
             Theme.line.frame(height: 0.5)
         }
     }
@@ -512,6 +562,8 @@ struct PostForm: View {
             LineField(placeholder: "微信号（只填这一次）", text: $contact)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .focused($focus, equals: .contact)
+                .id(Field.contact)
         }
     }
 
@@ -557,6 +609,8 @@ struct PostForm: View {
             }
             if placeOther {
                 LineField(placeholder: "写地点", text: $place)
+                    .focused($focus, equals: .place)
+                    .id(Field.place)
             }
         }
     }
@@ -564,83 +618,104 @@ struct PostForm: View {
     // MARK: - 出租房子：可以长
 
     private var rentForm: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                requiredBlock {
-                    FlowLayout(spacing: 8) { rentPhotos }
-                    HStack(alignment: .bottom, spacing: 14) {
-                        priceField.frame(width: 118)
-                        nameField
-                    }
-                    contactField
-                    row("出租") {
-                        FlowLayout(spacing: 6) {
-                            Chip(text: "整套", on: unitWhole, act: formAct, surface: Theme.bg) { unitWhole.toggle() }
-                            Chip(text: "单间", on: unitRoom, act: formAct, surface: Theme.bg) { unitRoom.toggle() }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    requiredBlock {
+                        FlowLayout(spacing: 8) { rentPhotos }
+                        HStack(alignment: .bottom, spacing: 14) {
+                            priceField.frame(width: 118)
+                            nameField
+                        }
+                        contactField
+                        row("出租") {
+                            FlowLayout(spacing: 6) {
+                                Chip(text: "整套", on: unitWhole, act: formAct, surface: Theme.bg) { unitWhole.toggle() }
+                                Chip(text: "单间", on: unitRoom, act: formAct, surface: Theme.bg) { unitRoom.toggle() }
+                            }
+                        }
+                        row("地段") { placeChips(surface: Theme.bg) }
+                        HStack(spacing: 10) {
+                            DateTile(label: "起", value: from, empty: "选日期", act: formAct, surface: Theme.bg) { dateField = .from }
+                            DateTile(label: "止", value: to, empty: "长租", act: formAct, surface: Theme.bg) { dateField = .to }
+                        }
+                        row("水电") {
+                            FlowLayout(spacing: 6) {
+                                Chip(text: "包水电", on: utilities == true, act: formAct, surface: Theme.bg) { utilities = true }
+                                Chip(text: "不包水电", on: utilities == false, act: formAct, surface: Theme.bg) { utilities = false }
+                            }
                         }
                     }
-                    row("地段") { placeChips(surface: Theme.bg) }
-                    HStack(spacing: 10) {
-                        DateTile(label: "起", value: from, empty: "选日期", act: formAct, surface: Theme.bg) { dateField = .from }
-                        DateTile(label: "止", value: to, empty: "长租", act: formAct, surface: Theme.bg) { dateField = .to }
+                    sectionLabel("选填")
+                    Theme.line.frame(height: 0.5)
+                    section("房型") {
+                        row("几室") { oneOf(["1", "2", "3", "4+"], $bedrooms) }
+                        row("几卫") { oneOf(["1", "2", "3"], $baths) }
                     }
-                    row("水电") {
-                        FlowLayout(spacing: 6) {
-                            Chip(text: "包水电", on: utilities == true, act: formAct, surface: Theme.bg) { utilities = true }
-                            Chip(text: "不包水电", on: utilities == false, act: formAct, surface: Theme.bg) { utilities = false }
-                        }
+                    section("费用") {
+                        row("网费") { yesNo("包", "不包", $internet) }
+                        row("押金") { LineField(placeholder: "$", text: $deposit, dollar: true)
+                            .keyboardType(.numberPad)
+                            .focused($focus, equals: .deposit)
+                            .id(Field.deposit) }
+                        row("申请费") { LineField(placeholder: "$", text: $appFee, dollar: true)
+                            .keyboardType(.numberPad)
+                            .focused($focus, equals: .appFee)
+                            .id(Field.appFee) }
                     }
-                }
-                sectionLabel("选填")
-                Theme.line.frame(height: 0.5)
-                section("房型") {
-                    row("几室") { oneOf(["1", "2", "3", "4+"], $bedrooms) }
-                    row("几卫") { oneOf(["1", "2", "3"], $baths) }
-                }
-                section("费用") {
-                    row("网费") { yesNo("包", "不包", $internet) }
-                    row("押金") { LineField(placeholder: "$", text: $deposit, dollar: true).keyboardType(.numberPad) }
-                    row("申请费") { LineField(placeholder: "$", text: $appFee, dollar: true).keyboardType(.numberPad) }
-                }
-                section("屋里") {
-                    row("家具") { oneOf(["有", "部分有", "没有"], $furniture) }
-                    row("独卫") { yesNo("有", "没有", $privateBath) }
-                    row("停车") { oneOf(["有车位", "路边", "没有"], $parking) }
-                    row("宠物") { oneOf(["可以", "不可以"], $pets) }
-                }
-                section("室友") {
-                    row("现在") { oneOf(Self.roommateCounts, $roommateCount) }
-                    row("情况") { LineField(placeholder: "比如都是学生", text: $roommateNote) }
-                }
-                section("租约") {
-                    DateTile(label: "租约到期日", value: leaseEnd, empty: "不限", act: formAct) { dateField = .leaseEnd }
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("描述").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
-                    ZStack(alignment: .topLeading) {
-                        if desc.isEmpty {
-                            Text("写详细一点：周边、交通、看房时间")
+                    section("屋里") {
+                        row("家具") { oneOf(["有", "部分有", "没有"], $furniture) }
+                        row("独卫") { yesNo("有", "没有", $privateBath) }
+                        row("停车") { oneOf(["有车位", "路边", "没有"], $parking) }
+                        row("宠物") { oneOf(["可以", "不可以"], $pets) }
+                    }
+                    section("室友") {
+                        row("现在") { oneOf(Self.roommateCounts, $roommateCount) }
+                        row("情况") { LineField(placeholder: "比如都是学生", text: $roommateNote)
+                            .focused($focus, equals: .note)
+                            .id(Field.note) }
+                    }
+                    section("租约") {
+                        DateTile(label: "租约到期日", value: leaseEnd, empty: "不限", act: formAct) { dateField = .leaseEnd }
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("描述").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                        ZStack(alignment: .topLeading) {
+                            if desc.isEmpty {
+                                Text("写详细一点：周边、交通、看房时间")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(Theme.sub.opacity(0.7))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 14)
+                            }
+                            TextEditor(text: $desc)
+                                .focused($focus, equals: .desc)
+                                .id(Field.desc)
                                 .font(.system(size: 15))
-                                .foregroundStyle(Theme.sub.opacity(0.7))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 14)
+                                .scrollContentBackground(.hidden)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 6)
                         }
-                        TextEditor(text: $desc)
-                            .font(.system(size: 15))
-                            .scrollContentBackground(.hidden)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 6)
+                        .frame(minHeight: 130)
+                        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 14))
                     }
-                    .frame(minHeight: 130)
-                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 14))
+                    errorLine
                 }
-                errorLine
+                .padding(.horizontal, 16)
+                .padding(.top, 20)
+                .padding(.bottom, 12)
+                .contentShape(Rectangle())
+                .onTapGesture { focus = nil }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 20)
-            .padding(.bottom, 12)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: focus) { _, field in
+                guard let field else { return }
+                // 等键盘升起来再滚，免得算错位置
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation(.snappy) { proxy.scrollTo(field, anchor: .center) }
+                }
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom, spacing: 0) { publishBar }
     }
 
@@ -793,6 +868,7 @@ struct PostForm: View {
 
     private func submit() async {
         error = nil
+        focus = nil
         // AI 还在认就等它一下（最多十来秒），它失败了才要手填
         if !isRent, title.trimmingCharacters(in: .whitespaces).isEmpty, let task = describeTask {
             busy = true

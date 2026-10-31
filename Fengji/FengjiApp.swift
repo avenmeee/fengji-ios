@@ -54,6 +54,7 @@ struct RootView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.scenePhase) private var phase
     @State private var keyboardUp = false
+    @State private var restoreBar: Task<Void, Never>?
 
     var body: some View {
         TabView(selection: $state.tab) {
@@ -70,9 +71,16 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.15), value: state.pushed.contains(state.tab))
         .animation(.easeOut(duration: 0.15), value: keyboardUp)
-        // 键盘弹起时藏底栏，收起后恢复
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardUp = true }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardUp = false }
+        // 键盘弹起时藏底栏。切表情、语音时会先收后弹，所以显示要等一下，藏是马上
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
+            let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+            guard (end?.height ?? 0) > 100 else { return }  // 外接键盘只露一条工具栏，不算
+            restoreBar?.cancel()
+            keyboardUp = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            showBarSoon()
+        }
         .overlay(alignment: .bottom) {
             if state.pendingDelete != nil {
                 HStack(spacing: 14) {
@@ -110,10 +118,23 @@ struct RootView: View {
         .animation(.easeOut(duration: 0.18), value: state.toastText)
         .onChange(of: phase) { _, p in
             if p != .active { state.flushDelete() }
+            // 切走再回来：键盘还在的话系统会再发一次，不在的话底栏不能卡住
+            if p == .background {
+                restoreBar?.cancel()
+                keyboardUp = false
+            }
         }
         .task {
             await state.loadConfig()
             await state.refreshMe()
+        }
+    }
+
+    private func showBarSoon() {
+        restoreBar?.cancel()
+        restoreBar = Task {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if !Task.isCancelled { keyboardUp = false }
         }
     }
 }

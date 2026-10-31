@@ -7,8 +7,8 @@ struct MeView: View {
     @EnvironmentObject var state: AppState
     @State private var items: [Listing] = []
     @State private var phase: FeedModel.Phase = .loading
-    @State private var postingGoods = Demo.scene == "form" || Demo.scene == "form-filled" || Demo.scene == "posted"
-    @State private var postingRent = Demo.scene == "rentform" || Demo.scene == "rentform-filled"
+    @State private var postingGoods = Demo.scene == "form" || Demo.scene == "form-filled" || Demo.scene == "form-kb-price" || Demo.scene == "form-kb-desc" || Demo.scene == "posted"
+    @State private var postingRent = Demo.scene == "rentform" || Demo.scene == "rentform-filled" || Demo.scene == "rent-kb-deposit" || Demo.scene == "rent-kb-desc"
     @State private var claiming = Demo.scene == "claim"
     @State private var editing: Listing?
     @State private var acting: Listing?

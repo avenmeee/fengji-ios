@@ -53,6 +53,12 @@ private struct FeedKey: Hashable {
     let version: Int
 }
 
+/// 收起键盘，不管焦点在哪
+@MainActor
+func hideKeyboard() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+}
+
 extension View {
     /// 搜索词变了等一下再查，分类和写操作马上查
     func reloads(_ model: FeedModel, version: Int) -> some View {
@@ -120,7 +126,7 @@ struct TopBar<Filters: View>: View {
     let placeholder: String
     @Binding var query: String
     @ViewBuilder var filters: () -> Filters
-    @State private var searching = false
+    @State private var searching = Demo.scene == "search-kb"
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -153,6 +159,9 @@ struct TopBar<Filters: View>: View {
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 8)
+        .onAppear {
+            if searching { DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { focused = true } }
+        }
     }
 }
 
@@ -234,6 +243,8 @@ struct BuyView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.bottom, Theme.barSpace)
+                        .contentShape(Rectangle())
+                        .onTapGesture { hideKeyboard() }
                     }
                     .scrollDismissesKeyboard(.immediately)
                     .honeyRefresh { await model.load() }
@@ -317,6 +328,8 @@ struct RentView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.bottom, Theme.barSpace)
+                        .contentShape(Rectangle())
+                        .onTapGesture { hideKeyboard() }
                     }
                     .scrollDismissesKeyboard(.immediately)
                     .honeyRefresh { await model.load() }
