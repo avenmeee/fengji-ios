@@ -22,7 +22,7 @@ enum Demo {
 
     /// 开场就推到“我”的截图
     static var opensMe: Bool {
-        ["me", "guest-me", "mine-actions", "undo", "settings", "claim"].contains(scene ?? "")
+        ["me", "guest-me", "mine-actions", "undo", "settings", "claim", "wants"].contains(scene ?? "")
     }
 
     static var initialPosting: PostKind? {
@@ -152,6 +152,10 @@ enum DemoServer {
         if method == "GET", path == "/v1/me" { return (200, encode(Me(id: "me", isAdmin: false, agreed: true)), json) }
         if method == "GET", path == "/v1/me/listings" { return (200, encode(ListingList(items: mineList)), json) }
         if method == "GET", path == "/v1/admin/stats" { return (200, encode(Stats(posts: 12, views: 340, sold: 5, copies: 40, groupClicks: 18)), json) }
+        if method == "GET", path == "/v1/me/wants" {
+            let sample = Demo.scene == "wants" ? [Want(id: "w1", listingId: "g11", title: "显示器支架", photo: photo("e1").url, message: "还在吗？今晚能拿吗", contact: "wx_buyer", createdAt: now)] : []
+            return (200, encode(WantList(items: sample)), json)
+        }
         if method == "GET", path == "/v1/me/claim" { return (200, encode(ClaimStatus(claimed: false, count: 0, contact: nil)), json) }
         if method == "POST", path == "/v1/claim/code" { return (200, encode(ClaimCode(code: "K7M2QX", expiresAt: now + 900_000)), json) }
         if method == "POST", path == "/v1/ai/describe" { return (200, encode(AIGuess(name: "宜家小书桌", cat: "furn", cond: "几乎全新", price: 30)), json) }
@@ -165,7 +169,10 @@ enum DemoServer {
             return (200, encode(ListingPage(items: list, next: nil)), json)
         }
         if method == "GET", path.hasPrefix("/v1/listings/") {
-            if let hit = all.first(where: { $0.id == url.lastPathComponent }) { return (200, encode(hit), json) }
+            if var hit = all.first(where: { $0.id == url.lastPathComponent }) {
+                if Demo.scene == "want-detail" { hit.contact = nil }
+                return (200, encode(hit), json)
+            }
             return (404, encode(["error": "not_found"]), json)
         }
         return (200, encode(OK(ok: true)), json)

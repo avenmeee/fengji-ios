@@ -102,7 +102,7 @@ struct TermsView: View {
 
                 只限萨凡纳，当面交易。看货再付，看房前别转押金，合同和房东身份自己核对。
 
-                你发的微信号，所有人都能看到。
+                你发的微信号，所有人都能看到。没留微信时，买家可以点“想要”留言，留言和对方的联系方式只有你能看到，可以删除、举报、屏蔽。
 
                 放上的照片会发给 AI（Anthropic 的 Claude）自动填名字、分类和成色；东西的名字、价格、分类、成色、地点和第一张照片也会发给 AI 打分。
 
@@ -194,8 +194,8 @@ struct AdminReportsView: View {
                         HStack(spacing: 6) {
                             ActionChip(text: "没问题") { run { try await API.shared.adminRestore(r.listing.id) } }
                             ActionChip(text: "删除", danger: true) { run { try await API.shared.delete(r.listing.id) } }
-                            if !r.listing.isGroup {
-                                ActionChip(text: "封号", danger: true) { run { try await API.shared.adminBan(r.listing.uid) } }
+                            if r.reportedUser != nil || !r.listing.isGroup {
+                                ActionChip(text: "封号", danger: true) { run { try await API.shared.adminBan(r.reportedUser ?? r.listing.uid) } }
                             }
                         }
                     }

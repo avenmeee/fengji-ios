@@ -15,10 +15,12 @@ struct DetailView: View {
     @State private var confirmTakedown = false
     @State private var claiming = false
     @State private var page = 0
+    @State private var wanting = false
 
     /// 展签第二行：分类、成色或房子的情况
     private var line1: String {
-        let parts = item.isRent ? [item.rentFacts] : [item.catLabel, item.cond ?? ""]
+        // 分类和成色是 AI 后台用的，不显示
+        let parts = item.isRent ? [item.rentFacts] : []
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
@@ -57,6 +59,7 @@ struct DetailView: View {
             PostForm(kind: item.kind, editing: item) { item = $0 }
         }
         .sheet(isPresented: $claiming) { ClaimView() }
+        .sheet(isPresented: $wanting) { WantSheet(item: item) }
         .confirmationDialog("举报这条", isPresented: $choosingReason, titleVisibility: .visible) {
             ForEach(REASONS, id: \.self) { reason in
                 Button(reason) { Task { await report(reason) } }
@@ -248,6 +251,15 @@ struct DetailView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(Theme.bg)
+        } else if !item.mine, item.isOn || item.isReserved {
+            // 卖家没留微信：留一句话和联系方式给他
+            Button("想要") {
+                if state.needLogin() { wanting = true }
+            }
+            .buttonStyle(PrimaryButtonStyle(act: .ink))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Theme.bg)
         }
     }
 
@@ -340,5 +352,76 @@ extension UINavigationController: @retroactive UIGestureRecognizerDelegate {
 
     public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         viewControllers.count > 1
+    }
+}
+
+/// 想要：一句话（可不写）和自己的联系方式。只有卖家能看到。
+struct WantSheet: View {
+    let item: Listing
+    @EnvironmentObject var state: AppState
+    @Environment(\.dismiss) private var dismiss
+    @State private var message = ""
+    @State private var contact = UserDefaults.standard.string(forKey: "wantContact") ?? UserDefaults.standard.string(forKey: "contact") ?? ""
+    @State private var error: String?
+    @State private var busy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("想要 " + item.title)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Theme.ink)
+                .lineLimit(2)
+            line("说一句（可以不写）", $message)
+            line("你的联系方式，只有卖家能看到", $contact)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            if let error {
+                Text(error).font(.subheadline).foregroundStyle(Theme.warn)
+            }
+            Spacer(minLength: 0)
+            Button {
+                Task { await send() }
+            } label: {
+                HStack(spacing: 8) {
+                    if busy { HoneyLoader(size: 22) }
+                    Text(busy ? "正在发" : "发给卖家")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle(act: .ink, dimmed: contact.trimmingCharacters(in: .whitespaces).isEmpty))
+            .disabled(busy)
+        }
+        .padding(16)
+        .padding(.top, 12)
+        .background(Theme.bg)
+        .contentShape(Rectangle())
+        .onTapGesture { hideKeyboard() }
+        .presentationDetents([.height(320)])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func line(_ placeholder: String, _ text: Binding<String>) -> some View {
+        VStack(spacing: 6) {
+            TextField(placeholder, text: text).font(.system(size: 16))
+            Theme.line.frame(height: 0.5)
+        }
+    }
+
+    private func send() async {
+        let c = contact.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !c.isEmpty else {
+            error = "留个联系方式，卖家才联系得上你。"
+            return
+        }
+        busy = true
+        defer { busy = false }
+        do {
+            try await API.shared.want(item.id, message: message.trimmingCharacters(in: .whitespacesAndNewlines), contact: c)
+            UserDefaults.standard.set(c, forKey: "wantContact")
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            state.toast("发好了，等卖家联系你")
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 }

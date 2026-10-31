@@ -11,6 +11,8 @@ struct APIError: LocalizedError {
     var errorDescription: String? {
         switch code {
         case "not_allowed": return "这类内容不能发。"
+        case "want_again": return "今天已经发过了。"
+        case "need_contact": return "留个联系方式，卖家才联系得上你。"
         case "need_ai_consent": return "要同意发给 AI 打分才能发布。"
         case "need_photo": return "要一张实拍照。"
         case "need_utilities": return "选一下包不包水电。"
@@ -102,6 +104,21 @@ final class API: @unchecked Sendable {
         let _: Listing = try await post("POST", "/v1/listings/\(id)/price", ["price": price])
     }
     func takedown(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/takedown") }
+    func want(_ id: String, message: String, contact: String) async throws {
+        let _: OK = try await post("POST", "/v1/listings/\(id)/want", ["message": message, "contact": contact])
+    }
+    func wants() async throws -> [Want] {
+        let r: WantList = try await get("/v1/me/wants")
+        return r.items
+    }
+    func deleteWant(_ id: String) async throws { try await act("DELETE", "/v1/wants/\(id)") }
+    func reportWant(_ id: String, reason: String) async throws {
+        let _: OK = try await post("POST", "/v1/wants/\(id)/report", ["reason": reason])
+    }
+    func blockWant(_ id: String) async throws { try await act("POST", "/v1/wants/\(id)/block") }
+    func saveDevice(token: String) async throws {
+        let _: OK = try await post("POST", "/v1/me/device", ["token": token])
+    }
     func claimCode() async throws -> ClaimCode {
         try JSONDecoder().decode(ClaimCode.self, from: await send("POST", "/v1/claim/code"))
     }

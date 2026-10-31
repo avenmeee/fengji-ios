@@ -13,7 +13,7 @@ let CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"]
 let UNIT_OPTIONS: [Option] = [("whole", "整套"), ("room", "单间")]
 
 /// 热门地点，卖东西和房子都用；选了存文字
-let PLACES = ["Monty", "TP", "Mark", "大中超", "Riverchase", "Arcadia"]
+let PLACES = ["Monty", "TP", "Mark", "大中超"]
 let REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"]
 
 struct Photo: Codable, Hashable {
@@ -69,8 +69,8 @@ struct Listing: Codable, Identifiable, Hashable {
     var isReserved: Bool { status == "reserved" }
     /// 群里搬来的
     var isGroup: Bool { sourceType == "group" }
-    /// 没有公开微信号的群帖子（包括认领了还没填的）：只能去群里找
-    var findInGroup: Bool { (contact ?? "").isEmpty && sourceGroup != nil }
+    /// 没认领的群帖子：只能去群里找
+    var findInGroup: Bool { isGroup }
     /// “3 天前发在群里”里的前半句
     var groupAge: String {
         guard let t = sourcePostedAt else { return "" }
@@ -186,6 +186,21 @@ struct AIGuess: Codable {
     let price: Int?
 }
 
+/// 收到的“想要”留言，只有卖家看得到
+struct Want: Codable, Identifiable {
+    let id: String
+    let listingId: String
+    let title: String
+    let photo: String?
+    let message: String
+    let contact: String
+    let createdAt: Int64
+}
+
+struct WantList: Codable {
+    let items: [Want]
+}
+
 struct ClaimCode: Codable {
     let code: String
     let expiresAt: Int64
@@ -265,6 +280,7 @@ struct AdminReport: Codable, Identifiable {
     let at: Int64
     let reporter: String
     let listing: Listing
+    var reportedUser: String?
 }
 
 struct AdminReportList: Codable {

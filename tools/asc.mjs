@@ -59,10 +59,19 @@ try {
       await api("POST", "/v1/bundleIdCapabilities", { data: { type: "bundleIdCapabilities", attributes: { capabilityType: "APPLE_ID_AUTH", settings: [{ key: "APPLE_ID_AUTH_APP_CONSENT", options: [{ key: "PRIMARY_APP_CONSENT" }] }] }, relationships: { bundleId: { data: { type: "bundleIds", id: got.id } } } } });
       console.log("打开了 Sign in with Apple");
     } else console.log("Sign in with Apple 已经开着");
+    if (!have.includes("PUSH_NOTIFICATIONS")) {
+      await api("POST", "/v1/bundleIdCapabilities", { data: { type: "bundleIdCapabilities", attributes: { capabilityType: "PUSH_NOTIFICATIONS" }, relationships: { bundleId: { data: { type: "bundleIds", id: got.id } } } } });
+      console.log("打开了推送");
+    } else console.log("推送已经开着");
     console.log("团队号：" + got.attributes.seedId);
   } else if (cmd === "profile") {
     const certId = fs.readFileSync(path.join(DIR, "dist", "cert-id.txt"), "utf8").trim(), bundle = await findBundle();
     let p = ((await api("GET", `/v1/profiles?filter[name]=${encodeURIComponent(PROFILE)}&limit=5`)).data || []).find(x => x.attributes.name === PROFILE);
+    // App ID 加了权限后旧描述文件作废，带 renew 就删掉重建
+    if (p && process.argv[3] === "renew") {
+      await api("DELETE", `/v1/profiles/${p.id}`);
+      p = null;
+    }
     if (!p) {
       p = (await api("POST", "/v1/profiles", { data: { type: "profiles", attributes: { name: PROFILE, profileType: "IOS_APP_STORE" }, relationships: { bundleId: { data: { type: "bundleIds", id: bundle.id } }, certificates: { data: [{ type: "certificates", id: certId }] } } } })).data;
       console.log("建了描述文件：" + PROFILE);

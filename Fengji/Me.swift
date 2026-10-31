@@ -14,6 +14,9 @@ struct MeView: View {
     @State private var afterActing: (() -> Void)?
     @State private var pricing: Listing?
     @State private var newPrice = ""
+    @State private var wants: [Want] = []
+    @State private var reportingWant: Want?
+    @State private var blockingWant: Want?
 
     private var visible: [Listing] { items.filter { $0.id != state.pendingDelete?.id } }
 
@@ -46,6 +49,17 @@ struct MeView: View {
             }
             .presentationDetents([.height(item.status == "off" ? 190 : 380)])
         }
+        .confirmationDialog("举报这条留言", isPresented: Binding(get: { reportingWant != nil }, set: { if !$0 { reportingWant = nil } }), titleVisibility: .visible, presenting: reportingWant) { want in
+            ForEach(REASONS, id: \.self) { reason in
+                Button(reason) { Task { await reportWant(want, reason) } }
+            }
+        }
+        .alert("屏蔽这个人？", isPresented: Binding(get: { blockingWant != nil }, set: { if !$0 { blockingWant = nil } }), presenting: blockingWant) { want in
+            Button("屏蔽", role: .destructive) { Task { await blockWant(want) } }
+            Button("取消", role: .cancel) {}
+        } message: { _ in
+            Text("他的留言会删掉，也收不到他的新留言。")
+        }
         .alert("改价", isPresented: Binding(get: { pricing != nil }, set: { if !$0 { pricing = nil } }), presenting: pricing) { item in
             TextField("美元", text: $newPrice).keyboardType(.numberPad)
             Button("保存") { Task { await savePrice(item) } }
@@ -77,6 +91,27 @@ struct MeView: View {
 
     private var list: some View {
         List {
+            if !wants.isEmpty {
+                Text("有人想要")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                ForEach(wants) { want in
+                    WantRow(want: want, copy: {
+                        UIPasteboard.general.string = want.contact
+                        state.toast("已复制")
+                    }, remove: { Task { await deleteWant(want) } }, report: { reportingWant = want }, block: { blockingWant = want })
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 8))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                }
+                Text("我发的")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+            }
             if visible.isEmpty {
                 Group {
                     if phase == .ok {
@@ -124,10 +159,40 @@ struct MeView: View {
         }
         do {
             items = try await API.shared.mine()
+            wants = (try? await API.shared.wants()) ?? []
             phase = .ok
         } catch {
             if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
             if items.isEmpty { phase = .failed }
+        }
+    }
+
+    private func deleteWant(_ want: Want) async {
+        do {
+            try await API.shared.deleteWant(want.id)
+            wants.removeAll { $0.id == want.id }
+        } catch {
+            state.toast(error.localizedDescription)
+        }
+    }
+
+    private func reportWant(_ want: Want, _ reason: String) async {
+        do {
+            try await API.shared.reportWant(want.id, reason: reason)
+            wants.removeAll { $0.id == want.id }
+            state.toast("收到了，会尽快处理")
+        } catch {
+            state.toast(error.localizedDescription)
+        }
+    }
+
+    private func blockWant(_ want: Want) async {
+        do {
+            try await API.shared.blockWant(want.id)
+            state.changed()
+            state.toast("已屏蔽")
+        } catch {
+            state.toast(error.localizedDescription)
         }
     }
 
@@ -173,6 +238,58 @@ struct MeView: View {
             state.toast("擦亮了")
         } catch {
             state.toast(error.localizedDescription)
+        }
+    }
+}
+
+/// 一条“想要”：哪件东西、留言、对方联系方式
+struct WantRow: View {
+    let want: Want
+    let copy: () -> Void
+    let remove: () -> Void
+    let report: () -> Void
+    let block: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Color.clear
+                .frame(width: 66, height: 66)
+                .overlay {
+                    if let photo = want.photo {
+                        RemoteImage(url: photo, maxPixel: 240)
+                    } else {
+                        Theme.fill
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(want.title).font(.subheadline).foregroundStyle(Theme.sub).lineLimit(1)
+                if !want.message.isEmpty {
+                    Text(want.message).font(.subheadline).foregroundStyle(Theme.ink)
+                }
+                Button(action: copy) {
+                    HStack(spacing: 6) {
+                        Text(want.contact).font(.system(size: 15, weight: .semibold))
+                        Image(systemName: "doc.on.doc").font(.system(size: 13))
+                    }
+                    .foregroundStyle(Theme.ink)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("复制联系方式 " + want.contact)
+            }
+            Spacer(minLength: 0)
+            Menu {
+                Button("删除", systemImage: "trash", role: .destructive, action: remove)
+                Button("举报", systemImage: "flag", action: report)
+                Button("屏蔽这个人", systemImage: "hand.raised", action: block)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.sub)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("更多")
         }
     }
 }

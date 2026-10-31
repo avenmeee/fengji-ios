@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 enum Config {
     static let host = "fengji.sinantrails.com"
@@ -10,6 +11,7 @@ enum Config {
 
 @main
 struct FengjiApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var state = AppState()
     /// 外观：默认浅色，不跟随手机；存在本机
     @AppStorage("appearance") private var appearance = "light"
@@ -44,6 +46,51 @@ struct FengjiApp: App {
             .tint(Theme.tint)
             .preferredColorScheme(colorScheme)
             .scrollIndicators(.hidden)   // 全 App 不显示滚动条
+        }
+    }
+}
+
+extension Notification.Name {
+    static let openWants = Notification.Name("openWants")
+}
+
+/// 推送：要令牌、前台也显示、点了去“我”
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+        Task { try? await API.shared.saveDevice(token: token) }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        await MainActor.run { NotificationCenter.default.post(name: .openWants, object: nil) }
+    }
+}
+
+enum Notifier {
+    /// 第一次发了没留微信的东西时问：这时卖家明白为什么要通知。不要角标。
+    @MainActor
+    static func ask() {
+        Task {
+            let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])) ?? false
+            if granted { UIApplication.shared.registerForRemoteNotifications() }
+        }
+    }
+
+    /// 已经同意过：每次打开刷新令牌
+    @MainActor
+    static func refresh() {
+        Task {
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            if settings.authorizationStatus == .authorized { UIApplication.shared.registerForRemoteNotifications() }
         }
     }
 }
@@ -135,6 +182,9 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: state.toastText)
+        .onReceive(NotificationCenter.default.publisher(for: .openWants)) { _ in
+            state.plusAction(.me)
+        }
         .onChange(of: phase) { _, p in
             if p != .active { state.flushDelete() }
             // 切走再回来：键盘还在的话系统会再发一次，不在的话底栏不能卡住
@@ -146,6 +196,7 @@ struct RootView: View {
         .task {
             await state.loadConfig()
             await state.refreshMe()
+            if state.isLoggedIn { Notifier.refresh() }
         }
     }
 

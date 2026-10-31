@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS reports (
   reporter_id TEXT NOT NULL,
   reason TEXT NOT NULL,
   note TEXT NOT NULL DEFAULT '',
+  reported_user TEXT,            -- 举报想要留言时是留言人；举报条目时为空
   status TEXT NOT NULL DEFAULT 'open',  -- open / done
   created_at INTEGER NOT NULL,
   UNIQUE (listing_id, reporter_id)
@@ -133,3 +134,24 @@ CREATE TABLE IF NOT EXISTS price_refs (
   high INTEGER,
   PRIMARY KEY (item, cat)
 );
+
+-- “想要”留言：只有卖家能看到买家的联系方式
+CREATE TABLE IF NOT EXISTS wants (
+  id TEXT PRIMARY KEY,
+  listing_id TEXT NOT NULL,
+  seller_id TEXT NOT NULL,
+  buyer_id TEXT NOT NULL,
+  message TEXT NOT NULL DEFAULT '',
+  contact TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS wants_seller ON wants(seller_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS wants_buyer ON wants(buyer_id, listing_id, created_at DESC);
+
+-- 推送的设备令牌，退出登录和删号时删
+CREATE TABLE IF NOT EXISTS devices (
+  token TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS devices_user ON devices(user_id);

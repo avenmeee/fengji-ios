@@ -60,7 +60,7 @@ private enum DateField: String, Identifiable {
 
     var title: String {
         switch self {
-        case .pickupAfter: return "几号后可取"
+        case .pickupAfter: return "从几号起可取"
         case .pickupBefore: return "几号前取走"
         case .from: return "起"
         case .to: return "止"
@@ -97,16 +97,15 @@ struct PostForm: View {
     @State private var price: String
     @State private var photos: [FormPhoto]
     @State private var contact: String
-    @State private var askContact: Bool
     // 卖东西选填
     @State private var cat: String?
     @State private var cond: String?
-    @State private var delivery: String?
+    @State private var pickup: Bool
+    @State private var deliver: Bool
     @State private var deliveryFee: String
     @State private var pickupBefore: Date?
     @State private var pickupAfter: Date?
     @State private var place: String
-    @State private var placeOther: Bool
     @State private var desc: String
     // 房子
     @State private var from: Date?
@@ -168,20 +167,21 @@ struct PostForm: View {
         var startPhotos = (editing?.photos ?? []).map { FormPhoto.existing($0) }
         if filled { startPhotos = (Demo.sampleListing?.photos ?? []).map { FormPhoto.existing($0) } }
         _photos = State(initialValue: startPhotos)
-        let savedContact = editing?.contact ?? UserDefaults.standard.string(forKey: "contact") ?? (filled ? "wx_demo" : "")
+        let savedContact = editing?.contact ?? UserDefaults.standard.string(forKey: "contact") ?? (filled ? "wx_demo1" : "")
         _contact = State(initialValue: savedContact)
-        _askContact = State(initialValue: savedContact.isEmpty && !filled)
 
         _cat = State(initialValue: editing?.cat ?? (filled && !isRent ? "art" : nil))
         _cond = State(initialValue: editing?.cond ?? (filled && !isRent ? "几乎全新" : nil))
         let savedDelivery = UserDefaults.standard.string(forKey: "defaultDelivery") ?? ""
-        _delivery = State(initialValue: editing?.delivery ?? (filled ? "deliver" : (savedDelivery.isEmpty ? nil : savedDelivery)))
+        let startDelivery = editing?.delivery ?? (filled ? "both" : (savedDelivery.isEmpty ? nil : savedDelivery))
+        let savedPlace = isRent ? "" : (UserDefaults.standard.string(forKey: "defaultPlace") ?? "")
+        _pickup = State(initialValue: startDelivery == "pickup" || startDelivery == "both" || (editing?.place.isEmpty == false && !isRent) || (editing == nil && !savedPlace.isEmpty))
+        _deliver = State(initialValue: startDelivery == "deliver" || startDelivery == "both")
         _deliveryFee = State(initialValue: editing?.deliveryFee.map { String($0) } ?? (filled ? "5" : ""))
         _pickupBefore = State(initialValue: Self.date(editing?.pickupBefore) ?? (filled && !isRent ? Date().addingTimeInterval(20 * 86400) : nil))
         _pickupAfter = State(initialValue: Self.date(editing?.pickupAfter))
-        let startPlace = editing?.place ?? (filled ? "Victory Dr" : (isRent ? "" : UserDefaults.standard.string(forKey: "defaultPlace") ?? ""))
+        let startPlace = editing?.place ?? (filled ? "Monty" : savedPlace)
         _place = State(initialValue: startPlace)
-        _placeOther = State(initialValue: !startPlace.isEmpty && !PLACES.contains(startPlace))
         _desc = State(initialValue: editing?.desc ?? (filled && !isRent ? "搬家出，自己来拿" : ""))
 
         _from = State(initialValue: Self.date(editing?.from) ?? (filled && isRent ? Date() : nil))
@@ -324,7 +324,6 @@ struct PostForm: View {
             priceSuggested = false
             pickupBefore = nil
             pickupAfter = nil
-            askContact = false
             error = nil
             posted = false
             if UIImagePickerController.isSourceTypeAvailable(.camera) { showCamera = true }
@@ -352,41 +351,29 @@ struct PostForm: View {
                             priceField.frame(width: 118)
                             nameField
                         }
-                        contactField
                     }
                     sectionLabel("选填")
-                    row("分类") { categoryChips }
-                    row("成色") {
-                        FlowLayout(spacing: 6) {
-                            ForEach(CONDS, id: \.self) { c in
-                                Chip(text: c, on: cond == c, act: formAct) { cond = cond == c ? nil : c }
-                            }
-                        }
-                    }
                     row("取货") {
-                        FlowLayout(spacing: 6) {
-                            ForEach([(key: "pickup", label: "自取"), (key: "deliver", label: "可配送"), (key: "both", label: "都可")], id: \.key) { opt in
-                                Chip(text: opt.label, on: delivery == opt.key, act: formAct) { delivery = delivery == opt.key ? nil : opt.key }
-                            }
-                            if let delivery, delivery != "pickup" {
-                                LineField(placeholder: "$ 配送费", text: $deliveryFee, dollar: true)
+                        HStack(spacing: 6) {
+                            Chip(text: "自取", on: pickup, act: formAct) { pickup.toggle() }
+                            Chip(text: "可配送", on: deliver, act: formAct) { deliver.toggle() }
+                            if deliver {
+                                LineField(placeholder: "配送费", text: $deliveryFee, prefix: "配送费 $")
                                     .keyboardType(.numberPad)
                                     .focused($focus, equals: .fee)
                                     .id(Field.fee)
-                                    .frame(width: 90)
                             }
                         }
                     }
-                    row("地点") { placeChips(surface: Theme.fill) }
-                    HStack(spacing: 10) {
-                        DateTile(label: "几号后可取", value: pickupAfter, empty: "不限", act: formAct) { dateField = .pickupAfter }
-                        DateTile(label: "几号前取走", value: pickupBefore, empty: "不限", act: formAct) { dateField = .pickupBefore }
+                    if pickup {
+                        row("地点") { placeChips(surface: Theme.fill) }
                     }
-                    row("备注") {
-                        LineField(placeholder: "写一句", text: $desc)
-                            .focused($focus, equals: .desc)
-                            .id(Field.desc)
-                    }
+                    DateRow(label: "从几号起可取", value: pickupAfter) { dateField = .pickupAfter }
+                    DateRow(label: "几号前取走", value: pickupBefore) { dateField = .pickupBefore }
+                    contactField
+                    LineField(placeholder: "备注", text: $desc)
+                        .focused($focus, equals: .desc)
+                        .id(Field.desc)
                     errorLine
                 }
                 .padding(.horizontal, 16)
@@ -509,7 +496,7 @@ struct PostForm: View {
                 .focused($focus, equals: .price)
             }
             .id(Field.price)
-            .font(.system(size: 22, weight: .bold))
+            .font(.system(size: 20, weight: .semibold))
             .monospacedDigit()
             .foregroundStyle(Theme.ink)
             Theme.line.frame(height: 0.5)
@@ -532,69 +519,37 @@ struct PostForm: View {
                     nameTouched = true
                 }
             ))
-            .font(.system(size: 17))
+            .font(.system(size: 20, weight: .semibold))
             .focused($focus, equals: .name)
             .id(Field.name)
             Theme.line.frame(height: 0.5)
         }
     }
 
-    @ViewBuilder
     private var contactField: some View {
-        if askContact {
-            LineField(placeholder: "微信号（只填这一次）", text: $contact)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($focus, equals: .contact)
-                .id(Field.contact)
-        }
+        LineField(placeholder: "微信号", text: $contact)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .focused($focus, equals: .contact)
+            .id(Field.contact)
     }
 
-    /// 只选中的写字，其余图标，一行放下
-    private var categoryChips: some View {
-        HStack(spacing: 6) {
-            ForEach(CATS, id: \.key) { opt in
-                let on = cat == opt.key
-                Button {
-                    withAnimation(.snappy(duration: 0.18)) { cat = on ? nil : opt.key }
-                } label: {
-                    HStack(spacing: 4) {
-                        CategoryIcon(key: opt.key, size: 22)
-                        if on { Text(opt.label).font(.system(size: 14, weight: .semibold)).fixedSize() }
-                    }
-                    .foregroundStyle(on ? formAct.on : Theme.ink)
-                    .padding(.horizontal, on ? 10 : 0)
-                    .frame(minWidth: 44)
-                    .frame(height: 34)
-                    .background(on ? formAct.fill : Theme.fill, in: RoundedRectangle(cornerRadius: 10))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(opt.label)
-                .accessibilityAddTraits(on ? .isSelected : [])
-            }
-        }
-    }
-
-    /// 热门地点；点“其他”才输入。存的都是文字，能搜。
+    /// 热门地点，下面一条能手填。存的都是文字，能搜。
     private func placeChips(surface: Color) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             FlowLayout(spacing: 6) {
                 ForEach(PLACES, id: \.self) { p in
-                    Chip(text: p, on: !placeOther && place == p, act: formAct, surface: surface) {
-                        placeOther = false
+                    Chip(text: p, on: place == p, act: formAct, surface: surface) {
                         place = place == p ? "" : p
                     }
                 }
-                Chip(text: "其他", on: placeOther, act: formAct, surface: surface) {
-                    placeOther.toggle()
-                    place = ""
-                }
             }
-            if placeOther {
-                LineField(placeholder: "写地点", text: $place)
-                    .focused($focus, equals: .place)
-                    .id(Field.place)
-            }
+            LineField(placeholder: "手动填地点", text: Binding(
+                get: { PLACES.contains(place) ? "" : place },
+                set: { place = $0 }
+            ))
+            .focused($focus, equals: .place)
+            .id(Field.place)
         }
     }
 
@@ -610,7 +565,6 @@ struct PostForm: View {
                             priceField.frame(width: 118)
                             nameField
                         }
-                        contactField
                         row("出租") {
                             FlowLayout(spacing: 6) {
                                 Chip(text: "整套", on: unitWhole, act: formAct, surface: Theme.bg) { unitWhole.toggle() }
@@ -630,6 +584,7 @@ struct PostForm: View {
                         }
                     }
                     sectionLabel("选填")
+                    contactField
                     Theme.line.frame(height: 0.5)
                     section("房型") {
                         row("几室") { oneOf(["1", "2", "3", "4+"], $bedrooms) }
@@ -811,7 +766,6 @@ struct PostForm: View {
     private var requiredFilled: Bool {
         guard !photos.isEmpty, Int(price.trimmingCharacters(in: .whitespaces)) != nil else { return false }
         guard !title.trimmingCharacters(in: .whitespaces).isEmpty || aiLoading else { return false }
-        guard !contact.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         if isRent { return (unitWhole || unitRoom) && !place.trimmingCharacters(in: .whitespaces).isEmpty && from != nil && utilities != nil }
         return true
     }
@@ -874,7 +828,6 @@ struct PostForm: View {
         if photos.isEmpty { error = "要一张实拍照。"; return }
         guard let money = Int(price.trimmingCharacters(in: .whitespaces)), money >= 0 else { error = "价格要填整数。"; return }
         guard !t.isEmpty else { error = isRent ? "写一下标题。" : "写一下卖什么。"; return }
-        guard !c.isEmpty else { error = "留个微信号。"; return }
         if isRent {
             if money == 0 { error = "租金要大于 0。"; return }
             if !unitWhole, !unitRoom { error = "选整套或单间，都可以就都选。"; return }
@@ -887,8 +840,9 @@ struct PostForm: View {
             return
         }
         let fee = deliveryFee.trimmingCharacters(in: .whitespaces)
+        let delivery: String? = pickup && deliver ? "both" : (pickup ? "pickup" : (deliver ? "deliver" : nil))
         let dep = deposit.trimmingCharacters(in: .whitespaces), app = appFee.trimmingCharacters(in: .whitespaces)
-        if !isRent, delivery != nil, delivery != "pickup", !fee.isEmpty, Int(fee) == nil { error = "配送费要填整数。"; return }
+        if !isRent, deliver, !fee.isEmpty, Int(fee) == nil { error = "配送费要填整数。"; return }
         if isRent, (!dep.isEmpty && Int(dep) == nil) || (!app.isEmpty && Int(app) == nil) { error = "押金和申请费要填整数。"; return }
 
         busy = true
@@ -901,7 +855,7 @@ struct PostForm: View {
                 case .fresh(_, let jpeg, _): keys.append(try await API.shared.upload(jpeg: jpeg))
                 }
             }
-            var input = ListingInput(kind: kind, title: t, price: money, place: p, desc: desc.trimmingCharacters(in: .whitespacesAndNewlines), contact: c, photos: keys)
+            var input = ListingInput(kind: kind, title: t, price: money, place: isRent || pickup ? p : "", desc: desc.trimmingCharacters(in: .whitespacesAndNewlines), contact: c, photos: keys)
             let day: (Date?) -> String? = { $0.map { Self.dayFormat.string(from: $0) } }
             if isRent {
                 input.from = day(from)
@@ -927,7 +881,7 @@ struct PostForm: View {
                 input.cond = cond
                 input.aiConsent = editing == nil ? true : nil
                 input.delivery = delivery
-                input.deliveryFee = delivery == nil || delivery == "pickup" ? nil : Int(fee)
+                input.deliveryFee = deliver ? Int(fee) : nil
                 input.pickupBefore = day(pickupBefore)
                 input.pickupAfter = day(pickupAfter)
             }
@@ -937,11 +891,15 @@ struct PostForm: View {
             } else {
                 saved = try await API.shared.create(input)
             }
-            UserDefaults.standard.set(c, forKey: "contact")
+            if !c.isEmpty { UserDefaults.standard.set(c, forKey: "contact") }
             if !isRent, editing == nil { UserDefaults.standard.set(true, forKey: "aiConsent") }
             onSaved?(saved)
             state.changed()
-            if editing == nil { Haptics.beeBuzz() }
+            if editing == nil {
+                Haptics.beeBuzz()
+                // 没留微信才靠留言，这时问通知，卖家知道为什么
+                if c.isEmpty { Notifier.ask() }
+            }
             if editing == nil, !isRent {
                 var cover = HiveItem(image: nil, url: saved.photos.first?.url, priceText: saved.priceText)
                 if case .fresh(_, _, let preview)? = photos.first { cover.image = preview }
@@ -962,10 +920,13 @@ private struct LineField: View {
     let placeholder: String
     @Binding var text: String
     var dollar = false
+    /// 填了之后留在前面的字
+    var prefix = ""
 
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 0) {
+                if !prefix.isEmpty, !text.isEmpty { Text(prefix).foregroundStyle(Theme.ink) }
                 if dollar, !text.isEmpty { Text("$").foregroundStyle(Theme.ink) }
                 TextField(placeholder, text: $text)
             }
@@ -973,6 +934,36 @@ private struct LineField: View {
             Theme.line.frame(height: 0.5)
         }
         .padding(.top, 8)
+    }
+}
+
+/// 卖东西的日期：一行字，选了才是黑的
+private struct DateRow: View {
+    let label: String
+    let value: Date?
+    let action: () -> Void
+
+    private var text: String {
+        guard let value else { return "不限" }
+        let c = Calendar.current.dateComponents([.month, .day], from: value)
+        return "\(c.month ?? 0) 月 \(c.day ?? 0) 日"
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(label).font(.system(size: 15)).foregroundStyle(Theme.sub)
+                Spacer()
+                Text(text)
+                    .font(.system(size: 15, weight: value == nil ? .regular : .semibold))
+                    .foregroundStyle(value == nil ? Theme.sub : Theme.ink)
+                Image(systemName: "calendar").font(.system(size: 16)).foregroundStyle(Theme.sub)
+            }
+            .frame(height: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label + " " + text)
     }
 }
 

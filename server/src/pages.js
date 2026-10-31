@@ -37,7 +37,7 @@ export async function listingPage(env, url, id) {
     ${row.descr ? `<p>${esc(row.descr)}</p>` : ""}
     ${row.source_type === "group"
       ? `<p>去 <b>${esc(row.source_group)}</b> 群找 <b>${esc(row.source_poster)}</b></p><p class="sub">${daysAgo(row.source_posted_at)}发在群里。来自微信群，未经发布者确认。</p>`
-      : `<p>微信号：<b>${esc(row.contact)}</b></p>`}
+      : row.contact ? `<p>微信号：<b>${esc(row.contact)}</b></p>` : `<p>在蜂集里点“想要”留言。</p>`}
     <p class="sub">同学自办，非学校官方。不经手钱，当面看过再付。</p>${app}`, head);
 }
 
@@ -48,6 +48,8 @@ export function privacyPage(env) {
   <p>只在你发布时才要登录。登录用“通过 Apple 登录”，我们只拿到苹果给的匿名编号，拿不到你的姓名和邮箱。</p>
   <p>你主动发布的内容：照片、标题、价格、地点、备注、微信号。这些内容所有人都能看到，包括没有登录的人和看到分享链接的人。</p>
   <p>屏蔽和举报记录。不登录举报时不记录你是谁。</p>
+  <p>“想要”留言：你留的一句话和联系方式只有卖家能看到。删帖或删号时一起删除。</p>
+  <p>推送：同意通知后，我们保存设备的推送令牌，只用来告诉你有人想要。退出登录或删号时删除。</p>
   <p>部分条目来自微信群，由运营者搬进来，未经发布者确认，包括物品信息、群名、群昵称和原图。不公开微信号和电话，房源不写门牌，有人脸、二维码、微信截图、门牌的图不用。发布者可以在详情页一键要求下架，立刻生效，照片一起删除。</p>
   <p>发布、浏览、成交的每日总数，只是数字，不关联到个人。</p>
   <p>认领：把 App 给的验证码用自己的微信发出来，核对发送者后，这个人名下的条目一次转到你的账号。我们只存发送者编号的带密钥哈希用来匹配，不存也不显示微信 ID 明文。认领后你填的微信号才会公开。</p>
@@ -61,7 +63,7 @@ export function privacyPage(env) {
   <h2>联系</h2>
   <p>${contactLine(env)}</p>
   <h2 lang="en">In English</h2>
-  <p lang="en">Fengji only needs sign-in to post, using Sign in with Apple; we receive an anonymous identifier, not your name or email. What you post (photos, text, location, WeChat ID) is public. We keep daily totals of posts, views and sales that are not linked to anyone. We do not track you, show ads or sell data. Some listings are copied from WeChat groups by the operator without the poster's confirmation, including group names, nicknames and original photos; posters can take them down instantly or claim them. Listing details and the first photo are sent to AI (Anthropic's Claude) to produce a rating; you are asked to agree before posting. Delete your account any time in the app (+ → Me → Settings → Delete account); your posts and photos are deleted immediately. Data is stored on Cloudflare.</p>`);
+  <p lang="en">Fengji only needs sign-in to post, using Sign in with Apple; we receive an anonymous identifier, not your name or email. What you post (photos, text, location, WeChat ID if you add one) is public. A "want" message and the contact you leave are visible only to the seller. If you allow notifications we store a device push token, removed on sign-out or account deletion. We keep daily totals of posts, views and sales that are not linked to anyone. We do not track you, show ads or sell data. Some listings are copied from WeChat groups by the operator without the poster's confirmation, including group names, nicknames and original photos; posters can take them down instantly or claim them. Listing details and the first photo are sent to AI (Anthropic's Claude) to produce a rating; you are asked to agree before posting. Delete your account any time in the app (+ → Me → Settings → Delete account); your posts and photos are deleted immediately. Data is stored on Cloudflare.</p>`);
 }
 
 export function supportPage(env) {

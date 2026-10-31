@@ -2,6 +2,7 @@
 import { describePhoto } from "./ai.js";
 import { exchangeCode, fetchAppleKeys, revokeToken, verifyIdentityToken } from "./apple.js";
 import { listingPage, privacyPage, supportPage } from "./pages.js";
+import { pushToUser } from "./push.js";
 
 const CATS = ["furn", "elec", "kitchen", "art", "other"];
 const CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"];
@@ -126,7 +127,6 @@ function checkListing(b, userId, existing = []) {
   if (!Number.isInteger(price) || price < 0 || price > 1_000_000) throw new Fail(400, "bad_price");
   if (kind === "rent" && price === 0) throw new Fail(400, "bad_price");
   if (kind === "rent" && !place) throw new Fail(400, "need_place");
-  if (!contact) throw new Fail(400, "need_contact");
   const text = [title, place, descr].join(" ");
   if (BANNED.some(r => r.test(text))) throw new Fail(422, "not_allowed");
 
@@ -326,6 +326,7 @@ async function deleteRows(env, rows) {
   for (const r of rows) {
     await env.DB.batch([
       env.DB.prepare("DELETE FROM reports WHERE listing_id = ?").bind(r.id),
+      env.DB.prepare("DELETE FROM wants WHERE listing_id = ?").bind(r.id),
       env.DB.prepare("DELETE FROM listings WHERE id = ?").bind(r.id)
     ]);
   }
@@ -375,7 +376,7 @@ async function report(req, env, id) {
   if (!row) throw new Fail(404, "not_found");
   await env.DB.prepare("INSERT OR IGNORE INTO reports (id, listing_id, reporter_id, reason, note, created_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(newId(), id, u ? u.id : "anon:" + newId(), b.reason, clean(b.note, 300), Date.now()).run();
-  const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE listing_id = ? AND status = 'open' AND reporter_id NOT LIKE 'anon:%'").bind(id).first();
+  const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE listing_id = ? AND status = 'open' AND reporter_id NOT LIKE 'anon:%' AND reporter_id NOT LIKE 'want:%'").bind(id).first();
   if (c.n >= AUTO_HIDE_REPORTS) await env.DB.prepare("UPDATE listings SET status = 'hidden' WHERE id = ? AND status = 'on'").bind(id).run();
   return json({ ok: true });
 }
@@ -412,6 +413,8 @@ async function wipeUser(env, u) {
     env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(u.id),
     env.DB.prepare("DELETE FROM blocks WHERE user_id = ? OR blocked_id = ?").bind(u.id, u.id),
     env.DB.prepare("DELETE FROM claim_codes WHERE user_id = ?").bind(u.id),
+    env.DB.prepare("DELETE FROM wants WHERE seller_id = ? OR buyer_id = ?").bind(u.id, u.id),
+    env.DB.prepare("DELETE FROM devices WHERE user_id = ?").bind(u.id),
     // 删过号的人，之后群里的帖子也不再搬
     ...(u.sender_hash ? [env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind("sender:" + u.sender_hash, Date.now())] : []),
     env.DB.prepare("DELETE FROM reports WHERE reporter_id = ?").bind(u.id),
@@ -429,16 +432,20 @@ async function deleteAccount(req, env) {
 
 async function logout(req, env) {
   const m = /^Bearer (\S+)$/.exec(req.headers.get("authorization") || "");
-  if (m) await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await sha256(m[1])).run();
+  if (m) {
+    const u = await currentUser(req, env);
+    if (u) await env.DB.prepare("DELETE FROM devices WHERE user_id = ?").bind(u.id).run();
+    await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await sha256(m[1])).run();
+  }
   return json({ ok: true });
 }
 
 // ---- 管理 ----
 async function adminReports(req, env, url) {
   await needAdmin(req, env);
-  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.room_type, l.unit_type, l.furniture, l.internet, l.deposit, l.app_fee, l.parking, l.pets, l.roommates, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
+  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, r.reported_user, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.room_type, l.unit_type, l.furniture, l.internet, l.deposit, l.app_fee, l.parking, l.pets, l.roommates, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
     FROM reports r JOIN listings l ON l.id = r.listing_id WHERE r.status = 'open' ORDER BY r.created_at DESC LIMIT 100`).all()).results;
-  return json({ items: rows.map(r => ({ id: r.id, reason: r.reason, note: r.note, at: r.at, reporter: r.reporter, listing: view({ ...r, id: r.lid }, url.origin, { id: "admin" }) })) });
+  return json({ items: rows.map(r => ({ id: r.id, reason: r.reason, note: r.note, at: r.at, reporter: r.reporter, reportedUser: r.reported_user || null, listing: view({ ...r, id: r.lid }, url.origin, { id: "admin" }) })) });
 }
 async function adminCloseReport(req, env, id) {
   await needAdmin(req, env);
@@ -461,6 +468,8 @@ async function adminBan(req, env, id) {
   await deleteRows(env, rows);
   await env.DB.batch([
     env.DB.prepare("UPDATE users SET banned = 1 WHERE id = ?").bind(id),
+    env.DB.prepare("DELETE FROM wants WHERE buyer_id = ? OR seller_id = ?").bind(id, id),
+    env.DB.prepare("DELETE FROM devices WHERE user_id = ?").bind(id),
     env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(id)
   ]);
   return json({ ok: true });
@@ -478,6 +487,88 @@ async function adminStats(req, env) {
   const rows = (await env.DB.prepare("SELECT what, SUM(n) AS n FROM daily_counts WHERE user_id = '*' AND day >= ? GROUP BY what").bind(since).all()).results;
   const of = w => (rows.find(r => r.what === w) || { n: 0 }).n;
   return json({ posts: of("post"), views: of("view"), sold: of("sold"), copies: of("copy"), groupClicks: of("group_click") });
+}
+
+// ---- “想要”留言：卖家没留微信时，买家留一句话和联系方式。只有卖家看得到 ----
+const WANTS_PER_DAY = 20, SITE_WANTS_PER_DAY = 1000;
+
+async function sendWant(req, env, id) {
+  const u = await needAgreed(req, env);
+  const b = await bodyOf(req);
+  const message = clean(b.message, 200), contact = clean(b.contact, 60);
+  if (!contact) throw new Fail(400, "need_contact");
+  if (BANNED.some(r => r.test(message + " " + contact))) throw new Fail(422, "not_allowed");
+  const row = await env.DB.prepare("SELECT id, user_id, title, status, source_type FROM listings WHERE id = ?").bind(id).first();
+  if (!row || row.source_type === "group" || !["on", "reserved"].includes(row.status)) throw new Fail(404, "not_found");
+  if (row.user_id === u.id) throw new Fail(400, "self");
+  const dayAgo = Date.now() - 86400000;
+  const again = await env.DB.prepare("SELECT 1 AS x FROM wants WHERE buyer_id = ? AND listing_id = ? AND created_at > ?").bind(u.id, id, dayAgo).first();
+  if (again) throw new Fail(429, "want_again");
+  if (await bump(env, u.id, "want") > WANTS_PER_DAY) throw new Fail(429, "daily_limit");
+  if (await bump(env, "*", "want") > SITE_WANTS_PER_DAY) throw new Fail(429, "site_limit");
+  // 被卖家屏蔽的人：看起来发成功了，卖家收不到
+  const blocked = await env.DB.prepare("SELECT 1 AS x FROM blocks WHERE user_id = ? AND blocked_id = ?").bind(row.user_id, u.id).first();
+  if (!blocked) {
+    await env.DB.prepare("INSERT INTO wants (id, listing_id, seller_id, buyer_id, message, contact, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(newId(), id, row.user_id, u.id, message, contact, Date.now()).run();
+    try {
+      await pushToUser(env, row.user_id, "有人想要", row.title);
+    } catch (e) {
+      console.error("push failed", e && e.message);
+    }
+  }
+  return json({ ok: true }, 201);
+}
+
+async function myWants(req, env, url) {
+  const u = await needUser(req, env);
+  const rows = (await env.DB.prepare("SELECT w.id, w.message, w.contact, w.created_at, l.id AS listing_id, l.title, l.photos FROM wants w JOIN listings l ON l.id = w.listing_id WHERE w.seller_id = ? ORDER BY w.created_at DESC LIMIT 100").bind(u.id).all()).results;
+  return json({
+    items: rows.map(r => {
+      const first = JSON.parse(r.photos)[0];
+      return { id: r.id, listingId: r.listing_id, title: r.title, photo: first ? `${url.origin}/p/${first}` : null, message: r.message, contact: r.contact, createdAt: r.created_at };
+    })
+  });
+}
+
+async function ownWant(req, env, id) {
+  const u = await needUser(req, env);
+  const w = await env.DB.prepare("SELECT * FROM wants WHERE id = ?").bind(id).first();
+  if (!w || w.seller_id !== u.id) throw new Fail(404, "not_found");
+  return { u, w };
+}
+
+async function deleteWant(req, env, id) {
+  const { w } = await ownWant(req, env, id);
+  await env.DB.prepare("DELETE FROM wants WHERE id = ?").bind(w.id).run();
+  return json({ ok: true });
+}
+
+async function reportWant(req, env, id) {
+  const { w } = await ownWant(req, env, id);
+  const { reason } = await bodyOf(req);
+  if (!REASONS.includes(reason)) throw new Fail(400, "bad_reason");
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR IGNORE INTO reports (id, listing_id, reporter_id, reason, note, reported_user, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(newId(), w.listing_id, "want:" + w.id, reason, "想要留言：" + w.message, w.buyer_id, Date.now()),
+    env.DB.prepare("DELETE FROM wants WHERE id = ?").bind(w.id)
+  ]);
+  return json({ ok: true });
+}
+
+async function blockWant(req, env, id) {
+  const { u, w } = await ownWant(req, env, id);
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR IGNORE INTO blocks (user_id, blocked_id, created_at) VALUES (?, ?, ?)").bind(u.id, w.buyer_id, Date.now()),
+    env.DB.prepare("DELETE FROM wants WHERE seller_id = ? AND buyer_id = ?").bind(u.id, w.buyer_id)
+  ]);
+  return json({ ok: true });
+}
+
+async function saveDevice(req, env) {
+  const u = await needUser(req, env);
+  const token = String((await bodyOf(req)).token || "");
+  if (!/^[0-9a-f]{32,200}$/.test(token)) throw new Fail(400, "bad_token");
+  await env.DB.prepare("INSERT OR REPLACE INTO devices (token, user_id, updated_at) VALUES (?, ?, ?)").bind(token, u.id, Date.now()).run();
+  return json({ ok: true });
 }
 
 // ---- 发布时 AI 看照片。Worker 变量 AI_DESCRIBE 关掉，App 自动变手填 ----
@@ -715,6 +806,8 @@ async function newClaimCode(req, env) {
   const expiresAt = Date.now() + CODE_TTL;
   await env.DB.batch([
     env.DB.prepare("DELETE FROM claim_codes WHERE user_id = ?").bind(u.id),
+    env.DB.prepare("DELETE FROM wants WHERE seller_id = ? OR buyer_id = ?").bind(u.id, u.id),
+    env.DB.prepare("DELETE FROM devices WHERE user_id = ?").bind(u.id),
     env.DB.prepare("INSERT INTO claim_codes (code_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256(code), u.id, expiresAt)
   ]);
   return json({ code, expiresAt }, 201);
@@ -802,6 +895,12 @@ async function route(req, env) {
     if (method === "DELETE") return deleteListing(req, env, m[1]);
   }
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/status$/.exec(path))) return setStatus(req, env, url, m[1]);
+  if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/want$/.exec(path))) return sendWant(req, env, m[1]);
+  if (method === "GET" && path === "/v1/me/wants") return myWants(req, env, url);
+  if (method === "POST" && path === "/v1/me/device") return saveDevice(req, env);
+  if ((m = /^\/v1\/wants\/([0-9a-f]+)$/.exec(path)) && method === "DELETE") return deleteWant(req, env, m[1]);
+  if (method === "POST" && (m = /^\/v1\/wants\/([0-9a-f]+)\/report$/.exec(path))) return reportWant(req, env, m[1]);
+  if (method === "POST" && (m = /^\/v1\/wants\/([0-9a-f]+)\/block$/.exec(path))) return blockWant(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/price$/.exec(path))) return setPrice(req, env, url, m[1]);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/takedown$/.exec(path))) return takedown(env, m[1]);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/bump$/.exec(path))) return bumpListing(req, env, url, m[1]);
