@@ -264,11 +264,12 @@ struct FloatingBar: View {
 
 /// 加号上方的弧形：相对加号中心的位置，判定区比图形大
 enum PlusLayout {
-    static let width: CGFloat = 96
+    static let width: CGFloat = 100
     static var height: CGFloat { width * 2 / 3.0.squareRoot() }
-    static let hitRadius: CGFloat = 66
-    static let side = CGPoint(x: 112, y: 108)
-    static let top: CGFloat = 176
+    static let hitRadius: CGFloat = 72
+    /// 以加号中心为圆心，半径 152：145°、90°、35°
+    static let side = CGPoint(x: 124.5, y: 87.2)
+    static let top: CGFloat = 152
 
     static func hit(_ point: CGPoint, plus: CGPoint) -> PlusAction? {
         let spots: [(PlusAction, CGPoint)] = [
@@ -336,7 +337,8 @@ struct PlusSheet: View {
             }
             .frame(width: PlusLayout.width, height: PlusLayout.height)
             .contentShape(Hexagon())
-            .scaleEffect(hovered ? 1.14 : 1)
+            .scaleEffect(hovered ? 1.16 : 1)
+            .opacity(state.plusHover != nil && !hovered ? 0.6 : 1)
             .shadow(color: .black.opacity(hovered ? 0.25 : 0), radius: 10, y: 4)
             .animation(.snappy(duration: 0.12), value: hovered)
         }
