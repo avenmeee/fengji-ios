@@ -328,6 +328,9 @@ struct BuyView: View {
                 case "myinfo": MyInfoView()
                 case "records": RecordsView()
                 case "rules": RulesView()
+                case "blocked": BlockedView()
+                case "terms": TermsView()
+                case "admin": AdminReportsView()
                 default: SettingsView()
                 }
             }
@@ -500,6 +503,9 @@ struct RentView: View {
                 case "myinfo": MyInfoView()
                 case "records": RecordsView()
                 case "rules": RulesView()
+                case "blocked": BlockedView()
+                case "terms": TermsView()
+                case "admin": AdminReportsView()
                 default: SettingsView()
                 }
             }

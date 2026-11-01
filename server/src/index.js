@@ -572,8 +572,10 @@ async function unblock(req, env, targetId) {
 }
 async function blockList(req, env) {
   const u = await needUser(req, env);
-  const rows = (await env.DB.prepare("SELECT blocked_id AS id, created_at AS at FROM blocks WHERE user_id = ? ORDER BY created_at DESC").bind(u.id).all()).results;
-  return json({ items: rows });
+  // 带上昵称和头像，屏蔽名单里认得出是谁
+  const rows = (await env.DB.prepare("SELECT b.blocked_id AS id, b.created_at AS at, u.nickname, u.avatar_color, u.avatar_key FROM blocks b LEFT JOIN users u ON u.id = b.blocked_id WHERE b.user_id = ? ORDER BY b.created_at DESC").bind(u.id).all()).results;
+  const origin = new URL(req.url).origin;
+  return json({ items: rows.map(r => ({ id: r.id, at: r.at, name: r.nickname || defaultName(r.id), color: r.avatar_color ?? defaultColor(r.id), named: !!r.nickname, avatar: r.avatar_key ? `${origin}/p/${r.avatar_key}` : null })) });
 }
 
 // ---- 账号 ----

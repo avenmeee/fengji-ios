@@ -546,30 +546,55 @@ struct RecordRow: View {
 // MARK: - 举报规则
 
 struct RulesView: View {
-    @State private var showEmail = false
+    @EnvironmentObject var state: AppState
+
+    private let steps: [(String, String)] = [
+        ("可以举报什么", "违规内容、虚假信息、骚扰或诈骗，比如违禁物品、假学历、代写代考、私下换汇、冒用别人的照片，以及不当的昵称和头像。"),
+        ("怎么举报", "在东西或房子的详情页，点右上角“…”→ 举报，再选举报这条帖子、昵称还是头像。不想再看到这个人，可以同时屏蔽。"),
+        ("多久处理", "24 小时内处理。违规的内容会下架，不当的昵称会重置、头像会撤掉，情节严重的停用账号。")
+    ]
 
     var body: some View {
         VStack(spacing: 0) {
             PageTop(title: "举报规则")
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    step(1, "可以举报什么", "违规内容、虚假信息、骚扰或诈骗，比如违禁物品、假学历、代写代考、私下换汇、冒用别人的照片，以及不当的昵称和头像。")
-                    step(2, "怎么举报", "在东西或房子的详情页，点右上角“…”→ 举报，再选原因；昵称和头像选“举报昵称”“举报头像”。不想再看到这个人，可以同时屏蔽。")
-                    step(3, "多久处理", "24 小时内处理。违规的内容会下架，不当的昵称会重置、头像会撤掉，情节严重的停用账号。")
-                    Button { withAnimation(.snappy(duration: 0.18)) { showEmail.toggle() } } label: {
-                        HStack(alignment: .top, spacing: 12) {
-                            ZStack {
-                                Hexagon().fill(Theme.fill).frame(width: 30, height: 30)
-                                Image(systemName: "envelope").font(.system(size: 13)).foregroundStyle(Theme.sub)
+                VStack(alignment: .leading, spacing: 12) {
+                    FormCard {
+                        ForEach(Array(steps.enumerated()), id: \.offset) { i, step in
+                            if i > 0 { FormDivider() }
+                            HStack(alignment: .top, spacing: 14) {
+                                NumberHex(n: i + 1)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(step.0).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+                                    Text(step.1).font(.system(size: 15)).foregroundStyle(Theme.sub).lineSpacing(4)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("觉得处理错了").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
-                                Text("点这里看邮箱，写邮件申诉").font(.subheadline).foregroundStyle(Theme.sub)
-                            }
+                            .padding(.vertical, 14)
                         }
                     }
-                    .buttonStyle(.plain)
-                    EmailReveal(shown: $showEmail)
+                    if !Config.contactEmail.isEmpty {
+                        GroupHeader(title: "觉得处理错了").padding(.top, 12)
+                        FormCard {
+                            SettingRow(symbol: "envelope", title: "写邮件申诉").frame(minHeight: 54)
+                            HStack {
+                                if let url = URL(string: "mailto:\(Config.contactEmail)") {
+                                    Link(Config.contactEmail, destination: url).font(.system(size: 16)).foregroundStyle(Theme.ink)
+                                }
+                                Spacer()
+                                Button {
+                                    UIPasteboard.general.string = Config.contactEmail
+                                    state.toast("已复制")
+                                } label: {
+                                    Image(systemName: "doc.on.doc").font(.system(size: 15)).foregroundStyle(Theme.sub).frame(width: 36, height: 36)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("复制邮箱")
+                            }
+                            .padding(.leading, 42)
+                            .padding(.bottom, 12)
+                        }
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -577,18 +602,5 @@ struct RulesView: View {
         }
         .background(Theme.bg)
         .toolbar(.hidden, for: .navigationBar)
-    }
-
-    private func step(_ n: Int, _ title: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            ZStack {
-                Hexagon().fill(Theme.buy).frame(width: 30, height: 30)
-                Text("\(n)").font(.system(size: 14, weight: .bold)).foregroundStyle(Theme.onBuy)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
-                Text(text).font(.subheadline).foregroundStyle(Theme.sub).lineSpacing(3)
-            }
-        }
     }
 }

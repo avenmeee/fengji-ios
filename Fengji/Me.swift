@@ -50,6 +50,7 @@ struct MeView: View {
             if Demo.scene == "profile" || Demo.scene?.hasPrefix("myinfo") == true { path.append("myinfo") }
             if Demo.scene == "records" { path.append("records") }
             if Demo.scene == "rules" { path.append("settings"); path.append("rules") }
+            if Demo.scene == "blocked" || Demo.scene == "terms" || Demo.scene == "admin" { path.append("settings"); path.append(Demo.scene ?? "") }
         }
         .onChange(of: items) { _, list in
             if Demo.scene == "mine-actions", acting == nil { acting = list.first }

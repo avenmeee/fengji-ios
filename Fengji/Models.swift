@@ -356,6 +356,10 @@ struct PhotoKey: Codable {
 struct Blocked: Codable, Identifiable, Hashable {
     let id: String
     let at: Int64
+    var name: String?
+    var color: Int?
+    var named: Bool?
+    var avatar: String?
 }
 
 struct BlockList: Codable {
@@ -374,6 +378,8 @@ struct AdminReport: Codable, Identifiable {
     var type: String?
     /// 帖子类的举报按条目合并后有几条
     var count: Int?
+    /// 被举报的内容：留言原文、昵称、头像网址
+    var content: String?
 }
 
 struct AdminReportList: Codable {

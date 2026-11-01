@@ -798,4 +798,9 @@ ok("方便的时间存得上", r.status === 201, r);
 r = await call("GET", "/v1/listings/" + r.data.id);
 ok("方便的时间读得到", r.data.availTime === "工作日晚上", r);
 
+// 屏蔽名单带昵称
+await call("POST", `/v1/blocks/${s1.me.id}`, { token: o1.token });
+r = await call("GET", "/v1/me/blocks", { token: o1.token });
+ok("屏蔽名单带昵称和颜色", r.data.items.some(x => x.id === s1.me.id && x.name === "主页卖家" && Number.isInteger(x.color)), r);
+
 console.log(`全部通过：${n} 项`);
