@@ -14,6 +14,11 @@ struct DetailView: View {
     @State private var page = 0
     @State private var wanting = false
     @State private var popCheck = ""
+    @State private var goSeller = false
+    @State private var showHint = false
+    /// 照片翻页时，手指按下时在第几张：只有从最后一张再往左滑才进主页
+    @State private var dragStartPage: Int?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 展签第二行：分类、成色或房子的情况
     private var line1: String {
@@ -59,6 +64,15 @@ struct DetailView: View {
             if !gone { contactBar }
         }
         .task(id: state.version) { await reload() }
+        .navigationDestination(isPresented: $goSeller) { SellerView(ref: SellerRef(listing: item)) }
+        .onAppear {
+            // 第一次看别人的帖子时提示一次左滑
+            let key = "sellerSwipeHintSeen"
+            if !item.mine, !UserDefaults.standard.bool(forKey: key) {
+                showHint = true
+                UserDefaults.standard.set(true, forKey: key)
+            }
+        }
         .task {
             if !item.mine { try? await API.shared.countView(item.id) }
         }
@@ -85,8 +99,11 @@ struct DetailView: View {
                             }
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
+                        .simultaneousGesture(swipeToSeller(fromLastPhoto: true))
                     } else {
                         ListingImage(item: item, maxPixel: 1600)
+                            .contentShape(Rectangle())
+                            .simultaneousGesture(swipeToSeller())
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 3))
@@ -130,9 +147,13 @@ struct DetailView: View {
                 }
             }
             Spacer(minLength: 8)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.sub)
+            if showHint {
+                Text("左滑看主页 ›").font(.footnote).foregroundStyle(Theme.sub)
+            } else {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.sub)
+            }
         }
         .padding(.top, 10)
         .contentShape(Rectangle())
@@ -179,6 +200,37 @@ struct DetailView: View {
         .padding(.top, 18)
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .simultaneousGesture(swipeToSeller())
+    }
+
+    /// 像抖音左滑进作者主页：手指从右往左，横着滑够远才算。自己的帖子没反应。
+    /// 从左边缘往右滑是系统返回，方向相反，不冲突。
+    private func swipeToSeller(fromLastPhoto: Bool = false) -> some Gesture {
+        DragGesture(minimumDistance: 24)
+            .onChanged { _ in
+                if dragStartPage == nil { dragStartPage = page }
+            }
+            .onEnded { v in
+                let start = dragStartPage
+                dragStartPage = nil
+                guard !item.mine, !gone, v.translation.width < -70,
+                      abs(v.translation.width) > abs(v.translation.height) * 1.5 else { return }
+                if fromLastPhoto, start != item.photos.count - 1 { return }
+                openSeller()
+            }
+    }
+
+    private func openSeller() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        showHint = false
+        if reduceMotion {
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { goSeller = true }
+        } else {
+            goSeller = true
+        }
     }
 
     /// 所有次要动作都收在右上角，点开是自己的底部弹层
