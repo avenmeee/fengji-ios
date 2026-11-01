@@ -338,6 +338,10 @@ struct BuyView: View {
                     path.append(first)
                 }
                 // 截图：卖家主页，自己发的取第二条（有昵称的），群帖取第一条
+                if Demo.scene == "detail-sold", !demoOpened, let sold = items.first(where: \.isSold) {
+                    demoOpened = true
+                    path.append(sold)
+                }
                 if Demo.scene == "seller" || Demo.scene == "seller-group", !demoOpened, items.count > 1 {
                     demoOpened = true
                     path.append(SellerRef(listing: Demo.scene == "seller" ? items[1] : items[0]))

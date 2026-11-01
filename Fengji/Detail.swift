@@ -20,14 +20,6 @@ struct DetailView: View {
     @State private var tipOpen = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// 文字信息：一行一项。东西是地点和怎么拿，房子是地段、可住日期、房子情况
-    private var facts: [(String, String)] {
-        let rows: [(String, String)] = item.isRent
-            ? [("地段", item.place), ("可住", item.period), ("房子", item.rentFacts)]
-            : [("地点", item.place), ("怎么拿", item.pickupText)]
-        return rows.filter { !$0.1.isEmpty }
-    }
-
     /// 一周内写“3 天前发布”“今天发布”，再早写日期。群帖写“群里 10月28日发”。重新上架或擦亮按最近一次算。
     private var postedText: String {
         let cal = Calendar.current
@@ -47,17 +39,21 @@ struct DetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
+                if item.isSold { soldTag }
                 Spacer()
                 moreMenu
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 12) {
                     sellerRow
                     label
+                    if !item.isSold { scamTip }
                     photos
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
                 .contentShape(Rectangle())
                 .simultaneousGesture(swipeToSeller())
             }
@@ -101,28 +97,22 @@ struct DetailView: View {
         }
     }
 
+    /// 照片：一律 4:5 居中裁切，每张装进一样的卡纸；点开看原图比例
     private var photos: some View {
-        VStack(spacing: 10) {
-            ForEach(item.photos.indices, id: \.self) { i in
-                Button { viewing = PhotoIndex(index: i) } label: {
-                    DetailPhoto(item: item, index: i)
-                        .overlay(alignment: .topLeading) {
-                            if i == 0, item.isSold { soldTag }
-                        }
+        VStack(spacing: 12) {
+            ForEach(Array((item.photos.isEmpty ? [0] : Array(item.photos.indices)).enumerated()), id: \.offset) { _, i in
+                Button { if !item.photos.isEmpty { viewing = PhotoIndex(index: i) } } label: {
+                    Color.clear
+                        .aspectRatio(0.8, contentMode: .fit)
+                        .overlay { ListingImage(item: item, index: i, maxPixel: 1600).soldCover(item) }
                         .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .padding(7)
+                        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("第 \(i + 1) 张照片，点开看大图")
             }
-            if item.photos.isEmpty {
-                DetailPhoto(item: item, index: 0)
-                    .overlay(alignment: .topLeading) { if item.isSold { soldTag } }
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-            }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .padding(.bottom, 16)
     }
 
     private var soldTag: some View {
@@ -132,7 +122,6 @@ struct DetailView: View {
             .padding(.horizontal, 10)
             .frame(height: 28)
             .background(Theme.ink, in: RoundedRectangle(cornerRadius: 9))
-            .padding(12)
     }
 
     /// 点进卖家主页；自己的就去“我”
@@ -147,10 +136,10 @@ struct DetailView: View {
 
     private var sellerLine: some View {
         HStack(spacing: 12) {
-            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 42, url: item.sellerAvatar)
+            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 34, url: item.sellerAvatar)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.sellerLabel)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
                 if item.isGroup {
@@ -161,66 +150,110 @@ struct DetailView: View {
             }
             Spacer(minLength: 8)
             if showHint {
-                Text("左滑看主页 ›").font(.footnote).foregroundStyle(Theme.sub)
+                Text("左滑看主页 ›").font(.system(size: 13)).foregroundStyle(Theme.sub)
             } else {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.sub)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 6)
+        .padding(.horizontal, 4)
+        .padding(.top, 4)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint("看他发的其他东西")
     }
 
+    /// 卡纸：上面名字和价签、发布日期，下面一块白底装信息
     private var label: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(item.title)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(Theme.ink)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(item.priceText)
-                    .font(.system(size: 26, weight: .bold))
-                    .tracking(-0.3)
-                    .foregroundStyle(item.isSold ? Theme.sub : Theme.ink)
-                if item.isRent { Text("/月").font(.subheadline).foregroundStyle(Theme.sub) }
-                Spacer(minLength: 8)
-                ScoreBadge(score: item.score, size: 26)
-            }
-            if !postedText.isEmpty {
-                Text(postedText).font(.subheadline).foregroundStyle(Theme.sub)
-            }
-            if gone {
-                Text("这条已经没有了").font(.subheadline).foregroundStyle(Theme.warn)
-            } else if !item.isOn {
-                Text(item.statusText).font(.subheadline.weight(.medium)).foregroundStyle(item.isSold ? Theme.ink : Theme.warn)
-            }
-            if !item.desc.isEmpty {
-                Text(item.desc)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(item.title)
+                    .font(.system(size: 27, weight: .bold))
                     .foregroundStyle(Theme.ink)
-                    .lineSpacing(4)
-                    .padding(.top, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                HStack(alignment: .center, spacing: 8) {
+                    detailPriceTag
+                    Spacer(minLength: 8)
+                    Text(statusLine)
+                        .font(.system(size: 13))
+                        .foregroundStyle(gone || item.status == "hidden" || item.isReserved ? Theme.warn : Theme.sub)
+                        .lineLimit(1)
+                }
             }
-            if !facts.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(facts, id: \.0) { label, value in
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text(label).font(.subheadline).foregroundStyle(Theme.sub).frame(width: 52, alignment: .leading)
-                            Text(value).font(.subheadline).foregroundStyle(Theme.ink).frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 14)
+            if !item.desc.isEmpty || !item.infoRows.isEmpty {
+                infoBlock
+            }
+        }
+        .padding(7)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// 价签右边那行：发布日期；已预订、审核中、没了的也写在这里
+    private var statusLine: String {
+        if gone { return "这条已经没有了" }
+        if item.isReserved || item.status == "hidden" { return [item.statusText, postedText].filter { !$0.isEmpty }.joined(separator: " · ") }
+        return postedText
+    }
+
+    private var detailPriceTag: some View {
+        HStack(alignment: .center, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(item.priceText)
+                    .font(.system(size: 17, weight: .semibold))
+                    .tracking(-0.3)
+                    .strikethrough(item.isSold)
+                    .foregroundStyle(item.isSold ? Theme.sub : Theme.ink)
+                if item.isRent { Text("/月").font(.system(size: 13)).foregroundStyle(Theme.sub) }
+            }
+            if !item.isSold {
+                ScoreBadge(score: item.score, size: 18, labelSize: 13)
+            }
+        }
+        .padding(.horizontal, 11)
+        .frame(height: 34)
+        .background(Theme.priceTagDetail, in: RoundedRectangle(cornerRadius: 9))
+        .shadow(color: .black.opacity(0.1), radius: 4, y: 1)
+    }
+
+    /// 信息白块：东西先备注再一行一项；房子先一行一项再描述
+    private var infoBlock: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !item.isRent, !item.desc.isEmpty { descText }
+            if !item.isRent, !item.desc.isEmpty, !item.infoRows.isEmpty { Theme.line.frame(height: 0.5) }
+            if !item.infoRows.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(item.infoRows.enumerated()), id: \.offset) { _, row in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Image(systemName: row.icon)
+                                .font(.system(size: 15, weight: .light))
+                                .foregroundStyle(Theme.sub)
+                                .frame(width: 20)
+                            Text(row.label).font(.system(size: 13)).foregroundStyle(Theme.sub).frame(width: 30, alignment: .leading)
+                            Text(row.value).font(.system(size: 15)).foregroundStyle(Theme.ink).frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 }
-                .padding(.top, 10)
             }
-            scamTip
+            if item.isRent, !item.desc.isEmpty, !item.infoRows.isEmpty { Theme.line.frame(height: 0.5) }
+            if item.isRent, !item.desc.isEmpty { descText }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 18)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.bg, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var descText: some View {
+        Text(item.desc)
+            .font(.system(size: 16))
+            .foregroundStyle(Theme.ink)
+            .lineSpacing(4)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// 防骗：一行灰字，点开再说两三句
@@ -230,9 +263,9 @@ struct DetailView: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "exclamationmark.shield").font(.footnote)
+                    Image(systemName: "exclamationmark.shield").font(.system(size: 13))
                     Text(item.isRent ? "先看房再交钱，到 leasing office 核实房东，看房前别交押金或申请费。" : "当面验货再付款，别提前转账。")
-                        .font(.footnote)
+                        .font(.system(size: 13))
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 4)
                     Image(systemName: tipOpen ? "chevron.up" : "chevron.down").font(.system(size: 10, weight: .semibold))
@@ -249,7 +282,7 @@ struct DetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.top, 14)
+        .padding(.horizontal, 4)
         .accessibilityHint(tipOpen ? "收起" : "展开看怎么防骗")
     }
 

@@ -109,6 +109,7 @@ jobs:
           shot "44-详情弹层" detail-panel light
           shot "45-详情弹层-深" detail-panel dark
           shot "46-举报什么" detail-report light
+          shot "47-详情-已卖出" detail-sold light
           shot "29-加号弹层" plus-open light
           shot "30-加号弹层-深" plus-open dark
           shot "31-蜂巢1件" posted light

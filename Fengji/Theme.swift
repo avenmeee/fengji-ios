@@ -34,6 +34,8 @@ enum Theme {
     /// 卡片的卡纸、照片上的价签
     static let paper = dyn(0xF3F1EC, 0x312F2C)
     static let priceTag = dyn(0xFFFFFF, 0x312F2C)
+    /// 详情页卡纸上的价签
+    static let priceTagDetail = dyn(0xFFFFFF, 0x3A3834)
 
     static let accent = buy
     /// 系统控件的强调色：黄字在白底上看不清，浅色下压深。

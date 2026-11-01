@@ -183,6 +183,34 @@ struct Listing: Codable, Identifiable, Hashable {
     /// 1～10 上旬，11～20 中旬，其余下旬
     static func xunName(_ day: Int) -> String { day <= 10 ? "上旬" : (day <= 20 ? "中旬" : "下旬") }
 
+    /// 详情的信息块：一行一项（图标、标签、内容）。房子：类型、地段、可住、房间、其他；东西：自取或地点、日期、送货
+    var infoRows: [(icon: String, label: String, value: String)] {
+        var rows: [(icon: String, label: String, value: String)] = []
+        if isRent {
+            let unit = unitType == "whole" ? "整套" : (unitType == "room" ? "单间" : (unitType == "both" ? "整套或单间" : ""))
+            var other: [String] = []
+            if let utilities { other.append(utilities ? "包水电" : "不包水电") }
+            if let internet { other.append(internet ? "包网" : "不包网") }
+            if let furniture { other.append("家具：\(furniture)") }
+            if let privateBath { other.append(privateBath ? "独卫" : "没有独卫") }
+            if let end = Self.day(leaseEnd) { other.append("租约到 \(end)") }
+            if let deposit { other.append("押金 $\(deposit)") }
+            if let appFee { other.append("申请费 $\(appFee)") }
+            rows = [("house", "类型", unit), ("mappin.and.ellipse", "地段", place), ("calendar", "可住", period),
+                    ("bed.double", "房间", roomType ?? ""), ("info.circle", "其他", other.joined(separator: " · "))]
+        } else {
+            var dates: [String] = []
+            if let d = Self.day(pickupBefore) { dates.append("\(d)前") }
+            if let d = Self.day(pickupAfter) { dates.append("\(d)后可取") }
+            var send = ""
+            if delivery == "deliver" || delivery == "both" {
+                send = deliveryFee == nil ? "可以送" : (deliveryFee == 0 ? "可以送，免配送费" : "可以送，配送费 $\(deliveryFee ?? 0)")
+            }
+            rows = [("mappin.and.ellipse", delivery == "deliver" ? "地点" : "自取", place), ("calendar", "日期", dates.joined(separator: " · ")), ("box.truck", "送货", send)]
+        }
+        return rows.filter { !$0.value.isEmpty }
+    }
+
     private static func day(_ iso: String?, _ prec: String? = nil) -> String? {
         if prec == "xun", let parts = iso?.split(separator: "-"), parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]) {
             return "\(m)月" + xunName(d)
