@@ -62,6 +62,12 @@ async function needAdmin(req, env) {
   if (!u.is_admin) throw new Fail(403, "forbidden");
   return u;
 }
+// 处理举报：管理员在 App 里登录，或者定时任务拿 ADMIN_TOKEN。后者没有账号，id 是 null
+async function needStaff(req, env) {
+  const m = /^Bearer (\S+)$/.exec(req.headers.get("authorization") || "");
+  if (env.ADMIN_TOKEN && m && m[1] === env.ADMIN_TOKEN) return { id: null, operator: true };
+  return needAdmin(req, env);
+}
 
 async function startSession(env, userId) {
   const raw = new Uint8Array(32);
@@ -484,29 +490,66 @@ async function logout(req, env) {
 }
 
 // ---- 管理 ----
+// 举报的种类看 reporter_id 前缀：want: 想要留言，name: 昵称，avatar: 头像，其余是帖子（anon: 是没登录的人举报帖子）
+const reportType = reporter => reporter.startsWith("want:") ? "want" : reporter.startsWith("name:") ? "name" : reporter.startsWith("avatar:") ? "avatar" : "listing";
+
 async function adminReports(req, env, url) {
-  await needAdmin(req, env);
-  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, r.reported_user, (SELECT nickname FROM users u WHERE u.id = l.user_id) AS seller_nick, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.room_type, l.unit_type, l.furniture, l.internet, l.deposit, l.app_fee, l.parking, l.pets, l.roommates, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
-    FROM reports r JOIN listings l ON l.id = r.listing_id WHERE r.status = 'open' ORDER BY r.created_at DESC LIMIT 100`).all()).results;
-  return json({ items: rows.map(r => ({ id: r.id, reason: r.reason, note: r.note, at: r.at, reporter: r.reporter, reportedUser: r.reported_user || null, listing: view({ ...r, id: r.lid }, url.origin, { id: "admin" }) })) });
+  await needStaff(req, env);
+  const rows = (await env.DB.prepare(`SELECT r.id, r.reason, r.note, r.created_at AS at, r.reporter_id AS reporter, r.reported_user, r.listing_id AS rlid,
+      (SELECT nickname FROM users u WHERE u.id = COALESCE(r.reported_user, l.user_id)) AS target_nick,
+      (SELECT avatar_key FROM users u WHERE u.id = COALESCE(r.reported_user, l.user_id)) AS target_avatar,
+      (SELECT nickname FROM users u WHERE u.id = l.user_id) AS seller_nick, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.room_type, l.unit_type, l.furniture, l.internet, l.deposit, l.app_fee, l.parking, l.pets, l.roommates, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
+    FROM reports r LEFT JOIN listings l ON l.id = r.listing_id WHERE r.status = 'open' ORDER BY r.created_at DESC LIMIT 200`).all()).results;
+  const photo = key => key ? url.origin + "/p/" + key : null;
+  return json({ items: rows.map(r => {
+    const type = reportType(r.reporter);
+    // 被举报的内容：留言原文、举报时的昵称、举报时的头像；帖子就是帖子本身（看 listing）
+    const content = type === "want" ? r.note.replace(/^想要留言：/, "") : type === "name" ? r.note : type === "avatar" ? photo(r.note.replace(/^\/p\//, "")) : null;
+    const current = type === "name" ? (r.target_nick || null) : type === "avatar" ? photo(r.target_avatar) : null;
+    return {
+      id: r.id, type, reason: r.reason, note: r.note, at: r.at, reporter: r.reporter,
+      anonymous: r.reporter.startsWith("anon:"),
+      reportedUser: r.reported_user || r.user_id || null,
+      content, current, listingId: r.rlid,
+      listing: r.lid ? view({ ...r, id: r.lid }, url.origin, { id: "admin" }) : null
+    };
+  }) });
 }
 async function adminCloseReport(req, env, id) {
-  await needAdmin(req, env);
+  await needStaff(req, env);
   await env.DB.prepare("UPDATE reports SET status = 'done' WHERE id = ?").bind(id).run();
   return json({ ok: true });
 }
 // 忽略举报后恢复上架
 async function adminRestore(req, env, id) {
-  await needAdmin(req, env);
+  await needStaff(req, env);
   await env.DB.batch([
     env.DB.prepare("UPDATE reports SET status = 'done' WHERE listing_id = ?").bind(id),
     env.DB.prepare("UPDATE listings SET status = 'on' WHERE id = ? AND status = 'hidden'").bind(id)
   ]);
   return json({ ok: true });
 }
+// 管理员下架帖子：和在 App 里删别人的帖子一样，彻底删掉（照片、想要留言、举报一起删）。
+// 群帖再留编号，之后不再导入。
+async function adminRemove(req, env, id) {
+  await needStaff(req, env);
+  const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
+  if (!row) throw new Fail(404, "not_found");
+  if (row.source_type === "group") {
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind(row.source_id, Date.now()),
+      env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind("key:" + row.merge_key, Date.now())
+    ]);
+  }
+  await deleteRows(env, [row]);
+  return json({ ok: true });
+}
 async function adminBan(req, env, id) {
-  const admin = await needAdmin(req, env);
+  const admin = await needStaff(req, env);
   if (id === admin.id) throw new Fail(400, "self");
+  const target = await env.DB.prepare("SELECT is_admin FROM users WHERE id = ?").bind(id).first();
+  if (!target) throw new Fail(404, "not_found");
+  if (target.is_admin) throw new Fail(400, "is_admin");
   const rows = (await env.DB.prepare("SELECT id, photos FROM listings WHERE user_id = ?").bind(id).all()).results;
   await deleteRows(env, rows);
   const banned = await env.DB.prepare("SELECT avatar_key FROM users WHERE id = ?").bind(id).first();
@@ -602,7 +645,7 @@ async function reportName(req, env, id) {
 }
 
 async function adminResetName(req, env, id) {
-  await needAdmin(req, env);
+  await needStaff(req, env);
   await env.DB.batch([
     env.DB.prepare("UPDATE users SET nickname = NULL WHERE id = ?").bind(id),
     env.DB.prepare("UPDATE reports SET status = 'done' WHERE reported_user = ? AND reason = '昵称不当'").bind(id)
@@ -633,7 +676,7 @@ async function removeAvatar(req, env) {
 
 // 头像被举报：撤掉换回默认
 async function adminRemoveAvatar(req, env, id) {
-  await needAdmin(req, env);
+  await needStaff(req, env);
   const row = await env.DB.prepare("SELECT avatar_key FROM users WHERE id = ?").bind(id).first();
   if (row?.avatar_key) await removePhotos(env, [row.avatar_key]);
   await env.DB.batch([
@@ -1045,6 +1088,7 @@ async function route(req, env) {
   if (method === "GET" && path === "/v1/admin/reports") return adminReports(req, env, url);
   if (method === "POST" && (m = /^\/v1\/admin\/reports\/([0-9a-f]+)\/close$/.exec(path))) return adminCloseReport(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/admin\/listings\/([0-9a-f]+)\/restore$/.exec(path))) return adminRestore(req, env, m[1]);
+  if (method === "POST" && (m = /^\/v1\/admin\/listings\/([0-9a-f]+)\/remove$/.exec(path))) return adminRemove(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/admin\/users\/([0-9a-f]+)\/ban$/.exec(path))) return adminBan(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/admin\/users\/([0-9a-f]+)\/reset-name$/.exec(path))) return adminResetName(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/admin\/users\/([0-9a-f]+)\/remove-avatar$/.exec(path))) return adminRemoveAvatar(req, env, m[1]);
