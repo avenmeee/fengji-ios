@@ -150,6 +150,15 @@ jobs:
           shot "65-认领" claim light
           shot "66-认领好了" claim-done light
           shot "67-发布成功" posted-3 light
+          shot "90-这些照片是" batch-choose light
+          shot "91-这些照片是-深" batch-choose dark
+          shot "92-正在认" batch-recognize light
+          shot "93-确认页" batch-confirm light
+          shot "94-确认页-深" batch-confirm dark
+          shot "95-移到别的件" batch-move light
+          shot "96-删一件" batch-removed light
+          shot "97-AI没认出来" batch-failed light
+          shot "98-漏填" batch-missing light
           shot "68-发布成功-深" posted-3 dark
           shot "69-搜索" search-hit light
           shot "70-搜索没找到" search-none light

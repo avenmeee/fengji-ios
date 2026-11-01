@@ -940,7 +940,8 @@ async function aiGroup(req, env, url) {
   // 收拾 AI 的结果：编号要在范围内、每张只用一次；漏掉的每张自成一件，名字空着让卖家填
   const used = new Set(), items = [];
   for (const it of r.items || []) {
-    const photos = (it.photos || []).filter(i => Number.isInteger(i) && i >= 0 && i < images.length && !used.has(i));
+    // 一件最多 3 张，多出来的下面自成一件
+    const photos = [...new Set(it.photos || [])].filter(i => Number.isInteger(i) && i >= 0 && i < images.length && !used.has(i)).slice(0, MAX_PHOTOS);
     if (!photos.length) continue;
     photos.forEach(i => used.add(i));
     const price = Number.isInteger(it.price) && it.price >= 0 && it.price <= 100000 ? it.price : null;

@@ -150,6 +150,11 @@ struct PostForm: View {
     private let relist: Bool
     @State private var dateField: DateField? = Demo.scene == "rentcal-to" ? .to : (Demo.scene?.hasPrefix("rentcal") == true ? .from : nil)
     @State private var picked: [PhotosPickerItem] = []
+    // 一次选好几张：先问怎么分，再进确认页
+    @StateObject private var batch = BatchModel()
+    @State private var showSplit = Demo.scene == "batch-choose"
+    @State private var inBatch = Demo.scene?.hasPrefix("batch-") == true && Demo.scene != "batch-choose"
+    @State private var readingPhotos = false
     @State private var error: String?
     @State private var busy = false
     /// 点过发布：缺的那项下面出红字
@@ -269,6 +274,8 @@ struct PostForm: View {
         Group {
             if posted {
                 postedView
+            } else if inBatch {
+                batchFlow
             } else if isRent {
                 rentForm
             } else {
@@ -277,7 +284,20 @@ struct PostForm: View {
         }
         .background(Theme.bg)
         .presentationDragIndicator(.visible)
-        .interactiveDismissDisabled(busy)
+        .interactiveDismissDisabled(busy || inBatch)
+        .overlay {
+            if readingPhotos {
+                ZStack {
+                    Color.black.opacity(0.3).ignoresSafeArea()
+                    HoneyLoader(size: 44)
+                }
+            }
+        }
+        .overlay {
+            BottomPanel(shown: $showSplit) {
+                BatchChoosePanel(batch: batch, aiEnough: aiEnough, aiLeft: state.me?.aiLeft) { chooseSplit($0) }
+            }
+        }
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }
             Task { await addPicked(items) }
@@ -344,6 +364,89 @@ struct PostForm: View {
         case .from: from = value
         case .to: to = value
         case .leaseEnd: leaseEnd = value
+        }
+    }
+
+    // MARK: - 一次发好几件
+
+    /// 一开始放照片时能多选，之后和原来一样
+    private var canBatch: Bool { !isRent && editing == nil && photos.isEmpty }
+
+    private var aiUsable: Bool { (state.aiDescribe && state.isLoggedIn && aiConsent) || Demo.isOn }
+
+    /// 本月 AI 够不够分这些照片
+    private var aiEnough: Bool {
+        guard aiUsable else { return false }
+        if let left = state.me?.aiLeft { return left >= batch.shots.count }
+        return true
+    }
+
+    private func addBatch(_ items: [PhotosPickerItem]) async {
+        readingPhotos = true
+        var datas: [Data] = []
+        for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self) { datas.append(data) }
+        }
+        picked = []
+        batch.reset()
+        await batch.add(datas)
+        readingPhotos = false
+        if batch.shots.count >= 2 {
+            showSplit = true
+        } else {
+            if datas.count < items.count { state.toast("有张照片打不开") }
+            if let only = datas.first { addPhoto(only) }
+            batch.reset()
+        }
+    }
+
+    private func chooseSplit(_ how: BatchModel.Split) {
+        showSplit = false
+        if how == .allOne {
+            // 都是同一件：回原来的发布页
+            let first = batch.shots.first
+            photos = batch.shots.prefix(maxPhotos).map { .fresh(id: UUID(), jpeg: $0.jpeg, preview: $0.preview) }
+            batch.reset()
+            if let first { startDescribe(first.preview) }
+            return
+        }
+        // 发布页上填过的带过去
+        batch.pickup = pickup
+        batch.deliver = deliver
+        batch.deliveryFee = deliveryFee
+        batch.place = place
+        batch.availTime = availTime
+        batch.contact = contact
+        focus = nil
+        inBatch = true
+        batch.start(how, consent: aiConsent, aiOn: aiUsable && state.me?.aiLeft != 0, left: state.me?.aiLeft)
+    }
+
+    private var batchFlow: some View {
+        BatchFlow(batch: batch, aiConsent: aiConsent, aiOn: aiUsable && state.me?.aiLeft != 0) {
+            inBatch = false
+            showSplit = true
+        } exit: {
+            batch.reset()
+            inBatch = false
+        } posted: { saved in
+            // 再发一件时带上这次填的
+            pickup = batch.pickup
+            deliver = batch.deliver
+            deliveryFee = batch.deliveryFee
+            place = batch.place
+            availTime = batch.availTime
+            contact = batch.contact
+            hive = zip(batch.items, saved).map { it, listing in
+                HiveItem(image: it.shots.first.flatMap { batch.shot($0)?.preview }, url: listing.photos.first?.url, priceText: listing.priceText)
+            }
+            if state.me?.aiConsent != true { Task { await state.refreshMe() } }
+            state.changed()
+            Haptics.beeBuzz()
+            if contact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { Notifier.ask() }
+            batch.reset()
+            inBatch = false
+            posted = true
         }
     }
 
@@ -522,7 +625,7 @@ struct PostForm: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("拍照")
             }
-            PhotosPicker(selection: $picked, maxSelectionCount: maxPhotos, matching: .images) {
+            PhotosPicker(selection: $picked, maxSelectionCount: canBatch ? BatchModel.maxPhotos : maxPhotos, matching: .images) {
                 photoTile("photo.on.rectangle")
             }
             .accessibilityLabel("相册")
@@ -900,6 +1003,10 @@ struct PostForm: View {
     // MARK: - 动作
 
     private func addPicked(_ items: [PhotosPickerItem]) async {
+        if items.count >= 2, canBatch {
+            await addBatch(items)
+            return
+        }
         for item in items where photos.count < maxPhotos {
             guard let data = try? await item.loadTransferable(type: Data.self) else {
                 state.toast("有张照片打不开")
