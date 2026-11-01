@@ -792,4 +792,10 @@ await call("GET", "/cdn-cgi/handler/scheduled");
 r = await call("GET", "/v1/me/listings", { token: rl.token });
 ok("30 天后照片清掉", r.data.items.find(x => x.id === rlPost.id).photos.length === 0, r);
 
+// 方便的时间
+r = await call("POST", "/v1/listings", { token: o2.token, body: { ...goods, photos: [(await call("POST", "/v1/photos", { token: o2.token, raw: jpeg })).data.key], title: "台灯带时间", availTime: "工作日晚上" } });
+ok("方便的时间存得上", r.status === 201, r);
+r = await call("GET", "/v1/listings/" + r.data.id);
+ok("方便的时间读得到", r.data.availTime === "工作日晚上", r);
+
 console.log(`全部通过：${n} 项`);

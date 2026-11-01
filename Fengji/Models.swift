@@ -31,6 +31,8 @@ struct Listing: Codable, Identifiable, Hashable {
     var soldAt: Int64? = nil
     /// 删掉后留给本人的小图（30 天后照片清掉时用）
     var thumb: String? = nil
+    /// 方便的时间：东西是方便取货，房子是方便看房
+    var availTime: String? = nil
     /// 只有本人的记录里有
     var soldPrice: Int? = nil
     var deletedAt: Int64? = nil
@@ -199,7 +201,7 @@ struct Listing: Codable, Identifiable, Hashable {
             if let deposit { other.append("押金 $\(deposit)") }
             if let appFee { other.append("申请费 $\(appFee)") }
             rows = [("house", "类型", unit), ("mappin", "地段", place), ("calendar", "可住", period),
-                    ("bed.double", "房间", roomType ?? ""), ("info.circle", "其他", other.joined(separator: " · "))]
+                    ("bed.double", "房间", roomType ?? ""), ("clock", "看房", availTime ?? ""), ("info.circle", "其他", other.joined(separator: " · "))]
         } else {
             var dates: [String] = []
             if let d = Self.day(pickupBefore) { dates.append("\(d)前") }
@@ -208,7 +210,8 @@ struct Listing: Codable, Identifiable, Hashable {
             if delivery == "deliver" || delivery == "both" {
                 send = deliveryFee == nil ? "可以送" : (deliveryFee == 0 ? "可以送，免配送费" : "可以送，配送费 $\(deliveryFee ?? 0)")
             }
-            rows = [("mappin", delivery == "deliver" ? "地点" : "自取", place), ("calendar", "日期", dates.joined(separator: " · ")), ("box.truck", "送货", send)]
+            rows = [("mappin", delivery == "deliver" ? "地点" : "自取", place), ("calendar", "日期", dates.joined(separator: " · ")),
+                    ("clock", "时间", availTime ?? ""), ("box.truck", "送货", send)]
         }
         return rows.filter { !$0.value.isEmpty }
     }
@@ -292,6 +295,7 @@ struct ListingList: Codable {
 struct ListingInput: Encodable {
     /// 从“记录”里把删掉的重新发出去
     var relist: Bool?
+    var availTime: String?
     let kind: String
     let title: String
     let price: Int

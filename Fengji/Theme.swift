@@ -16,7 +16,9 @@ enum Theme {
     static let bg = dyn(0xFFFFFF, 0x262524)
     /// 搜索框、小标签、输入框、条目块的底
     static let fill = dyn(0xF2F2F0, 0x353330)
-    static let line = dyn(0xE5E5E3, 0x413F3C)
+    static let line = dyn(0xE6E4DF, 0x403D39)
+    /// 提示字：比次要字更浅
+    static let hint = dyn(0x8E8E93, 0x8D8A84)
     static let ink = dyn(0x1C1C1E, 0xF2EFE9)
     static let sub = dyn(0x6E6E73, 0xAAA7A1)
     static let bar = dyn(0xFFFFFF, 0x35332F).opacity(0.88)
@@ -100,12 +102,15 @@ struct Chip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(text)
+            HStack(spacing: 4) {
+                if on { Image(systemName: "checkmark").font(.system(size: large ? 13 : 11, weight: .bold)) }
+                Text(text)
+            }
                 .font(.system(size: large ? 17 : 14, weight: on ? .semibold : .regular))
                 .foregroundStyle(on ? act.on : Theme.ink)
                 .padding(.horizontal, large ? 14 : 10)
-                .frame(height: large ? 44 : 34)
-                .background(on ? act.fill : surface, in: RoundedRectangle(cornerRadius: large ? 12 : 10))
+                .frame(height: large ? 42 : 34)
+                .background(on ? act.fill : surface, in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])

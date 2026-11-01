@@ -80,7 +80,7 @@ private enum DateField: String, Identifiable {
 
 /// 发布页能打字的地方：滚到可见、收键盘都靠它
 private enum Field: Hashable {
-    case price, name, contact, fee, place, desc, deposit, appFee, note
+    case price, name, contact, fee, place, desc, deposit, appFee, note, time
 }
 
 struct PostForm: View {
@@ -101,6 +101,8 @@ struct PostForm: View {
     @State private var price: String
     @State private var photos: [FormPhoto]
     @State private var contact: String
+    /// 方便的时间：东西是取货，房子是看房；从我的信息带进来
+    @State private var availTime: String
     // 卖东西选填
     @State private var cat: String?
     @State private var cond: String?
@@ -181,6 +183,7 @@ struct PostForm: View {
         _photos = State(initialValue: startPhotos)
         let savedContact = source?.contact ?? UserDefaults.standard.string(forKey: "contact") ?? (filled ? "wx_demo1" : "")
         _contact = State(initialValue: savedContact)
+        _availTime = State(initialValue: source?.availTime ?? (source == nil ? (UserDefaults.standard.string(forKey: "defaultTime") ?? "") : "") )
 
         _cat = State(initialValue: source?.cat ?? (filled && !isRent ? "art" : nil))
         _cond = State(initialValue: source?.cond ?? (filled && !isRent ? "几乎全新" : nil))
@@ -236,7 +239,7 @@ struct PostForm: View {
         }
     }
 
-    private static let roommateCounts = ["没有室友", "1 人", "2 人", "3 人以上"]
+    private static let roommateCounts = ["没有", "1 人", "2 人", "3 人以上"]
 
     /// “2室1卫”拆回两个按钮
     private static func parseRoom(_ text: String?) -> (String?, String?) {
@@ -248,16 +251,17 @@ struct PostForm: View {
     private static func parseRoommates(_ text: String?) -> (String?, String) {
         guard let text else { return (nil, "") }
         let parts = text.components(separatedBy: "；")
-        if let first = parts.first, roommateCounts.contains(first) {
-            return (first, parts.dropFirst().joined(separator: "；"))
+        if let first = parts.first, roommateCounts.contains(first) || first == "没有室友" {
+            return (first == "没有室友" ? "没有" : first, parts.dropFirst().joined(separator: "；"))
         }
         return (nil, text)
     }
 
     private var isRent: Bool { kind == "rent" }
-    private var formAct: Act { isRent ? .rent : .sell }
+    /// 只留蜂蜜一个强调色（11-01 统一重做）
+    private var formAct: Act { .buy }
     private var maxPhotos: Int { isRent ? 9 : 3 }
-    private var tile: CGFloat { 76 }
+    private var tile: CGFloat { 68 }
 
     var body: some View {
         Group {
@@ -375,47 +379,62 @@ struct PostForm: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    statusRow
-                    requiredBlock {
-                        HStack(spacing: 8) {
+                    formTitle
+                    statusCard
+                    GroupHeader(title: "必填", note: "照片、名字、价格")
+                    FormCard {
+                        HStack(alignment: .center, spacing: 8) {
                             goodsPhotos
-                            aiHint
                             Spacer(minLength: 0)
+                            aiHint
                         }
-                        HStack(alignment: .top, spacing: 14) {
-                            nameField
-                            priceField.frame(width: 118)
-                        }
+                        .padding(.vertical, 12)
+                        FormDivider()
+                        nameField
+                        FormDivider()
+                        priceField
                     }
-                    sectionLabel("选填", large: true)
-                    Group {
-                        row("取货") {
-                            HStack(spacing: 6) {
+                    GroupHeader(title: "选填", note: "填了买家更好决定", large: true).padding(.top, 10)
+                    FormCard {
+                        FieldBlock(label: "取货方式", hint: pickup ? nil : "选了自取，再填自取地点") {
+                            HStack(spacing: 8) {
                                 Chip(text: "自取", on: pickup, act: formAct) { pickup.toggle() }
                                 Chip(text: "可配送", on: deliver, act: formAct) { deliver.toggle() }
                                 if deliver {
-                                    LineField(placeholder: "配送费", text: $deliveryFee, prefix: "配送费 $")
-                                        .keyboardType(.numberPad)
-                                        .focused($focus, equals: .fee)
-                                        .id(Field.fee)
+                                    inputLine("配送费 $", text: $deliveryFee, field: .fee, number: true)
                                 }
                             }
                         }
                         if pickup {
-                            row("地点") { placeChips(surface: Theme.fill) }
+                            FormDivider()
+                            FieldBlock(label: "自取地点") {
+                                inputLine("比如 Monty 楼下", text: $place, field: .place)
+                            }
                         }
-                        DateRow(label: "从几号起可取", value: pickupAfter) { dateField = .pickupAfter }
-                        DateRow(label: "几号前取走", value: pickupBefore) { dateField = .pickupBefore }
-                        contactField
-                        LineField(placeholder: "备注", text: $desc)
-                            .focused($focus, equals: .desc)
-                            .id(Field.desc)
+                        FormDivider()
+                        NavRow(symbol: "calendar", title: "从几号起可取", value: dayText(pickupAfter), empty: pickupAfter == nil) { dateField = .pickupAfter }
+                        FormDivider()
+                        NavRow(symbol: "calendar", title: "几号前取走", value: dayText(pickupBefore), empty: pickupBefore == nil) { dateField = .pickupBefore }
+                    }
+                    FormCard {
+                        FieldBlock(label: "方便的时间", hint: fromProfile(availTime, "defaultTime") ? "来自我的信息" : nil) {
+                            inputLine("比如 工作日晚上、周末", text: $availTime, field: .time)
+                        }
+                        FormDivider()
+                        FieldBlock(label: "微信号", hint: fromProfile(contact, "contact") ? "来自我的信息，别人能看到" : "填了别人能看到") {
+                            contactField
+                        }
+                        FormDivider()
+                        FieldBlock(label: "备注") {
+                            noteEditor("用了多久、有没有毛病", minHeight: 80)
+                        }
                     }
                     .environment(\.formLarge, true)
                     errorLine
                 }
+                .environment(\.formLarge, true)
                 .padding(.horizontal, 16)
-                .padding(.top, 20)
+                .padding(.top, 14)
                 .padding(.bottom, 12)
                 .contentShape(Rectangle())
                 .onTapGesture { focus = nil }
@@ -430,6 +449,51 @@ struct PostForm: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { publishBar }
+    }
+
+    /// 顶上居中的标题
+    private var formTitle: some View {
+        Text(editing != nil && !relist ? (isRent ? "改房子" : "改东西") : (isRent ? "出租房子" : "卖东西"))
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(Theme.ink)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 4)
+    }
+
+    /// 这一项是不是从“我的信息”带进来的
+    private func fromProfile(_ value: String, _ key: String) -> Bool {
+        editing == nil && !value.isEmpty && value == UserDefaults.standard.string(forKey: key)
+    }
+
+    private func dayText(_ date: Date?) -> String {
+        guard let date else { return "不限" }
+        let c = Calendar.current.dateComponents([.month, .day], from: date)
+        return "\(c.month ?? 0)月\(c.day ?? 0)日"
+    }
+
+    /// 白底块里的一行输入：17 号字
+    private func inputLine(_ placeholder: String, text: Binding<String>, field: Field, number: Bool = false) -> some View {
+        TextField(placeholder, text: text)
+            .font(.system(size: 17))
+            .foregroundStyle(Theme.ink)
+            .keyboardType(number ? .numberPad : .default)
+            .focused($focus, equals: field)
+            .id(field)
+            .frame(minHeight: 30)
+    }
+
+    private func noteEditor(_ placeholder: String, minHeight: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            if desc.isEmpty {
+                Text(placeholder).font(.system(size: 17)).foregroundStyle(Theme.hint).padding(.top, 8).padding(.leading, 4)
+            }
+            TextEditor(text: $desc)
+                .focused($focus, equals: .desc)
+                .id(Field.desc)
+                .font(.system(size: 17))
+                .scrollContentBackground(.hidden)
+        }
+        .frame(minHeight: minHeight)
     }
 
     /// 没照片时拍照、相册两块，有了就是一排
@@ -452,10 +516,10 @@ struct PostForm: View {
 
     private func photoTile(_ symbol: String) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 24))
-            .foregroundStyle(Theme.ink)
-            .frame(width: tile, height: tile)
-            .background(Theme.bg, in: RoundedRectangle(cornerRadius: 14))
+            .font(.system(size: 22, weight: .light))
+            .foregroundStyle(Theme.sub)
+            .frame(width: tile, height: tile * 1.25)
+            .background(Theme.fill, in: RoundedRectangle(cornerRadius: 10))
     }
 
     @ViewBuilder
@@ -470,9 +534,9 @@ struct PostForm: View {
                         Image(uiImage: preview).resizable().aspectRatio(contentMode: .fill)
                     }
                 }
-                .frame(width: tile, height: tile)
+                .frame(width: tile, height: tile * 1.25)
                 .background(Theme.fill)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
                 Button {
                     photos.removeAll { $0.id == photo.id }
                 } label: {
@@ -499,7 +563,7 @@ struct PostForm: View {
     @ViewBuilder
     private var aiHint: some View {
         // 照片多了放不下，只在前两格旁边显示
-        if state.aiDescribe || Demo.isOn, editing == nil, photos.count < 2 {
+        if state.aiDescribe || Demo.isOn, editing == nil, photos.count < 3 {
             HStack(spacing: 6) {
                 if aiLoading {
                     HoneyLoader(size: 26)
@@ -511,6 +575,7 @@ struct PostForm: View {
                 }
                 Text(aiLoading ? "AI 正在认\n也可以自己写" : (aiGuessed ? "AI 填好了\n可以改" : "放上照片\nAI 帮你填名字"))
                     .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Theme.sub)
                     .foregroundStyle(Theme.ink)
                     .lineLimit(2)
                     .fixedSize(horizontal: true, vertical: false)
@@ -520,10 +585,10 @@ struct PostForm: View {
     }
 
     private var priceField: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 0) {
+        FieldBlock(label: isRent ? "月租" : "价格", hint: priceSuggested ? "AI 建议价，可以改" : nil, hintColor: Theme.tint) {
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
                 if !price.isEmpty { Text("$") }
-                TextField(isRent ? "$ 月租" : "$ 价格", text: Binding(
+                TextField("$", text: Binding(
                     get: { price },
                     set: {
                         price = $0
@@ -533,63 +598,54 @@ struct PostForm: View {
                 ))
                 .keyboardType(.numberPad)
                 .focused($focus, equals: .price)
+                .fixedSize()
+                if isRent, !price.isEmpty { Text(" /月") }
+                Spacer(minLength: 0)
             }
             .id(Field.price)
-            .font(.system(size: 20, weight: .semibold))
+            .font(.system(size: 22, weight: .semibold))
             .tracking(-0.3)
             .foregroundStyle(Theme.ink)
-            Theme.line.frame(height: 0.5)
-            if priceSuggested {
-                Text("AI 建议价，可以改")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Theme.warn)
-                    .fixedSize()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
     }
 
     private var nameField: some View {
-        VStack(spacing: 6) {
-            TextField(isRent ? "标题，比如一室一厅" : "名字", text: Binding(
+        FieldBlock(label: isRent ? "标题" : "名字", hint: title.count > 14 ? "名字写短一点，细节放备注" : nil) {
+            TextField(isRent ? "比如 Monty 旁一室一厅" : "比如 榉木画架", text: Binding(
                 get: { title },
                 set: {
                     title = $0
                     nameTouched = true
                 }
             ))
-            .font(.system(size: 20, weight: .semibold))
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundStyle(Theme.ink)
             .focused($focus, equals: .name)
             .submitLabel(.next)
             .onSubmit { focus = .price }
             .id(Field.name)
-            Theme.line.frame(height: 0.5)
-            // 卡片上名字只有一行：太长就提醒一句，不硬拦
-            if title.count > 14 {
-                Text("名字写短一点，细节放备注")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.sub)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
     }
 
     /// 编辑时才有：状态三选一
     @ViewBuilder
-    private var statusRow: some View {
+    private var statusCard: some View {
         if let editing, editing.status != "hidden", !relist {
-            row("状态") {
-                HStack(spacing: 6) {
-                    Chip(text: "在售", on: status == "on", act: formAct) { status = "on" }
-                    Chip(text: "已预订", on: status == "reserved", act: formAct) { status = "reserved" }
-                    Chip(text: isRent ? "已租" : "已卖", on: status == "off", act: formAct) { status = "off" }
+            FormCard {
+                FieldBlock(label: "状态") {
+                    HStack(spacing: 8) {
+                        Chip(text: "在售", on: status == "on", act: formAct) { status = "on" }
+                        Chip(text: "已预订", on: status == "reserved", act: formAct) { status = "reserved" }
+                        Chip(text: isRent ? "已租" : "已卖", on: status == "off", act: formAct) { status = "off" }
+                    }
                 }
             }
+            .environment(\.formLarge, true)
         }
     }
 
     private var contactField: some View {
-        LineField(placeholder: "微信号", text: $contact)
+        inputLine("微信号", text: $contact, field: .contact)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .focused($focus, equals: .contact)
@@ -606,12 +662,14 @@ struct PostForm: View {
                     }
                 }
             }
-            LineField(placeholder: "手动填地点", text: Binding(
+            TextField("或者自己填", text: Binding(
                 get: { (isRent ? RENT_PLACES : PLACES).contains(place) ? "" : place },
                 set: { place = $0 }
             ))
+            .font(.system(size: 17))
             .focused($focus, equals: .place)
             .id(Field.place)
+            .frame(minHeight: 30)
         }
     }
 
@@ -620,91 +678,82 @@ struct PostForm: View {
     private var rentForm: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    statusRow
-                    requiredBlock {
-                        FlowLayout(spacing: 8) { rentPhotos }
-                        HStack(alignment: .bottom, spacing: 14) {
-                            nameField
-                            priceField.frame(width: 118)
-                        }
-                        row("出租") {
-                            FlowLayout(spacing: 6) {
-                                Chip(text: "整套", on: unitWhole, act: formAct, surface: Theme.bg) { unitWhole.toggle() }
-                                Chip(text: "单间", on: unitRoom, act: formAct, surface: Theme.bg) { unitRoom.toggle() }
+                VStack(alignment: .leading, spacing: 12) {
+                    formTitle
+                    statusCard
+                    GroupHeader(title: "必填", note: "照片、标题、月租、出租、地段、起租、水电")
+                    FormCard {
+                        FlowLayout(spacing: 8) { rentPhotos }.padding(.vertical, 12)
+                        FormDivider()
+                        nameField
+                        FormDivider()
+                        priceField
+                        FormDivider()
+                        FieldBlock(label: "出租") {
+                            HStack(spacing: 8) {
+                                Chip(text: "整套", on: unitWhole, act: formAct) { unitWhole.toggle() }
+                                Chip(text: "单间", on: unitRoom, act: formAct) { unitRoom.toggle() }
                             }
                         }
-                        row("地段") { placeChips(surface: Theme.bg) }
-                        HStack(spacing: 10) {
-                            DateTile(label: "起", value: from, empty: "选日期", act: formAct, surface: Theme.bg, xun: fromXun) { dateField = .from }
-                            DateTile(label: "止", value: to, empty: "长租", act: formAct, surface: Theme.bg, xun: toXun) { dateField = .to }
+                        FormDivider()
+                        FieldBlock(label: "地段") { placeChips(surface: Theme.fill) }
+                        FormDivider()
+                        FieldBlock(label: "什么时候能住") {
+                            HStack(spacing: 10) {
+                                DateTile(label: "起", value: from, empty: "选日期", act: formAct, xun: fromXun) { dateField = .from }
+                                DateTile(label: "止", value: to, empty: "长租", act: formAct, xun: toXun) { dateField = .to }
+                            }
                         }
-                        row("水电") {
-                            FlowLayout(spacing: 6) {
-                                Chip(text: "包水电", on: utilities == true, act: formAct, surface: Theme.bg) { utilities = true }
-                                Chip(text: "不包水电", on: utilities == false, act: formAct, surface: Theme.bg) { utilities = false }
+                        FormDivider()
+                        FieldBlock(label: "水电") {
+                            HStack(spacing: 8) {
+                                Chip(text: "包水电", on: utilities == true, act: formAct) { utilities = true }
+                                Chip(text: "不包水电", on: utilities == false, act: formAct) { utilities = false }
                             }
                         }
                     }
-                    sectionLabel("选填", large: true)
-                    Group {
-                        contactField
-                        Theme.line.frame(height: 0.5)
-                        section("房型") {
-                            row("几室") { oneOf(["1", "2", "3"], $bedrooms) }
-                            row("几卫") { oneOf(["1", "2", "3"], $baths) }
-                        }
-                        section("费用") {
-                            row("网费") { yesNo("包", "不包", $internet) }
-                            row("押金") { LineField(placeholder: "$", text: $deposit, dollar: true)
-                                .keyboardType(.numberPad)
-                                .focused($focus, equals: .deposit)
-                                .id(Field.deposit) }
-                            row("申请费") { LineField(placeholder: "$", text: $appFee, dollar: true)
-                                .keyboardType(.numberPad)
-                                .focused($focus, equals: .appFee)
-                                .id(Field.appFee) }
-                        }
-                        section("屋里") {
-                            row("家具") { oneOf(["有", "部分有", "没有"], $furniture) }
-                            row("独卫") { yesNo("有", "没有", $privateBath) }
-                        }
-                        section("室友") {
-                            row("现在") { oneOf(Self.roommateCounts, $roommateCount) }
-                            row("情况") { LineField(placeholder: "比如都是学生", text: $roommateNote)
-                                .focused($focus, equals: .note)
-                                .id(Field.note) }
-                        }
-                        section("租约") {
-                            DateTile(label: "租约到期日", value: leaseEnd, empty: "不限", act: formAct) { dateField = .leaseEnd }
-                        }
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("描述").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
-                            ZStack(alignment: .topLeading) {
-                                if desc.isEmpty {
-                                    Text("写详细一点：周边、交通、看房时间")
-                                        .font(.system(size: 15))
-                                        .foregroundStyle(Theme.sub.opacity(0.7))
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 14)
-                                }
-                                TextEditor(text: $desc)
-                                    .focused($focus, equals: .desc)
-                                    .id(Field.desc)
-                                    .font(.system(size: 15))
-                                    .scrollContentBackground(.hidden)
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 6)
-                            }
-                            .frame(minHeight: 130)
-                            .background(Theme.fill, in: RoundedRectangle(cornerRadius: 14))
+                    GroupHeader(title: "选填", note: "填了少来回问", large: true).padding(.top, 10)
+                    FormCard {
+                        FieldBlock(label: "微信号", hint: fromProfile(contact, "contact") ? "来自我的信息，别人能看到" : "填了别人能看到") { contactField }
+                        FormDivider()
+                        FieldBlock(label: "方便看房的时间", hint: fromProfile(availTime, "defaultTime") ? "来自我的信息" : nil) {
+                            inputLine("比如 周末下午", text: $availTime, field: .time)
                         }
                     }
-                    .environment(\.formLarge, true)
+                    FormCard {
+                        FieldBlock(label: "房型") {
+                            VStack(alignment: .leading, spacing: 8) {
+                                oneOf(["1", "2", "3"], $bedrooms, suffix: " 室")
+                                oneOf(["1", "2", "3"], $baths, suffix: " 卫")
+                            }
+                        }
+                        FormDivider()
+                        FieldBlock(label: "家具") { oneOf(["有", "部分有", "没有"], $furniture) }
+                        FormDivider()
+                        FieldBlock(label: "独卫") { yesNo("有", "没有", $privateBath) }
+                    }
+                    FormCard {
+                        FieldBlock(label: "网费") { yesNo("包", "不包", $internet) }
+                        FormDivider()
+                        FieldBlock(label: "押金") { inputLine("$", text: $deposit, field: .deposit, number: true) }
+                        FormDivider()
+                        FieldBlock(label: "申请费") { inputLine("$", text: $appFee, field: .appFee, number: true) }
+                    }
+                    FormCard {
+                        FieldBlock(label: "室友") { oneOf(Self.roommateCounts, $roommateCount) }
+                        FormDivider()
+                        FieldBlock(label: "室友情况") { inputLine("比如都是学生", text: $roommateNote, field: .note) }
+                        FormDivider()
+                        NavRow(symbol: "calendar", title: "租约到期日", value: dayText(leaseEnd), empty: leaseEnd == nil) { dateField = .leaseEnd }
+                    }
+                    FormCard {
+                        FieldBlock(label: "描述") { noteEditor("周边、交通、看房时间", minHeight: 110) }
+                    }
                     errorLine
                 }
+                .environment(\.formLarge, true)
                 .padding(.horizontal, 16)
-                .padding(.top, 20)
+                .padding(.top, 14)
                 .padding(.bottom, 12)
                 .contentShape(Rectangle())
                 .onTapGesture { focus = nil }
@@ -740,42 +789,10 @@ struct PostForm: View {
 
     // MARK: - 小块
 
-    private func requiredBlock<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("必填")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isRent ? Theme.rent : Theme.warn)
-            content()
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(formAct.soft, in: RoundedRectangle(cornerRadius: 20))
-    }
-
-    private func sectionLabel(_ text: String, large: Bool = false) -> some View {
-        Text(text).font(.system(size: large ? 16 : 13, weight: .semibold)).foregroundStyle(Theme.sub)
-    }
-
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
-            content()
-            Theme.line.frame(height: 0.5).padding(.top, 4)
-        }
-    }
-
-    private func row<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            RowLabel(text: label)
-            content()
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func oneOf(_ list: [String], _ binding: Binding<String?>) -> some View {
-        FlowLayout(spacing: 6) {
+    private func oneOf(_ list: [String], _ binding: Binding<String?>, suffix: String = "") -> some View {
+        FlowLayout(spacing: 8) {
             ForEach(list, id: \.self) { value in
-                Chip(text: value, on: binding.wrappedValue == value, act: formAct) {
+                Chip(text: value + suffix, on: binding.wrappedValue == value, act: formAct) {
                     binding.wrappedValue = binding.wrappedValue == value ? nil : value
                 }
             }
@@ -783,7 +800,7 @@ struct PostForm: View {
     }
 
     private func yesNo(_ yes: String, _ no: String, _ binding: Binding<Bool?>) -> some View {
-        FlowLayout(spacing: 6) {
+        FlowLayout(spacing: 8) {
             Chip(text: yes, on: binding.wrappedValue == true, act: formAct) { binding.wrappedValue = binding.wrappedValue == true ? nil : true }
             Chip(text: no, on: binding.wrappedValue == false, act: formAct) { binding.wrappedValue = binding.wrappedValue == false ? nil : false }
         }
@@ -807,7 +824,7 @@ struct PostForm: View {
                     Text(busy ? "正在发" : (relist ? "重新发布" : (editing == nil ? "发布" : "保存")))
                 }
             }
-            .buttonStyle(PrimaryButtonStyle(act: formAct, dimmed: !requiredFilled))
+            .buttonStyle(PrimaryButtonStyle(act: .ink, dimmed: !requiredFilled))
             .disabled(busy)
             // 数字键盘没有回车，打字时这里能收
             if focus != nil {
@@ -966,6 +983,8 @@ struct PostForm: View {
                 input.pickupAfter = day(pickupAfter)
             }
             if relist { input.relist = true }
+            let t = availTime.trimmingCharacters(in: .whitespacesAndNewlines)
+            input.availTime = t.isEmpty ? nil : t
             var saved: Listing
             if let editing {
                 saved = try await API.shared.update(editing.id, input)
@@ -1101,11 +1120,11 @@ private struct DateTile: View {
                 Spacer(minLength: 4)
                 Image(systemName: "calendar").font(.system(size: 17))
             }
-            .foregroundStyle(value == nil ? Theme.sub : act.on)
+            .foregroundStyle(value == nil ? Theme.sub : Theme.ink)
             .padding(.horizontal, 12)
             .frame(height: 56)
             .frame(maxWidth: .infinity)
-            .background(value == nil ? surface : act.fill, in: RoundedRectangle(cornerRadius: 14))
+            .background(value == nil ? surface : Theme.accentSoft, in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label + " " + text)
@@ -1136,6 +1155,10 @@ private struct CalendarSheet: View {
 
     private static let xuns = [(1, "上旬"), (11, "中旬"), (21, "下旬")]
 
+    private var lastDayOfMonth: Int {
+        calendar.range(of: .day, in: .month, for: month)?.count ?? 30
+    }
+
     private var calendar: Calendar {
         var c = Calendar(identifier: .gregorian)
         c.firstWeekday = 1
@@ -1153,7 +1176,7 @@ private struct CalendarSheet: View {
     private var sheetHeight: CGFloat {
         let rows = CGFloat((days.count + 6) / 7)
         var h: CGFloat = 20 + 44 + 8 + 26 + rows * 46 + 8
-        if allowXun { h += 34 + 8 }
+        if allowXun { h += 58 + 8 + 18 + 8 }
         if clearLabel != nil { h += 0.5 + 8 + 44 }
         let bottom = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.keyWindow?.safeAreaInsets.bottom ?? 34
         return h + max(bottom, 8)
@@ -1178,12 +1201,25 @@ private struct CalendarSheet: View {
                 arrow("chevron.right", "下个月", 1)
             }
             if allowXun {
-                HStack(spacing: 6) {
+                // 上中下旬三块放在日历顶上，写清是几号到几号
+                HStack(spacing: 10) {
                     ForEach(Self.xuns, id: \.0) { first, name in
-                        Chip(text: name, on: chosenXunName == name, act: .rent) { pickXun(first) }
+                        let on = chosenXunName == name
+                        Button { pickXun(first) } label: {
+                            VStack(spacing: 2) {
+                                Text(name).font(.system(size: 17, weight: .bold))
+                                Text(first == 21 ? "21–\(lastDayOfMonth) 号" : "\(first)–\(first + 9) 号").font(.system(size: 13))
+                                    .foregroundStyle(on ? Theme.onBuy.opacity(0.75) : Theme.sub)
+                            }
+                            .foregroundStyle(on ? Theme.onBuy : Theme.ink)
+                            .frame(maxWidth: .infinity, minHeight: 58)
+                            .background(on ? Theme.accent : Theme.fill, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(on ? .isSelected : [])
                     }
-                    Spacer()
                 }
+                Text("选一旬，或者点某一天").font(.system(size: 13)).foregroundStyle(Theme.hint).frame(maxWidth: .infinity)
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 2) {
                 ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { d in
@@ -1274,7 +1310,7 @@ private struct CalendarSheet: View {
                 if inXun {
                     UnevenRoundedRectangle(topLeadingRadius: lead, bottomLeadingRadius: lead,
                                            bottomTrailingRadius: trail, topTrailingRadius: trail)
-                        .fill(Theme.rentSoft)
+                        .fill(Theme.accentSoft)
                 }
                 if selected { Hexagon().fill(Theme.accent).frame(width: 40, height: 40) }
                 Text("\(n)")

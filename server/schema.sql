@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS listings (
   merge_key TEXT,                -- 同一人同一物品合并用
   sender_hash TEXT,              -- 发送者的带密钥哈希，只用来匹配，不存不显示明文
   sold_at INTEGER,
-  thumb TEXT,                    -- 删掉后留给本人记录的小图               -- 标记卖完的时间；列表里只留 7 天
+  thumb TEXT,
+  avail_time TEXT,               -- 方便的时间：取货或看房                    -- 删掉后留给本人记录的小图               -- 标记卖完的时间；列表里只留 7 天
   place TEXT NOT NULL,
   descr TEXT NOT NULL DEFAULT '',
   contact TEXT NOT NULL,         -- 微信号，只给登录的人看

@@ -149,12 +149,14 @@ function checkListing(b, userId, existing = []) {
   const kind = b.kind;
   if (kind !== "goods" && kind !== "rent") throw new Fail(400, "bad_kind");
   const title = clean(b.title, 40), place = clean(b.place, 40), descr = clean(b.desc, kind === "rent" ? MAX_RENT_DESC : 500), contact = clean(b.contact, 40);
+  // 方便的时间：东西是方便取货，房子是方便看房
+  const availTime = clean(b.availTime, 40);
   const price = Number(b.price);
   if (!title) throw new Fail(400, "need_title");
   if (!Number.isInteger(price) || price < 0 || price > 1_000_000) throw new Fail(400, "bad_price");
   if (kind === "rent" && price === 0) throw new Fail(400, "bad_price");
   if (kind === "rent" && !place) throw new Fail(400, "need_place");
-  const text = [title, place, descr].join(" ");
+  const text = [title, place, descr, availTime].join(" ");
   if (BANNED.some(r => r.test(text))) throw new Fail(422, "not_allowed");
   if (contact) checkWechat(contact);
 
@@ -165,7 +167,7 @@ function checkListing(b, userId, existing = []) {
     if (typeof k !== "string" || !k.startsWith(userId + "/") || !/^[0-9a-f]+\/[0-9a-f]+\.jpg$/.test(k)) throw new Fail(400, "bad_photo");
   }
 
-  const out = { kind, title, price, place, descr, contact, photos: JSON.stringify(photos), cat: null, cond: null, from_date: null, to_date: null, from_prec: null, to_prec: null, lease_end: null, utilities: 0, private_bath: 0, delivery: null, delivery_fee: null, pickup_before: null, pickup_after: null, long_term: 0, furnished: 0, room_type: null, unit_type: null, furniture: null, internet: 0, deposit: null, app_fee: null, parking: null, pets: null, roommates: null };
+  const out = { kind, title, price, place, descr, contact, avail_time: availTime || null, photos: JSON.stringify(photos), cat: null, cond: null, from_date: null, to_date: null, from_prec: null, to_prec: null, lease_end: null, utilities: 0, private_bath: 0, delivery: null, delivery_fee: null, pickup_before: null, pickup_after: null, long_term: 0, furnished: 0, room_type: null, unit_type: null, furniture: null, internet: 0, deposit: null, app_fee: null, parking: null, pets: null, roommates: null };
   if (kind === "goods") {
     // 只有照片、名字、价格、微信号是必须的；分类没选归其他，其余没填就不显示
     const cat = b.cat == null || b.cat === "" ? "other" : b.cat;
@@ -220,7 +222,7 @@ function view(row, origin, viewer) {
     roomType: row.room_type || null, unitType: row.unit_type || null, internet: triView(row.internet), furniture: row.furniture || null, deposit: row.deposit ?? null, appFee: row.app_fee ?? null,
     parking: row.parking || null, pets: row.pets || null, roommates: row.roommates || null, to: row.to_date,
     leaseEnd: row.lease_end, utilities: !!row.utilities, privateBath: triView(row.private_bath), delivery: row.delivery,
-    place: row.place, desc: row.descr, status: row.status,
+    place: row.place, desc: row.descr, status: row.status, availTime: row.avail_time || null,
     contact: group || !row.contact || (row.status === "off" && !mine) ? null : row.contact,
     soldAt: row.status === "off" ? (row.sold_at ?? null) : null,
     sellerName: group ? (row.source_poster || null) : (nick || defaultName(row.user_id)),
@@ -362,8 +364,8 @@ async function createListing(req, env, url) {
   if (await bump(env, u.id, "post") > LIMITS.post) throw new Fail(429, "daily_limit");
   const id = newId(), now = Date.now();
   await bump(env, "*", "post");
-  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, from_date, to_date, lease_end, from_prec, to_prec, utilities, private_bath, delivery, delivery_fee, pickup_before, pickup_after, long_term, furnished, room_type, unit_type, furniture, internet, deposit, app_fee, parking, pets, roommates, place, descr, contact, photos, status, created_at, updated_at, bumped_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?)")
-    .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.from_prec, v.to_prec, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, now, now, now).run();
+  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, from_date, to_date, lease_end, from_prec, to_prec, utilities, private_bath, delivery, delivery_fee, pickup_before, pickup_after, long_term, furnished, room_type, unit_type, furniture, internet, deposit, app_fee, parking, pets, roommates, place, descr, contact, avail_time, photos, status, created_at, updated_at, bumped_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?)")
+    .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.from_prec, v.to_prec, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.avail_time, v.photos, now, now, now).run();
   const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
   return json(view(row, url.origin, u), 201);
 }
@@ -388,8 +390,8 @@ async function updateListing(req, env, url, id) {
     const live = await env.DB.prepare("SELECT COUNT(*) AS n FROM listings WHERE user_id = ? AND status = 'on'").bind(u.id).first();
     if (live.n >= MAX_LIVE_LISTINGS) throw new Fail(429, "too_many_listings");
   }
-  await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, from_date=?, to_date=?, lease_end=?, from_prec=?, to_prec=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, room_type=?, unit_type=?, furniture=?, internet=?, deposit=?, app_fee=?, parking=?, pets=?, roommates=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
-    .bind(v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.from_prec, v.to_prec, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, Date.now(), id).run();
+  await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, from_date=?, to_date=?, lease_end=?, from_prec=?, to_prec=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, room_type=?, unit_type=?, furniture=?, internet=?, deposit=?, app_fee=?, parking=?, pets=?, roommates=?, place=?, descr=?, contact=?, avail_time=?, photos=?, updated_at=? WHERE id=?")
+    .bind(v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.from_prec, v.to_prec, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.avail_time, v.photos, Date.now(), id).run();
   if (v.price !== row.price) await clearScore(env, id);
   const kept = new Set(JSON.parse(v.photos));
   await removePhotos(env, JSON.parse(row.photos).filter(k => !kept.has(k)));
