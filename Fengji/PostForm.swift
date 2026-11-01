@@ -379,8 +379,8 @@ struct PostForm: View {
                             Spacer(minLength: 0)
                         }
                         HStack(alignment: .top, spacing: 14) {
-                            priceField.frame(width: 118)
                             nameField
+                            priceField.frame(width: 118)
                         }
                     }
                     sectionLabel("选填")
@@ -553,6 +553,8 @@ struct PostForm: View {
             ))
             .font(.system(size: 20, weight: .semibold))
             .focused($focus, equals: .name)
+            .submitLabel(.next)
+            .onSubmit { focus = .price }
             .id(Field.name)
             Theme.line.frame(height: 0.5)
             // 卡片上名字只有一行：太长就提醒一句，不硬拦
@@ -616,8 +618,8 @@ struct PostForm: View {
                     requiredBlock {
                         FlowLayout(spacing: 8) { rentPhotos }
                         HStack(alignment: .bottom, spacing: 14) {
-                            priceField.frame(width: 118)
                             nameField
+                            priceField.frame(width: 118)
                         }
                         row("出租") {
                             FlowLayout(spacing: 6) {
