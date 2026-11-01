@@ -84,6 +84,8 @@ struct ClaimView: View {
                             state.toast("已复制")
                         } label: {
                             Label("复制", systemImage: "doc.on.doc")
+                                .lineLimit(1)
+                                .fixedSize()
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(Theme.ink)
                                 .padding(.horizontal, 12)
@@ -133,7 +135,7 @@ struct ClaimView: View {
             }
             .frame(height: 80)
             VStack(spacing: 4) {
-                Text("认领了 \(status?.count ?? 0) 件").font(.system(size: 26, weight: .bold)).foregroundStyle(Theme.ink)
+                Text("认领了 \(status?.count ?? 0) 件").font(.system(size: 26, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1)
                 Text("都在“我发的”里了").font(.system(size: 15)).foregroundStyle(Theme.sub)
             }
             FormCard {

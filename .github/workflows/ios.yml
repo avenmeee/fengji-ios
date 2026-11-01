@@ -77,6 +77,7 @@ jobs:
             if [ -n "$ONLY" ] && ! echo "$1" | grep -Eq "$ONLY"; then return 0; fi
             xcrun simctl terminate "$UDID" com.avenmeee.fengji || true
             xcrun simctl ui "$UDID" appearance "$3"
+            xcrun simctl ui "$UDID" content_size "${4:-large}" || true
             SIMCTL_CHILD_SH_DEMO="$2" xcrun simctl launch "$UDID" com.avenmeee.fengji
             sleep 4
             xcrun simctl io "$UDID" screenshot "shots/$1.png"
@@ -157,6 +158,14 @@ jobs:
           shot "73-帖子没有了" detail-gone light
           shot "74-我还没发过" me-empty light
           shot "75-发布缺必填" form-missing light
+          shot "80-大字-发布" form-filled light extra-extra-large
+          shot "81-大字-出租" rentform-filled light extra-extra-large
+          shot "82-大字-设置" settings light extra-extra-large
+          shot "83-大字-我" wants light extra-extra-large
+          shot "84-大字-详情" detail light extra-extra-large
+          shot "85-大字-我的信息" myinfo light extra-extra-large
+          shot "86-大字-买" buy light extra-extra-large
+          shot "87-大字-记录" records light extra-extra-large
           shot "42-记录" records light
           shot "43-举报规则" rules light
           shot "44-设置-深" settings dark

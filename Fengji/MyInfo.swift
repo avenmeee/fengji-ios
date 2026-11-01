@@ -31,7 +31,7 @@ struct GroupLabel: View {
     let text: String
 
     var body: some View {
-        Text(text).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.sub)
+        Text(text).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.sub).lineLimit(1)
     }
 }
 
@@ -49,8 +49,12 @@ struct SettingRow<Trailing: View>: View {
                 Image(systemName: symbol).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.sub)
             }
             Text(title).font(.system(size: 16)).foregroundStyle(color)
+                .lineLimit(1)
+                .layoutPriority(1)
             Spacer(minLength: 8)
             trailing()
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
         }
         .frame(minHeight: 46)
         .contentShape(Rectangle())
@@ -248,7 +252,7 @@ struct MyInfoView: View {
             Button { open(.name) } label: {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
-                        Text(me?.name ?? "").font(.system(size: 25, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1)
+                        Text(me?.name ?? "").font(.system(size: 25, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1).minimumScaleFactor(0.8)
                         Image(systemName: "pencil").font(.system(size: 15)).foregroundStyle(Theme.hint)
                     }
                     Text("别人看到的你").font(.system(size: 13)).foregroundStyle(Theme.hint)
@@ -271,6 +275,7 @@ struct MyInfoView: View {
                         .font(.system(size: 15))
                         .foregroundStyle(value.isEmpty ? Theme.hint : Theme.sub)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.hint)
                 }
             }
@@ -512,8 +517,8 @@ struct RecordRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 6) {
                     Text(item.title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
-                    Text(line).font(.system(size: 15)).tracking(-0.2).foregroundStyle(Theme.sub)
-                    Text(keepText).font(.system(size: 13)).foregroundStyle(Theme.hint)
+                    Text(line).font(.system(size: 15)).tracking(-0.2).foregroundStyle(Theme.sub).lineLimit(1).minimumScaleFactor(0.85)
+                    Text(keepText).font(.system(size: 13)).foregroundStyle(Theme.hint).lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
@@ -522,6 +527,8 @@ struct RecordRow: View {
             HStack(spacing: 10) {
                 Button(action: relist) {
                     Label("重新上架", systemImage: "arrow.triangle.2.circlepath")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Theme.ink)
                         .frame(maxWidth: .infinity, minHeight: 44)
@@ -530,6 +537,7 @@ struct RecordRow: View {
                 .buttonStyle(.plain)
                 Button(action: purge) {
                     Text("永久删除")
+                        .lineLimit(1)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Theme.warn)
                         .frame(maxWidth: .infinity, minHeight: 44)
@@ -565,7 +573,7 @@ struct RulesView: View {
                             HStack(alignment: .top, spacing: 14) {
                                 NumberHex(n: i + 1)
                                 VStack(alignment: .leading, spacing: 6) {
-                                    Text(step.0).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+                                    Text(step.0).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1)
                                     Text(step.1).font(.system(size: 15)).foregroundStyle(Theme.sub).lineSpacing(4)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }

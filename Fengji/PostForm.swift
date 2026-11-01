@@ -405,13 +405,11 @@ struct PostForm: View {
                             HStack(spacing: 8) {
                                 Chip(text: "自取", on: pickup, act: formAct) { pickup.toggle() }
                                 Chip(text: "可配送", on: deliver, act: formAct) { deliver.toggle() }
-                                if deliver {
-                                    HStack(spacing: 2) {
-                                        Text("配送费 $").font(.system(size: 17)).foregroundStyle(Theme.sub)
-                                        inputLine("0", text: $deliveryFee, field: .fee, number: true)
-                                    }
-                                }
                             }
+                        }
+                        if deliver {
+                            FormDivider()
+                            FieldBlock(label: "配送费") { dollarLine("0，不收就空着", text: $deliveryFee, field: .fee) }
                         }
                         if pickup {
                             FormDivider()
@@ -484,10 +482,20 @@ struct PostForm: View {
         TextField(placeholder, text: text)
             .font(.system(size: 17))
             .foregroundStyle(Theme.ink)
+            .lineLimit(1)
             .keyboardType(number ? .numberPad : .default)
             .focused($focus, equals: field)
             .id(field)
             .frame(minHeight: 30)
+    }
+
+    /// 钱数输入：$ 当前缀，一行放下
+    private func dollarLine(_ placeholder: String, text: Binding<String>, field: Field) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 2) {
+            Text("$").font(.system(size: 17)).foregroundStyle(text.wrappedValue.isEmpty ? Theme.hint : Theme.ink)
+            inputLine(placeholder, text: text, field: field, number: true)
+        }
+        .lineLimit(1)
     }
 
     private func noteEditor(_ placeholder: String, minHeight: CGFloat) -> some View {
@@ -584,8 +592,8 @@ struct PostForm: View {
                 Text(aiLoading ? "AI 正在认\n也可以自己写" : (aiGuessed ? "AI 填好了\n可以改" : "放上照片\nAI 帮你填名字"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.sub)
-                    .foregroundStyle(Theme.ink)
                     .lineLimit(2)
+                    .minimumScaleFactor(0.85)
                     .fixedSize(horizontal: true, vertical: false)
             }
             .accessibilityElement(children: .combine)
@@ -747,9 +755,9 @@ struct PostForm: View {
                     FormCard {
                         FieldBlock(label: "网费") { yesNo("包", "不包", $internet) }
                         FormDivider()
-                        FieldBlock(label: "押金") { inputLine("$", text: $deposit, field: .deposit, number: true) }
+                        FieldBlock(label: "押金") { dollarLine("", text: $deposit, field: .deposit) }
                         FormDivider()
-                        FieldBlock(label: "申请费") { inputLine("$", text: $appFee, field: .appFee, number: true) }
+                        FieldBlock(label: "申请费") { dollarLine("", text: $appFee, field: .appFee) }
                     }
                     FormCard {
                         FieldBlock(label: "室友") { oneOf(Self.roommateCounts, $roommateCount) }
@@ -833,7 +841,7 @@ struct PostForm: View {
             } label: {
                 HStack(spacing: 8) {
                     if busy { HoneyLoader(size: 22) }
-                    Text(busy ? "正在发" : (relist ? "重新发布" : (editing == nil ? "发布" : "保存")))
+                    Text(busy ? "正在发" : (relist ? "重新发布" : (editing == nil ? "发布" : "保存"))).lineLimit(1)
                 }
             }
             .buttonStyle(PrimaryButtonStyle(act: .ink, dimmed: !requiredFilled))
@@ -1147,8 +1155,8 @@ private struct DateTile: View {
         Button(action: action) {
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(label).font(.system(size: 13))
-                    Text(text).font(.system(size: 16, weight: .semibold))
+                    Text(label).font(.system(size: 13)).lineLimit(1)
+                    Text(text).font(.system(size: 16, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.8)
                 }
                 Spacer(minLength: 4)
                 Image(systemName: "calendar").font(.system(size: 17))
@@ -1240,8 +1248,8 @@ private struct CalendarSheet: View {
                         let on = chosenXunName == name
                         Button { pickXun(first) } label: {
                             VStack(spacing: 2) {
-                                Text(name).font(.system(size: 17, weight: .bold))
-                                Text(first == 21 ? "21–\(lastDayOfMonth) 号" : "\(first)–\(first + 9) 号").font(.system(size: 13))
+                                Text(name).font(.system(size: 17, weight: .bold)).lineLimit(1)
+                                Text(first == 21 ? "21–\(lastDayOfMonth) 号" : "\(first)–\(first + 9) 号").font(.system(size: 13)).lineLimit(1).minimumScaleFactor(0.8)
                                     .foregroundStyle(on ? Theme.onBuy.opacity(0.75) : Theme.sub)
                             }
                             .foregroundStyle(on ? Theme.onBuy : Theme.ink)

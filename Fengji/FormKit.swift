@@ -11,7 +11,7 @@ struct GroupHeader: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title).font(.system(size: large ? 19 : 15, weight: .bold)).foregroundStyle(Theme.ink)
+            Text(title).font(.system(size: large ? 19 : 15, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1).layoutPriority(1)
             if let note {
                 Text(note).font(.system(size: 12.5)).foregroundStyle(Theme.hint).lineLimit(1)
             }
@@ -53,7 +53,7 @@ struct FieldBlock<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(label).font(.system(size: 13)).foregroundStyle(Theme.sub)
+            Text(label).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
             content()
             if let hint {
                 Text(hint).font(.system(size: 12.5)).foregroundStyle(hintColor)
@@ -79,9 +79,9 @@ struct NavRow: View {
                     Hexagon().fill(Theme.fill).frame(width: 30, height: 30)
                     Image(systemName: symbol).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.sub)
                 }
-                Text(title).font(.system(size: 17)).foregroundStyle(Theme.ink)
+                Text(title).font(.system(size: 17)).foregroundStyle(Theme.ink).lineLimit(1).layoutPriority(1)
                 Spacer(minLength: 8)
-                Text(value).font(.system(size: 15)).foregroundStyle(empty ? Theme.hint : Theme.sub).lineLimit(1)
+                Text(value).font(.system(size: 15)).foregroundStyle(empty ? Theme.hint : Theme.sub).lineLimit(1).minimumScaleFactor(0.85)
                 Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.hint)
             }
             .frame(minHeight: 54)

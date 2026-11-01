@@ -90,11 +90,12 @@ struct MeView: View {
                         SellerAvatar(name: state.me?.name ?? "", color: state.me?.color ?? 0, named: state.me?.named ?? false, size: 64, url: state.me?.avatar)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(state.me?.name ?? "")
+                                .minimumScaleFactor(0.8)
                                 .font(.system(size: 25, weight: .bold))
                                 .foregroundStyle(Theme.ink)
                                 .lineLimit(1)
                             HStack(spacing: 4) {
-                                Text("我的信息")
+                                Text("我的信息").lineLimit(1)
                                 Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
                             }
                             .font(.system(size: 15))
@@ -159,7 +160,7 @@ struct MeView: View {
                 Text("我发的").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
                 Spacer()
                 if !visible.isEmpty {
-                    Text(mineCounts).font(.system(size: 13)).foregroundStyle(Theme.hint)
+                    Text(mineCounts).font(.system(size: 13)).foregroundStyle(Theme.hint).lineLimit(1)
                 }
             }.padding(.top, 10))
             if visible.isEmpty {
@@ -332,13 +333,13 @@ struct WantRow: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 6) {
-                Text(want.title + " · " + when).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
+                Text(want.title + " · " + when).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1).truncationMode(.middle)
                 if !want.message.isEmpty {
                     Text(want.message).font(.system(size: 16)).foregroundStyle(Theme.ink)
                 }
                 Button(action: copy) {
                     HStack(spacing: 6) {
-                        Text(want.contact).font(.system(size: 16, weight: .semibold))
+                        Text(want.contact).font(.system(size: 16, weight: .semibold)).lineLimit(1)
                         Image(systemName: "doc.on.doc").font(.system(size: 13))
                     }
                     .foregroundStyle(Theme.ink)
@@ -386,7 +387,7 @@ struct MineRow: View {
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(item.isSold ? Theme.sub : Theme.ink)
                             .lineLimit(1)
-                        PriceTag(item: item).padding(-8)
+                        PriceTag(item: item).padding(-8).fixedSize()
                         if item.status == "hidden" {
                             Text(item.statusText).font(.system(size: 13)).foregroundStyle(Theme.warn)
                         }
@@ -430,7 +431,7 @@ struct MineActions: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 8) {
                     Text(item.title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
-                    PriceTag(item: item).padding(-8)
+                    PriceTag(item: item).padding(-8).fixedSize()
                 }
                 Spacer(minLength: 0)
             }

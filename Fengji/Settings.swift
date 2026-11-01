@@ -36,7 +36,7 @@ struct SettingsView: View {
                             Button { appearance = key } label: {
                                 HStack(spacing: 6) {
                                     Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
-                                    Text(label).font(.system(size: 16, weight: on ? .semibold : .regular))
+                                    Text(label).font(.system(size: 16, weight: on ? .semibold : .regular)).lineLimit(1).minimumScaleFactor(0.8)
                                 }
                                 .foregroundStyle(on ? Theme.onBuy : Theme.ink)
                                 .frame(maxWidth: .infinity, minHeight: 44)
@@ -185,7 +185,7 @@ struct SettingsView: View {
         HStack(spacing: 16) {
             SellerAvatar(name: state.me?.name ?? "", color: state.me?.color, named: state.me?.named ?? false, size: 60, url: state.me?.avatar)
             VStack(alignment: .leading, spacing: 4) {
-                Text(state.me?.name ?? "").font(.system(size: 20, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1)
+                Text(state.me?.name ?? "").font(.system(size: 20, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1).minimumScaleFactor(0.85)
                 Text(infoLine).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -224,7 +224,7 @@ struct TermsView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(spacing: 10) {
                                     NumberHex(n: i + 1, size: 24)
-                                    Text(item.0).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+                                    Text(item.0).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1)
                                 }
                                 Text(item.1).font(.system(size: 15)).foregroundStyle(Theme.sub).lineSpacing(4)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -310,7 +310,7 @@ struct BlockedView: View {
             SellerAvatar(name: b.name ?? "", color: b.color, named: b.named ?? false, size: 32, url: b.avatar)
             Text(b.name ?? "已屏蔽").font(.system(size: 16)).foregroundStyle(Theme.ink).lineLimit(1)
             Spacer(minLength: 6)
-            Text("\(d.month ?? 0)月\(d.day ?? 0)日屏蔽").font(.system(size: 13)).foregroundStyle(Theme.hint)
+            Text("\(d.month ?? 0)月\(d.day ?? 0)日屏蔽").font(.system(size: 13)).foregroundStyle(Theme.hint).lineLimit(1).fixedSize()
             Button("解除") {
                 Task {
                     do {
@@ -323,6 +323,8 @@ struct BlockedView: View {
                 }
             }
             .font(.system(size: 15, weight: .semibold))
+            .lineLimit(1)
+            .fixedSize()
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 14)
             .frame(height: 34)
@@ -409,6 +411,8 @@ struct AdminReportsView: View {
                         HStack(spacing: 8) {
                             Text(typeName(r))
                                 .font(.system(size: 12, weight: .semibold))
+                                .lineLimit(1)
+                                .fixedSize()
                                 .foregroundStyle(Theme.sub)
                                 .padding(.horizontal, 7)
                                 .frame(height: 22)
@@ -417,6 +421,7 @@ struct AdminReportsView: View {
                         }
                         Text(r.reason + ((r.count ?? 1) > 1 ? " · \(r.count ?? 1) 人举报" : ""))
                             .font(.system(size: 15, weight: .semibold))
+                            .lineLimit(1)
                             .foregroundStyle(Theme.warn)
                         if r.type == "want", let c = r.content {
                             Text("“\(c)”").font(.system(size: 14)).foregroundStyle(Theme.ink).lineLimit(2)
@@ -463,6 +468,8 @@ struct AdminReportsView: View {
         Button { run(work) } label: {
             Text(title)
                 .font(.system(size: 15, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .foregroundStyle(danger ? Theme.warn : Theme.ink)
                 .frame(maxWidth: .infinity, minHeight: 40)
                 .background(danger ? Color.clear : Theme.bg.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))

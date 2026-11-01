@@ -138,9 +138,9 @@ struct OfflineBanner: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "wifi").font(.system(size: 15, weight: .semibold))
-            Text("没连上，下拉也能再试").font(.system(size: 15))
+            Text("没连上，下拉也能再试").font(.system(size: 15)).lineLimit(1).minimumScaleFactor(0.85)
             Spacer()
-            Button("再试", action: retry).font(.system(size: 15, weight: .bold)).buttonStyle(.plain)
+            Button("再试", action: retry).font(.system(size: 15, weight: .bold)).lineLimit(1).fixedSize().buttonStyle(.plain)
         }
         .foregroundStyle(Theme.warn)
         .padding(.horizontal, 16)
@@ -166,6 +166,8 @@ struct TopBar<Filters: View>: View {
                     query = ""
                     searching = false
                 }
+                .lineLimit(1)
+                .fixedSize()
                 .font(.system(size: 17))
                 .foregroundStyle(Theme.ink)
                 .buttonStyle(.plain)
@@ -213,6 +215,8 @@ struct TextTabs: View {
                 } label: {
                     Text(opt.label)
                         .font(.system(size: 17, weight: on ? .semibold : .regular))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                         .foregroundStyle(on ? Theme.ink : Theme.sub)
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
@@ -459,6 +463,8 @@ struct PriceTag: View {
             if item.isSold {
                 Text(item.isRent ? "已租出" : "已卖出")
                     .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+                    .fixedSize()
                     .foregroundStyle(Theme.bg)
                     .padding(.horizontal, 10)
                     .frame(height: 28)
@@ -474,10 +480,11 @@ struct PriceTag: View {
                         }
                     }
                     if item.isReserved {
-                        Text("已预订").font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.warn)
+                        Text("已预订").font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.warn).fixedSize()
                     }
                     ScoreBadge(score: item.score, size: 15, playID: item.id, labelSize: 11.5)
                 }
+                .lineLimit(1)
                 .foregroundStyle(Theme.ink)
                 .padding(.horizontal, 9)
                 .frame(height: 28)
@@ -608,7 +615,7 @@ struct RentRow: View {
                     .lineLimit(1)
                 let facts = [item.place, item.shortPeriod].filter { !$0.isEmpty }.joined(separator: " · ")
                 if !facts.isEmpty {
-                    Text(facts).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
+                    Text(facts).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1).truncationMode(.tail)
                 }
                 if showSeller { SellerLine(item: item, avatarSize: 15, fontSize: 12) }
             }

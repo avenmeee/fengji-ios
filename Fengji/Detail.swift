@@ -206,7 +206,7 @@ struct DetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 16)
             .padding(.bottom, 14)
-            if !item.desc.isEmpty || !item.infoRows.isEmpty || item.isGroup {
+            if !item.desc.isEmpty || !item.infoRows.isEmpty {
                 infoBlock
             }
         }
@@ -229,7 +229,7 @@ struct DetailView: View {
                     .tracking(-0.3)
                     .strikethrough(item.isSold)
                     .foregroundStyle(item.isSold ? Theme.sub : Theme.ink)
-                if item.isRent { Text("/月").font(.system(size: 13)).foregroundStyle(Theme.sub) }
+                if item.isRent { Text("/月").font(.system(size: 13)).foregroundStyle(Theme.sub).fixedSize() }
             }
             if !item.isSold {
                 ScoreBadge(score: item.score, size: 18, labelSize: 13)
@@ -254,7 +254,7 @@ struct DetailView: View {
                                 .font(.system(size: 15, weight: .light))
                                 .foregroundStyle(Theme.sub)
                                 .frame(width: 20)
-                            Text(row.label).font(.system(size: 13)).foregroundStyle(Theme.sub).frame(width: 30, alignment: .leading)
+                            Text(row.label).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1).fixedSize().frame(minWidth: 30, alignment: .leading)
                             Text(row.value).font(.system(size: 15)).foregroundStyle(Theme.ink).frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
@@ -262,13 +262,6 @@ struct DetailView: View {
             }
             if item.isRent, !item.desc.isEmpty, !item.infoRows.isEmpty { Theme.line.frame(height: 0.5) }
             if item.isRent, !item.desc.isEmpty { descText }
-            // 群里搬来的：提醒先去群里问（认领后就是本人的帖子，不显示）
-            if item.isGroup {
-                Text("这条是从群里搬来的，可能已经卖掉了，先去群里问一下。")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.sub)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -533,7 +526,7 @@ struct DetailView: View {
                 Image(systemName: symbol).font(.system(size: 13)).foregroundStyle(Theme.sub)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(label).font(.system(size: 13)).foregroundStyle(Theme.sub)
+                Text(label).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
                 Text(value).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1).minimumScaleFactor(0.7)
             }
             Spacer(minLength: 6)
@@ -543,6 +536,8 @@ struct DetailView: View {
                 state.toast("已复制")
             } label: {
                 Label(copied == label ? "已复制" : "复制", systemImage: copied == label ? "checkmark" : "doc.on.doc")
+                    .lineLimit(1)
+                    .fixedSize()
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.ink)
                     .padding(.horizontal, 12)
@@ -683,7 +678,7 @@ struct WantSheet: View {
                     .overlay { ListingImage(item: item, maxPixel: 240) }
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("想要 " + item.title).font(.system(size: 19, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1)
+                    Text("想要 " + item.title).font(.system(size: 19, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1).minimumScaleFactor(0.85)
                     PriceTag(item: item).padding(-8)
                 }
                 Spacer(minLength: 0)

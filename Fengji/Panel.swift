@@ -73,7 +73,7 @@ struct PanelConfirm: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink)
+            Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
             if let message {
                 Text(message).font(.subheadline).foregroundStyle(Theme.sub).multilineTextAlignment(.center)
             }
@@ -81,6 +81,7 @@ struct PanelConfirm: View {
                 .buttonStyle(PrimaryButtonStyle(act: .sell))
                 .padding(.top, 4)
             Button("取消", action: onCancel)
+                .lineLimit(1)
                 .font(.system(size: 16))
                 .foregroundStyle(Theme.ink)
                 .frame(maxWidth: .infinity, minHeight: 44)

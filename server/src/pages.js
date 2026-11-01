@@ -36,7 +36,7 @@ export async function listingPage(env, url, id) {
     <p class="sub">${esc(facts(row))}</p>
     ${row.descr ? `<p>${esc(row.descr)}</p>` : ""}
     ${row.source_type === "group"
-      ? `<p>去 <b>${esc(row.source_group)}</b> 群找 <b>${esc(row.source_poster)}</b></p><p class="sub">${daysAgo(row.source_posted_at)}发在群里。从微信群搬来的，可能已经卖掉了，先去群里问一下。</p>`
+      ? `<p>去 <b>${esc(row.source_group)}</b> 群找 <b>${esc(row.source_poster)}</b></p><p class="sub">${daysAgo(row.source_posted_at)}发在群里。</p>`
       : row.contact ? `<p>微信号：<b>${esc(row.contact)}</b></p>` : `<p>在蜂集里点“想要”留言。</p>`}
     <p class="sub">同学自办，非学校官方。不经手钱，当面看过再付。</p>${app}`, head);
 }

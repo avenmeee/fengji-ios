@@ -104,7 +104,7 @@ struct Chip: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 if on { Image(systemName: "checkmark").font(.system(size: large ? 13 : 11, weight: .bold)) }
-                Text(text)
+                Text(text).lineLimit(1).fixedSize()
             }
                 .font(.system(size: large ? 17 : 14, weight: on ? .semibold : .regular))
                 .foregroundStyle(on ? act.on : Theme.ink)
@@ -140,6 +140,8 @@ struct PrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
             .font(.system(size: 17, weight: .semibold))
             .foregroundStyle(act.on)
             .frame(maxWidth: .infinity)
@@ -156,6 +158,8 @@ struct ActionChip: View {
     var body: some View {
         Button(action: action) {
             Text(text)
+                .lineLimit(1)
+                .fixedSize()
                 .font(.subheadline)
                 .foregroundStyle(danger ? Theme.warn : Theme.ink)
                 .padding(.horizontal, 12)
