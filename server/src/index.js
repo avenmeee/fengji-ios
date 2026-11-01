@@ -232,11 +232,52 @@ function view(row, origin, viewer) {
   };
 }
 
+// 首页排序（10-31 用户定）：
+// 1. 发布 6 小时内的放最前，按时间新的在前；
+// 2. 其余按 划算系数 × 新鲜度，新鲜度每 2.5 天减半（擦亮、重新上架会刷新 bumped_at）；
+// 3. 同一个卖家最多连着 2 件，第 3 件往后挪；
+// 4. 卖完的（7 天内）放在全部在卖的后面，按卖出时间。
+// 分数随时间变，所以第一页记下 now，编进 next 里，后面几页用同一个 now 算，翻页不错位。
+const FRESH_TOP = 6 * 3600000, HALF_LIFE_HOURS = 60, FEED_POOL = 300;
+const DEAL = { 4: 1.6, 3: 1.3, 2: 1.0, 1: 0.7 };
+// next = 分钟数 × 10000 + 偏移；老版本 App 只认数字，这样也能用
+const encodeNext = (nowMs, offset) => Math.floor(nowMs / 60000) * 10000 + offset;
+const decodeNext = n => n >= 10000 ? { now: Math.floor(n / 10000) * 60000, offset: n % 10000 } : { now: null, offset: n };
+const sellerKey = r => r.source_type === "group" ? "g:" + (r.sender_hash || (r.source_poster || "") + "\u0000" + (r.source_group || "")) : "u:" + r.user_id;
+
+// 同一个卖家最多连着 2 件：第 3 件起往后挪，插到别人的后面
+function spreadSellers(list) {
+  const out = [], rest = list.slice();
+  while (rest.length) {
+    const n = out.length;
+    const blocked = n >= 2 && sellerKey(out[n - 1]) === sellerKey(out[n - 2]) ? sellerKey(out[n - 1]) : null;
+    let k = blocked === null ? 0 : rest.findIndex(x => sellerKey(x) !== blocked);
+    if (k < 0) k = 0;  // 剩下的都是同一个人，只好接着放
+    out.push(rest.splice(k, 1)[0]);
+  }
+  return out;
+}
+
+function rankFeed(rows, now) {
+  const byNewest = (a, b) => b.bumped_at - a.bumped_at || (a.id < b.id ? 1 : -1);
+  const live = rows.filter(r => r.status !== "off"), sold = rows.filter(r => r.status === "off");
+  const fresh = live.filter(r => now - r.bumped_at < FRESH_TOP).sort(byNewest);
+  const score = r => (DEAL[r.score] ?? 1.0) * Math.pow(0.5, Math.max(0, now - r.bumped_at) / 3600000 / HALF_LIFE_HOURS);
+  const older = live.filter(r => now - r.bumped_at >= FRESH_TOP).map(r => ({ r, s: score(r) }))
+    .sort((a, b) => b.s - a.s || (a.r.id < b.r.id ? 1 : -1)).map(x => x.r);
+  sold.sort((a, b) => (b.sold_at || 0) - (a.sold_at || 0) || (a.id < b.id ? 1 : -1));
+  return [...spreadSellers([...fresh, ...older]), ...sold];
+}
+
 async function feed(req, env, url) {
   const viewer = await currentUser(req, env);
   const p = url.searchParams, kind = p.get("kind") === "rent" ? "rent" : "goods";
-  // 卖完的照样显示 7 天，排在所有在卖的后面
-  const where = ["l.kind = ?", "(l.status IN ('on', 'reserved') OR (l.status = 'off' AND l.sold_at >= ?))", "(l.source_type != 'group' OR l.source_posted_at >= ?)"], args = [kind, Date.now() - SOLD_SHOWN, Date.now() - GROUP_MAX_AGE];
+  const paged = decodeNext(Math.max(0, Math.floor(Number(p.get("offset")) || 0)));
+  const now = paged.now ?? Date.now(), offset = paged.offset;
+  // 每页几条：默认 40；测试可以传小一点的
+  const size = Math.min(PAGE, Math.max(5, Math.floor(Number(p.get("n")) || PAGE)));
+  // 卖完的照样显示 7 天
+  const where = ["l.kind = ?", "(l.status IN ('on', 'reserved') OR (l.status = 'off' AND l.sold_at >= ?))", "(l.source_type != 'group' OR l.source_posted_at >= ?)"], args = [kind, now - SOLD_SHOWN, now - GROUP_MAX_AGE];
   if (kind === "goods" && CATS.includes(p.get("cat"))) { where.push("l.cat = ?"); args.push(p.get("cat")); }
   const unit = p.get("unit");
   if (kind === "rent" && (unit === "whole" || unit === "room")) { where.push("l.unit_type IN (?, 'both')"); args.push(unit); }
@@ -246,10 +287,13 @@ async function feed(req, env, url) {
     where.push("(l.title LIKE ? ESCAPE '\\' OR l.descr LIKE ? ESCAPE '\\' OR l.place LIKE ? ESCAPE '\\')");
     args.push(like, like, like);
   }
-  const offset = Math.max(0, Math.floor(Number(p.get("offset")) || 0));
   if (viewer) { where.push("l.user_id NOT IN (SELECT blocked_id FROM blocks WHERE user_id = ?)"); args.push(viewer.id); }
-  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY l.status = 'off', COALESCE(l.score, 2) DESC, l.bumped_at DESC, l.id DESC LIMIT ? OFFSET ?`).bind(...args, PAGE, offset).all()).results;
-  return json({ items: rows.map(r => view(r, url.origin, viewer)), next: rows.length === PAGE ? offset + PAGE : null });
+  // 候选先取最近的 300 条，在这里算分、打散、切页；量大了再搬进数据库
+  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY l.bumped_at DESC, l.id DESC LIMIT ?`).bind(...args, FEED_POOL).all()).results;
+  const ranked = rankFeed(rows, now);
+  const pageRows = ranked.slice(offset, offset + size);
+  const more = offset + size < ranked.length;
+  return json({ items: pageRows.map(r => view(r, url.origin, viewer)), next: more ? encodeNext(now, offset + size) : null });
 }
 
 const groupExpired = row => row.source_type === "group" && !(row.source_posted_at >= Date.now() - GROUP_MAX_AGE);

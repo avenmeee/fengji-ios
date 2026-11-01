@@ -712,4 +712,38 @@ execSync(`npx wrangler d1 execute fengji --local --command "UPDATE users SET ban
 r = await call("DELETE", "/v1/me", { token: q2.token });
 ok("被封的也能自己删号", r.status === 200, r);
 
+// 首页排序
+const o1 = await login("o1"), o2 = await login("o2");
+for (const u of [o1, o2]) await call("POST", "/v1/me/agree", { token: u.token });
+const oPost = async (u, title) => (await call("POST", "/v1/listings", { token: u.token, body: { ...goods, photos: [(await call("POST", "/v1/photos", { token: u.token, raw: jpeg })).data.key], title: title + stamp } })).data;
+const oa = [];
+for (let i = 0; i < 4; i++) oa.push(await oPost(o1, "排序甲" + i));
+const ob = await oPost(o2, "排序乙");
+const oOld = await oPost(o2, "排序旧");
+execSync(`npx wrangler d1 execute fengji --local --command "UPDATE listings SET bumped_at = ${Date.now() - 3 * 86400000}, score = 4 WHERE id = '${oOld.id}'"`, { stdio: "ignore" });
+await call("POST", `/v1/listings/${oa[0].id}/status`, { token: o1.token, body: { status: "off" } });
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent(stamp));
+const oIds = r.data.items.map(x => x.id), oUids = r.data.items.map(x => x.uid);
+ok("新帖在旧帖前面", oIds.indexOf(ob.id) < oIds.indexOf(oOld.id) && oIds.indexOf(oa[3].id) < oIds.indexOf(oOld.id), oIds);
+ok("同一卖家不超过 2 件连着", !oUids.some((u, i) => i >= 2 && u === oUids[i - 1] && u === oUids[i - 2] && r.data.items[i].status !== "off"), oUids);
+ok("卖完的在最后", oIds[oIds.length - 1] === oa[0].id, oIds);
+const pages = [];
+let off = null;
+for (let i = 0; i < 50; i++) {
+  r = await call("GET", "/v1/listings?kind=goods&n=5" + (off !== null ? "&offset=" + off : ""));
+  pages.push(...r.data.items.map(x => x.id));
+  off = r.data.next;
+  if (off === null) break;
+}
+r = await call("GET", "/v1/listings?kind=goods");
+const all = [];
+off = null;
+for (let i = 0; i < 50; i++) {
+  r = await call("GET", "/v1/listings?kind=goods" + (off !== null ? "&offset=" + off : ""));
+  all.push(...r.data.items.map(x => x.id));
+  off = r.data.next;
+  if (off === null) break;
+}
+ok("翻页不重复不漏", pages.length === new Set(pages).size && pages.length === all.length && pages.every(id => all.includes(id)), { pages: pages.length, all: all.length });
+
 console.log(`全部通过：${n} 项`);
