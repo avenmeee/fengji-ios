@@ -27,10 +27,26 @@ struct DetailView: View {
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
-    /// 第三行：地点和时间
+    /// 第三行：地点、时间、什么时候发的
     private var line2: String {
-        let parts = item.isRent ? [item.place, item.period] : [item.place, item.pickupText]
+        let parts = item.isRent ? [item.place, item.period, postedText] : [item.place, item.pickupText, postedText]
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    /// 一周内写“3 天前发布”“今天发布”，再早写日期。群帖写“群里 10月28日发”。重新上架或擦亮按最近一次算。
+    private var postedText: String {
+        let cal = Calendar.current
+        if item.isGroup, let at = item.sourcePostedAt {
+            let d = Date(timeIntervalSince1970: Double(at) / 1000)
+            return "群里 \(cal.component(.month, from: d))月\(cal.component(.day, from: d))日发"
+        }
+        let ms = max(item.bumpedAt, item.createdAt)
+        guard ms > 0 else { return "" }
+        let d = Date(timeIntervalSince1970: Double(ms) / 1000)
+        let days = cal.dateComponents([.day], from: cal.startOfDay(for: d), to: cal.startOfDay(for: Date())).day ?? 0
+        if days <= 0 { return "今天发布" }
+        if days < 7 { return "\(days) 天前发布" }
+        return "\(cal.component(.month, from: d))月\(cal.component(.day, from: d))日发布"
     }
 
     var body: some View {

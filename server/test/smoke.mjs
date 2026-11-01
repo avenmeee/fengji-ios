@@ -340,6 +340,8 @@ ok("要登录才给验证码", r.status === 401, r);
 r = await call("POST", "/v1/claim/code", { token: owner.token });
 ok("验证码", r.status === 201 && /^[2-9A-HJKMNP-Z]{6}$/.test(r.data.code), r);
 const code = r.data.code;
+r = await call("POST", "/v1/claim/code", { token: owner.token });
+ok("再取一个码，24 小时有效", r.status === 201 && r.data.code !== code && r.data.expiresAt - Date.now() > 23 * 3600000, r);
 r = await call("POST", "/v1/admin/claim/verify", { token: owner.token, body: { ...sender, code } });
 ok("普通登录不能核对", r.status === 403, r);
 const guesser = { senderId: "guesser_" + stamp };

@@ -36,13 +36,13 @@ struct ClaimView: View {
 
     private var codeView: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("用你的微信发这个验证码").font(.title3.weight(.semibold)).foregroundStyle(Theme.ink)
+            Text("认领你在群里发的东西").font(.title3.weight(.semibold)).foregroundStyle(Theme.ink)
             if let code {
                 Text(code.code)
                     .font(.system(size: 40, weight: .heavy, design: .monospaced))
                     .foregroundStyle(Theme.ink)
                     .textSelection(.enabled)
-                Button("复制验证码") {
+                Button("复制代码") {
                     UIPasteboard.general.string = code.code
                     state.toast("已复制")
                 }
@@ -50,19 +50,31 @@ struct ClaimView: View {
             } else {
                 HoneyLoader()
             }
-            Text("发给运营小号。15 分钟内有效。对上后，你在群里发的东西会一次转到这个账号。")
-                .font(.subheadline)
-                .foregroundStyle(Theme.sub)
-            if let ops = state.opsWechat {
-                HStack {
-                    Text("运营小号 " + ops).font(.subheadline.weight(.medium)).foregroundStyle(Theme.ink)
-                    Spacer()
-                    ActionChip(text: "复制") {
-                        UIPasteboard.general.string = ops
-                        state.toast("已复制")
+            VStack(alignment: .leading, spacing: 8) {
+                step("①", "复制上面的代码")
+                HStack(alignment: .firstTextBaseline) {
+                    step("②", "在微信里加 \(state.opsWechat ?? "运营微信") 为好友，备注写“蜂集认领”")
+                    if let ops = state.opsWechat {
+                        Spacer(minLength: 8)
+                        ActionChip(text: "复制") {
+                            UIPasteboard.general.string = ops
+                            state.toast("已复制")
+                        }
                     }
                 }
+                step("③", "通过后，把代码私聊发过去")
+                step("④", "电脑在线时几小时内自动完成，完成后这里会显示认领了几件")
             }
+            Text("代码 24 小时内有效。")
+                .font(.footnote)
+                .foregroundStyle(Theme.sub)
+        }
+    }
+
+    private func step(_ n: String, _ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(n).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
+            Text(text).font(.subheadline).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -89,12 +101,27 @@ struct ClaimView: View {
             status = s
             if s.claimed {
                 if let c = s.contact { contact = c }
+            } else if let saved = Self.savedCode() {
+                code = saved
             } else {
-                code = try await API.shared.claimCode()
+                let fresh = try await API.shared.claimCode()
+                code = fresh
+                UserDefaults.standard.set(fresh.code, forKey: "claimCode")
+                UserDefaults.standard.set(fresh.expiresAt, forKey: "claimCodeExpires")
             }
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    /// 没过期的码接着用，免得重开一次就换了个码、发出去的那个白发
+    private static func savedCode() -> ClaimCode? {
+        let d = UserDefaults.standard
+        guard let c = d.string(forKey: "claimCode") else { return nil }
+        let exp = Int64(d.integer(forKey: "claimCodeExpires"))
+        // 留一小时余量
+        guard exp > Int64(Date().timeIntervalSince1970 * 1000) + 3_600_000 else { return nil }
+        return ClaimCode(code: c, expiresAt: exp)
     }
 
     /// 等导入流程核对

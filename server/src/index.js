@@ -985,7 +985,8 @@ async function takedown(env, id) {
 
 // ---- 认领：用自己的微信把验证码发出来，导入流程核对发送者 ----
 const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
-const CODE_TTL = 15 * 60 * 1000, CODE_PER_DAY = 10, FAILS_PER_HOUR = 5, SITE_FAILS_PER_HOUR = 200;
+// 卖家先加运营微信，等通过好友再私聊发代码；运营每小时读一次，所以给 24 小时
+const CODE_TTL = 24 * 3600 * 1000, CODE_PER_DAY = 10, FAILS_PER_HOUR = 5, SITE_FAILS_PER_HOUR = 200;
 
 async function newClaimCode(req, env) {
   const u = await needAgreed(req, env);
@@ -999,10 +1000,8 @@ async function newClaimCode(req, env) {
     if (code.length === 6) break;
   }
   const expiresAt = Date.now() + CODE_TTL;
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM claim_codes WHERE user_id = ?").bind(u.id),
-    env.DB.prepare("INSERT INTO claim_codes (code_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256(code), u.id, expiresAt)
-  ]);
+  // 再取新码时旧码不作废：已经发出去的那个可能还在等核对
+  await env.DB.prepare("INSERT INTO claim_codes (code_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256(code), u.id, expiresAt).run();
   return json({ code, expiresAt }, 201);
 }
 
@@ -1036,13 +1035,18 @@ async function verifyClaim(req, env) {
   const u = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(hit.user_id).first();
   if (!u || u.banned) throw new Fail(404, "bad_code");
   const now = Date.now();
-  await env.DB.batch([
+  const done = await env.DB.batch([
     env.DB.prepare("UPDATE users SET sender_hash = ? WHERE id = ?").bind(senderHash, u.id),
     // 过期的不转，等定时清理
-    env.DB.prepare("UPDATE listings SET user_id = ?, contact = ?, source_type = 'claimed', updated_at = ? WHERE sender_hash = ? AND source_type = 'group' AND source_posted_at >= ?").bind(u.id, u.contact || "", now, senderHash, now - GROUP_MAX_AGE)
+    env.DB.prepare("UPDATE listings SET user_id = ?, contact = ?, source_type = 'claimed', updated_at = ? WHERE sender_hash = ? AND source_type = 'group' AND source_posted_at >= ?").bind(u.id, u.contact || "", now, senderHash, now - GROUP_MAX_AGE),
+    // 认领好了，他手里别的码都没用了
+    env.DB.prepare("DELETE FROM claim_codes WHERE user_id = ?").bind(u.id)
   ]);
+  const moved = done[1].meta.changes;
   const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM listings WHERE user_id = ? AND source_type = 'claimed'").bind(u.id).first();
-  return json({ ok: true, count: c.n });
+  // 开了通知才收得到；推送失败不影响认领
+  await pushToUser(env, u.id, "认领好了", `${moved} 件已转到你名下`).catch(() => 0);
+  return json({ ok: true, count: c.n, moved });
 }
 
 // 认领后填愿意公开的微信号；只进他认领来的条目，不碰他自己发的
