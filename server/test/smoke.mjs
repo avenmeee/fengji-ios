@@ -624,4 +624,35 @@ ok("封后令牌失效", r.status === 401, r);
 r = await call("POST", `/v1/admin/users/${k.me.id}/ban`, { token: "wrong" });
 ok("错的令牌不行", r.status === 401 || r.status === 403, r);
 
+// 卖家主页
+const s1 = await login("s1"), s2 = await login("s2");
+for (const u of [s1, s2]) await call("POST", "/v1/me/agree", { token: u.token });
+await call("PATCH", "/v1/me", { token: s1.token, body: { nickname: "主页卖家" } });
+const sPhoto = async () => [(await call("POST", "/v1/photos", { token: s1.token, raw: jpeg })).data.key];
+const sOn = (await call("POST", "/v1/listings", { token: s1.token, body: { ...goods, photos: await sPhoto(), title: "在卖的" } })).data;
+const sSold = (await call("POST", "/v1/listings", { token: s1.token, body: { ...goods, photos: await sPhoto(), title: "卖掉的" } })).data;
+await call("POST", `/v1/listings/${sSold.id}/status`, { token: s1.token, body: { status: "off" } });
+const sGone = (await call("POST", "/v1/listings", { token: s1.token, body: { ...goods, photos: await sPhoto(), title: "删掉的" } })).data;
+await call("DELETE", `/v1/listings/${sGone.id}`, { token: s1.token });
+r = await call("GET", `/v1/users/${s1.me.id}/listings`);
+ok("主页只有在架上的", r.status === 200 && r.data.items.length === 1 && r.data.items[0].id === sOn.id, r);
+ok("主页带昵称和头像信息", r.data.seller.name === "主页卖家" && r.data.seller.named === true && r.data.seller.group === false, r);
+ok("主页不带联系方式以外的记录", !JSON.stringify(r.data).includes("卖掉的") && !JSON.stringify(r.data).includes("删掉的"), r);
+r = await call("GET", `/v1/listings/${sOn.id}/poster`);
+ok("从帖子找到卖家主页", r.status === 200 && r.data.seller.id === s1.me.id && r.data.items.length === 1, r);
+await call("POST", `/v1/blocks/${s1.me.id}`, { token: s2.token });
+r = await call("GET", `/v1/users/${s1.me.id}/listings`, { token: s2.token });
+ok("屏蔽了打不开", r.status === 404, r);
+r = await call("GET", "/v1/users/" + "0".repeat(32) + "/listings");
+ok("群帖的占位账号没有主页", r.status === 404, r);
+r = await call("GET", `/v1/users/${k.me.id}/listings`);
+ok("封了的打不开", r.status === 404, r);
+const gp = { kind: "goods", cat: "furn", place: "monty", group: "主页群", poster: "群友甲", postedAt: Date.now() - 3600000 };
+const g1 = (await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...gp, sourceId: "pg1-" + stamp, title: "群帖一", price: 5 } })).data;
+const g2 = (await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...gp, sourceId: "pg2-" + stamp, title: "群帖二", price: 6 } })).data;
+await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...gp, poster: "群友乙", sourceId: "pg3-" + stamp, title: "别人的群帖", price: 7 } });
+r = await call("GET", `/v1/listings/${g1.id}/poster`);
+ok("群帖主页按群昵称加群找", r.status === 200 && r.data.seller.group === true && r.data.seller.name === "群友甲" && r.data.seller.groupName === "主页群" && r.data.items.length === 2 && r.data.items.some(x => x.id === g2.id), r);
+ok("群帖主页不露 sender_hash", !JSON.stringify(r.data).includes("sender"), r);
+
 console.log(`全部通过：${n} 项`);

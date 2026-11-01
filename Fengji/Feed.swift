@@ -317,6 +317,7 @@ struct BuyView: View {
             .background(PopGestureHook())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
+            .navigationDestination(for: SellerRef.self) { SellerView(ref: $0) }
             .navigationDestination(for: String.self) { route in
                 switch route {
                 case "me": MeView(path: $path)
@@ -331,6 +332,11 @@ struct BuyView: View {
                 if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "want-detail" || Demo.scene == "pop-check" || Demo.scene == "live-detail", !demoOpened, let first = items.first {
                     demoOpened = true
                     path.append(first)
+                }
+                // 截图：卖家主页，自己发的取第二条（有昵称的），群帖取第一条
+                if Demo.scene == "seller" || Demo.scene == "seller-group", !demoOpened, items.count > 1 {
+                    demoOpened = true
+                    path.append(SellerRef(listing: Demo.scene == "seller" ? items[1] : items[0]))
                 }
             }
             .onChange(of: path) { _, p in state.setPushed(.buy, !p.isEmpty) }
@@ -432,6 +438,7 @@ struct RentView: View {
             .background(PopGestureHook())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Listing.self) { DetailView(item: $0) }
+            .navigationDestination(for: SellerRef.self) { SellerView(ref: $0) }
             .navigationDestination(for: String.self) { route in
                 switch route {
                 case "me": MeView(path: $path)

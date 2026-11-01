@@ -101,6 +101,8 @@ final class API: @unchecked Sendable {
         return try await get("/v1/listings" + (c.string ?? ""))
     }
     func listing(_ id: String) async throws -> Listing { try await get("/v1/listings/\(id)") }
+    /// 这条帖子的发帖人主页
+    func poster(_ id: String) async throws -> SellerPage { try await get("/v1/listings/\(id)/poster") }
     func mine() async throws -> [Listing] {
         let r: ListingList = try await get("/v1/me/listings")
         return r.items

@@ -171,11 +171,22 @@ enum DemoServer {
         if method == "GET", path == "/v1/config" { return (200, encode(AppConfig(opsWechat: "demo_ops", aiDescribe: true)), json) }
         if method == "GET", path == "/v1/me/blocks" { return (200, encode(BlockList(items: [])), json) }
         if method == "GET", path == "/v1/listings" {
-            var list = param("kind") == "rent" ? rentList : (Demo.scene == "group" ? [groupItem] + goodsList : goodsList)
+            var list = param("kind") == "rent" ? rentList : (Demo.scene == "group" || Demo.scene == "seller-group" ? [groupItem] + goodsList : goodsList)
             if let c = param("cat") { list = list.filter { $0.cat == c } }
             if let u = param("unit") { list = list.filter { $0.unitType == u || $0.unitType == "both" } }
             if let q = param("q") { list = list.filter { $0.title.contains(q) || $0.place.contains(q) } }
             return (200, encode(ListingPage(items: list, next: nil)), json)
+        }
+        if method == "GET", path.hasPrefix("/v1/listings/"), path.hasSuffix("/poster") {
+            let id = url.deletingLastPathComponent().lastPathComponent
+            if id == groupItem.id {
+                let other = Listing(id: "g21", uid: "0", kind: "goods", title: "三层书架", price: 12, cat: "furn", cond: nil, from: nil, to: nil, place: "Monty", desc: "", status: "on", contact: nil, photos: [photo("c1")], createdAt: now - 1_800_000, mine: false, score: 3, sourceType: "group", sourceGroup: "二手群 3", sourcePoster: "小林", sourcePostedAt: now - 2 * 86_400_000)
+                return (200, encode(SellerPage(seller: SellerInfo(id: nil, name: "小林", color: nil, named: true, avatar: nil, group: true, groupName: "二手群 3"), items: [groupItem, other])), json)
+            }
+            var room = rentList[0]
+            room.sellerName = "林夏"
+            let items = goodsList.filter { $0.sellerName == "林夏" } + [room]
+            return (200, encode(SellerPage(seller: SellerInfo(id: "u2", name: "林夏", color: 2, named: true, avatar: nil, group: false, groupName: nil), items: items)), json)
         }
         if method == "GET", path.hasPrefix("/v1/listings/") {
             if var hit = all.first(where: { $0.id == url.lastPathComponent }) {

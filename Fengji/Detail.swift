@@ -129,8 +129,17 @@ struct DetailView: View {
         .padding(.top, 4)
     }
 
-    /// 只有一行，不做个人主页
+    /// 点进卖家主页；自己的就去“我”
+    @ViewBuilder
     private var sellerRow: some View {
+        if item.mine {
+            NavigationLink(value: "me") { sellerLine }.buttonStyle(.plain)
+        } else {
+            NavigationLink(value: SellerRef(listing: item)) { sellerLine }.buttonStyle(.plain)
+        }
+    }
+
+    private var sellerLine: some View {
         HStack(spacing: 12) {
             SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 42, url: item.sellerAvatar)
             VStack(alignment: .leading, spacing: 2) {
@@ -144,9 +153,15 @@ struct DetailView: View {
                         .foregroundStyle(Theme.sub)
                 }
             }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.sub)
         }
         .padding(.top, 10)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+        .accessibilityHint("看他发的其他东西")
     }
 
     private var label: some View {

@@ -186,6 +186,22 @@ struct Listing: Codable, Identifiable, Hashable {
     }
 }
 
+/// 卖家主页：群帖的 seller.id 是空的
+struct SellerInfo: Codable {
+    let id: String?
+    let name: String
+    let color: Int?
+    let named: Bool
+    let avatar: String?
+    let group: Bool
+    let groupName: String?
+}
+
+struct SellerPage: Codable {
+    let seller: SellerInfo
+    let items: [Listing]
+}
+
 struct ListingPage: Codable {
     let items: [Listing]
     let next: Int?

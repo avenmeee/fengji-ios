@@ -240,6 +240,36 @@ async function feed(req, env, url) {
 
 const groupExpired = row => row.source_type === "group" && !(row.source_posted_at >= Date.now() - GROUP_MAX_AGE);
 
+// ---- 卖家主页：只给在架上的（在售、已预订），不带记录 ----
+// 被封的、不存在的、被我屏蔽的，打不开
+async function sellerPage(req, env, url, uid) {
+  const viewer = await currentUser(req, env);
+  const u = uid === GROUP_UID ? null : await env.DB.prepare("SELECT id, nickname, avatar_color, avatar_key, banned FROM users WHERE id = ?").bind(uid).first();
+  if (!u || u.banned) throw new Fail(404, "not_found");
+  if (viewer && await env.DB.prepare("SELECT 1 AS x FROM blocks WHERE user_id = ? AND blocked_id = ?").bind(viewer.id, uid).first()) throw new Fail(404, "not_found");
+  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.user_id = ? AND l.status IN ('on', 'reserved') ORDER BY l.bumped_at DESC LIMIT 100`).bind(uid).all()).results;
+  return json({
+    seller: { id: uid, name: u.nickname || defaultName(uid), color: u.avatar_color ?? defaultColor(uid), named: !!u.nickname, avatar: u.avatar_key ? `${url.origin}/p/${u.avatar_key}` : null, group: false, groupName: null },
+    items: rows.map(r => view(r, url.origin, viewer))
+  });
+}
+
+// 从一条帖子找发帖人。自己发的就是那个账号；群里搬来的，同一个发送者（有 sender_hash 按它，没有按群昵称加群）
+// 的其他群帖。用帖子 id 当入口，不对外露 sender_hash。
+async function posterPage(req, env, url, id) {
+  const row = await env.DB.prepare("SELECT user_id, source_type, source_group, source_poster, sender_hash, status FROM listings WHERE id = ?").bind(id).first();
+  if (!row || row.status === "deleted" || row.status === "hidden") throw new Fail(404, "not_found");
+  if (row.source_type !== "group") return sellerPage(req, env, url, row.user_id);
+  const viewer = await currentUser(req, env);
+  const same = row.sender_hash ? ["l.sender_hash = ?", [row.sender_hash]] : ["l.sender_hash IS NULL AND l.source_poster = ? AND l.source_group = ?", [row.source_poster, row.source_group]];
+  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.source_type = 'group' AND l.status IN ('on', 'reserved') AND l.source_posted_at >= ? AND ${same[0]} ORDER BY l.bumped_at DESC LIMIT 100`)
+    .bind(Date.now() - GROUP_MAX_AGE, ...same[1]).all()).results;
+  return json({
+    seller: { id: null, name: row.source_poster || "群友", color: null, named: true, avatar: null, group: true, groupName: row.source_group || null },
+    items: rows.map(r => view(r, url.origin, viewer))
+  });
+}
+
 async function oneListing(req, env, url, id) {
   const viewer = await currentUser(req, env);
   const row = await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.id = ?`).bind(id).first();
@@ -1051,6 +1081,8 @@ async function route(req, env) {
   if (method === "POST" && path === "/v1/claim/code") return newClaimCode(req, env);
 
   if (method === "GET" && path === "/v1/listings") return feed(req, env, url);
+  if (method === "GET" && (m = /^\/v1\/users\/([0-9a-f]+)\/listings$/.exec(path))) return sellerPage(req, env, url, m[1]);
+  if (method === "GET" && (m = /^\/v1\/listings\/([0-9a-f]+)\/poster$/.exec(path))) return posterPage(req, env, url, m[1]);
   if (method === "POST" && path === "/v1/listings") return createListing(req, env, url);
   if ((m = /^\/v1\/listings\/([0-9a-f]+)$/.exec(path))) {
     if (method === "GET") return oneListing(req, env, url, m[1]);
