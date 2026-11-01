@@ -329,7 +329,7 @@ struct RecordsView: View {
                     ForEach(items) { item in
                         RecordRow(item: item, relist: { relist(item) }, purge: { purging = item })
                     }
-                    Text("只有你看得到。删掉的只留一张小图和文字。")
+                    Text("只有你看得到。删除后 30 天内可以一步重新上架，照片都在；之后照片删除，只留一张小图。")
                         .font(.footnote)
                         .foregroundStyle(Theme.sub)
                         .padding(.top, 8)
@@ -342,11 +342,10 @@ struct RecordsView: View {
         .toolbar(.hidden, for: .navigationBar)
         .task(id: state.version) { await load() }
         .sheet(item: $editing) { item in PostForm(kind: item.kind, editing: item, startStatus: "on") }
+        // 删掉的：照片 30 天内都在，打开填好的发布页，点“重新发布”就回到在售
         .sheet(item: $relisting) { item in
-            PostForm(kind: item.kind, prefill: item) { _ in
-                // 重新发了，旧记录就不要了
+            PostForm(kind: item.kind, editing: item, startStatus: "on", relist: true) { _ in
                 Task {
-                    try? await API.shared.purge(item.id)
                     state.changed()
                 }
             }
@@ -403,7 +402,13 @@ struct RecordRow: View {
         HStack(spacing: 12) {
             Color.clear
                 .frame(width: 60, height: 60)
-                .overlay { ListingImage(item: item, maxPixel: 200) }
+                .overlay {
+                    if item.photos.isEmpty, let thumb = item.thumb {
+                        RemoteImage(url: thumb, maxPixel: 200)
+                    } else {
+                        ListingImage(item: item, maxPixel: 200)
+                    }
+                }
                 .clipShape(RoundedRectangle(cornerRadius: 3))
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title).font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
@@ -413,7 +418,7 @@ struct RecordRow: View {
             Spacer(minLength: 0)
             Menu {
                 Button("重新上架", systemImage: "arrow.uturn.up", action: relist)
-                Button("彻底删除", systemImage: "trash", role: .destructive, action: purge)
+                Button("永久删除", systemImage: "trash", role: .destructive, action: purge)
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 16, weight: .semibold))

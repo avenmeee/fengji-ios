@@ -144,6 +144,8 @@ struct PostForm: View {
     @State private var posted = Demo.scene?.hasPrefix("posted") == true
     @State private var hive: [HiveItem] = Demo.scene == "posted" ? Demo.sampleHive(1) : (Demo.scene == "posted-3" ? Demo.sampleHive(3) : (Demo.scene == "posted-10" ? Demo.sampleHive(10) : []))
     @State private var hiveShare: ShareImage?
+    /// 从“记录”里重新发删掉的那条
+    private let relist: Bool
     @State private var dateField: DateField? = Demo.scene == "rentcal-to" ? .to : (Demo.scene?.hasPrefix("rentcal") == true ? .from : nil)
     @State private var picked: [PhotosPickerItem] = []
     @State private var error: String?
@@ -162,7 +164,8 @@ struct PostForm: View {
     }
 
     /// prefill：从记录重新发，预填文字，照片要重新放
-    init(kind: String, editing: Listing? = nil, prefill: Listing? = nil, startStatus: String? = nil, onSaved: ((Listing) -> Void)? = nil) {
+    init(kind: String, editing: Listing? = nil, prefill: Listing? = nil, startStatus: String? = nil, relist: Bool = false, onSaved: ((Listing) -> Void)? = nil) {
+        self.relist = relist
         self.kind = kind
         self.editing = editing
         self.onSaved = onSaved
@@ -574,7 +577,7 @@ struct PostForm: View {
     /// 编辑时才有：状态三选一
     @ViewBuilder
     private var statusRow: some View {
-        if let editing, editing.status != "hidden" {
+        if let editing, editing.status != "hidden", !relist {
             row("状态") {
                 HStack(spacing: 6) {
                     Chip(text: "在售", on: status == "on", act: formAct) { status = "on" }
@@ -801,7 +804,7 @@ struct PostForm: View {
             } label: {
                 HStack(spacing: 8) {
                     if busy { HoneyLoader(size: 22) }
-                    Text(busy ? "正在发" : (editing == nil ? "发布" : "保存"))
+                    Text(busy ? "正在发" : (relist ? "重新发布" : (editing == nil ? "发布" : "保存")))
                 }
             }
             .buttonStyle(PrimaryButtonStyle(act: formAct, dimmed: !requiredFilled))
@@ -962,6 +965,7 @@ struct PostForm: View {
                 input.pickupBefore = day(pickupBefore)
                 input.pickupAfter = day(pickupAfter)
             }
+            if relist { input.relist = true }
             var saved: Listing
             if let editing {
                 saved = try await API.shared.update(editing.id, input)

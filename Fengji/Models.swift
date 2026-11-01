@@ -29,6 +29,8 @@ struct Listing: Codable, Identifiable, Hashable {
     var sellerAvatar: String? = nil
     /// 标记卖完的时间
     var soldAt: Int64? = nil
+    /// 删掉后留给本人的小图（30 天后照片清掉时用）
+    var thumb: String? = nil
     /// 只有本人的记录里有
     var soldPrice: Int? = nil
     var deletedAt: Int64? = nil
@@ -288,6 +290,8 @@ struct ListingList: Codable {
 }
 
 struct ListingInput: Encodable {
+    /// 从“记录”里把删掉的重新发出去
+    var relist: Bool?
     let kind: String
     let title: String
     let price: Int

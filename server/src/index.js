@@ -17,7 +17,8 @@ const LIMITS = { post: 10, photo: 30 }, SITE_PHOTO_LIMIT = 2000;
 const MAX_LIVE_LISTINGS = 50;
 const PAGE = 40;
 const GROUP_MAX_AGE = 10 * 86400 * 1000;  // 群里发了超过 10 天的不导入：旧帖多半卖掉了。导进来的不再过期，靠排序自然沉下去
-const SOLD_SHOWN = 7 * 86400000;  // 卖完的在买、租列表里再留 7 天
+const SOLD_SHOWN = 7 * 86400000;
+const DELETED_KEEP = 30 * 86400000;  // 删掉的帖子照片留 30 天，在“记录”里能一步重新上架  // 卖完的在买、租列表里再留 7 天
 const GROUP_UID = "0".repeat(32);  // 群里搬来的条目挂在这个编号下，不对应真人
 // 导入时拦下联系方式和门牌：这类信息不能存
 const CONTACT_PATTERNS = [/微信号?\s*[:：]?\s*[A-Za-z][-_A-Za-z0-9]{5,}/, /\b(wx|vx|wechat)\s*[:：]?\s*[-_A-Za-z0-9]{5,}/i, /(?<!\d)1\d{10}(?!\d)/, /(?<!\d)(\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}(?!\d)/];
@@ -378,14 +379,25 @@ async function updateListing(req, env, url, id) {
   const u = await needAgreed(req, env);
   const row = await ownedOrFail(env, id, u);
   if (row.status === "hidden") throw new Fail(403, "hidden");
-  if (row.status === "deleted" || row.status === "removed") throw new Fail(400, "deleted");
-  const v = checkListing(await bodyOf(req), u.id, JSON.parse(row.photos));
+  const body = await bodyOf(req);
+  const relist = row.status === "deleted" && body.relist === true;
+  if ((row.status === "deleted" && !relist) || row.status === "removed") throw new Fail(400, "deleted");
+  const v = checkListing(body, u.id, JSON.parse(row.photos));
   if (v.kind !== row.kind) throw new Fail(400, "bad_kind");
+  if (relist) {
+    const live = await env.DB.prepare("SELECT COUNT(*) AS n FROM listings WHERE user_id = ? AND status = 'on'").bind(u.id).first();
+    if (live.n >= MAX_LIVE_LISTINGS) throw new Fail(429, "too_many_listings");
+  }
   await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, from_date=?, to_date=?, lease_end=?, from_prec=?, to_prec=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, room_type=?, unit_type=?, furniture=?, internet=?, deposit=?, app_fee=?, parking=?, pets=?, roommates=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
     .bind(v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.from_prec, v.to_prec, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.photos, Date.now(), id).run();
   if (v.price !== row.price) await clearScore(env, id);
   const kept = new Set(JSON.parse(v.photos));
   await removePhotos(env, JSON.parse(row.photos).filter(k => !kept.has(k)));
+  if (relist) {
+    const now = Date.now();
+    if (row.thumb) await removePhotos(env, [row.thumb]);
+    await env.DB.prepare("UPDATE listings SET status = 'on', deleted_at = NULL, thumb = NULL, sold_at = NULL, sold_price = NULL, bumped_at = ?, updated_at = ? WHERE id = ?").bind(now, now, id).run();
+  }
   const next = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
   return json(view(next, url.origin, u));
 }
@@ -443,7 +455,7 @@ async function removePhotos(env, keys) {
 }
 
 async function deleteRows(env, rows) {
-  await removePhotos(env, rows.flatMap(r => JSON.parse(r.photos)));
+  await removePhotos(env, rows.flatMap(r => [...JSON.parse(r.photos), ...(r.thumb ? [r.thumb] : [])]));
   for (const r of rows) {
     await env.DB.batch([
       env.DB.prepare("DELETE FROM reports WHERE listing_id = ?").bind(r.id),
@@ -480,9 +492,18 @@ async function deleteListing(req, env, id) {
     await env.PHOTOS.put(key, buf, { httpMetadata: { contentType: "image/jpeg", cacheControl: "private, max-age=86400" } });
     thumb = [key];
   }
+  // 照片留 30 天给本人一步重新上架：换成新编号，旧网址马上失效，新编号只有本人的“记录”里有
+  const kept = [];
+  for (const old of JSON.parse(row.photos)) {
+    const o = await env.PHOTOS.get(old);
+    if (!o) continue;
+    const key = `${u.id}/${newId()}.jpg`;
+    await env.PHOTOS.put(key, o.body, { httpMetadata: { contentType: "image/jpeg", cacheControl: "private, max-age=86400" } });
+    kept.push(key);
+  }
   await removePhotos(env, JSON.parse(row.photos));
   await env.DB.batch([
-    env.DB.prepare("UPDATE listings SET status = 'deleted', deleted_at = ?, photos = ?, score = NULL, scored_at = NULL, sold_price = NULL WHERE id = ?").bind(Date.now(), JSON.stringify(thumb), id),
+    env.DB.prepare("UPDATE listings SET status = 'deleted', deleted_at = ?, photos = ?, thumb = ?, score = NULL, scored_at = NULL, sold_price = NULL WHERE id = ?").bind(Date.now(), JSON.stringify(kept), thumb[0] || null, id),
     env.DB.prepare("DELETE FROM wants WHERE listing_id = ?").bind(id),
     env.DB.prepare("DELETE FROM reports WHERE listing_id = ?").bind(id)
   ]);
@@ -493,7 +514,7 @@ async function mine(req, env, url) {
   const u = await needUser(req, env);
   const rows = (await env.DB.prepare("SELECT * FROM listings WHERE user_id = ? AND status != 'removed' ORDER BY created_at DESC LIMIT 200").bind(u.id).all()).results;
   // 成交价和删除时间只给本人看
-  return json({ items: rows.map(r => ({ ...view(r, url.origin, u), soldPrice: r.sold_price ?? null, deletedAt: r.deleted_at ?? null, updatedAt: r.updated_at ?? null })) });
+  return json({ items: rows.map(r => ({ ...view(r, url.origin, u), soldPrice: r.sold_price ?? null, deletedAt: r.deleted_at ?? null, updatedAt: r.updated_at ?? null, thumb: r.thumb ? `${url.origin}/p/${r.thumb}` : null })) });
 }
 
 // ---- 照片 ----
@@ -562,7 +583,7 @@ async function agree(req, env) {
 }
 
 async function wipeUser(env, u) {
-  const rows = (await env.DB.prepare("SELECT id, photos FROM listings WHERE user_id = ?").bind(u.id).all()).results;
+  const rows = (await env.DB.prepare("SELECT id, photos, thumb FROM listings WHERE user_id = ?").bind(u.id).all()).results;
   await deleteRows(env, rows);
   if (u.avatar_key) await removePhotos(env, [u.avatar_key]);
   await env.DB.batch([
@@ -672,7 +693,7 @@ async function adminBan(req, env, id) {
   const target = await env.DB.prepare("SELECT is_admin FROM users WHERE id = ?").bind(id).first();
   if (!target) throw new Fail(404, "not_found");
   if (target.is_admin) throw new Fail(400, "is_admin");
-  const rows = (await env.DB.prepare("SELECT id, photos FROM listings WHERE user_id = ?").bind(id).all()).results;
+  const rows = (await env.DB.prepare("SELECT id, photos, thumb FROM listings WHERE user_id = ?").bind(id).all()).results;
   await deleteRows(env, rows);
   const banned = await env.DB.prepare("SELECT avatar_key FROM users WHERE id = ?").bind(id).first();
   if (banned?.avatar_key) await removePhotos(env, [banned.avatar_key]);
@@ -1010,7 +1031,12 @@ async function importListing(req, env) {
 
 // 每天清掉过期的群里搬来的条目和照片，不留着
 async function purgeExpired(env) {
-  // 群帖不再到期删除（10-31 用户定），这里只清过期的认领码
+  // 群帖不再到期删除（10-31 用户定）。删掉的帖子照片留 30 天，过了只留小图
+  const old = (await env.DB.prepare("SELECT id, photos FROM listings WHERE status = 'deleted' AND deleted_at < ? AND photos != '[]' LIMIT 200").bind(Date.now() - DELETED_KEEP).all()).results;
+  for (const r of old) {
+    await removePhotos(env, JSON.parse(r.photos));
+    await env.DB.prepare("UPDATE listings SET photos = '[]' WHERE id = ?").bind(r.id).run();
+  }
   await env.DB.prepare("DELETE FROM claim_codes WHERE expires_at < ?").bind(Date.now()).run();
 }
 

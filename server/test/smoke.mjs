@@ -767,4 +767,29 @@ ok("烟雾报警器不误伤", r.status === 201, r);
 r = await call("POST", "/v1/listings", { token: o2.token, body: { ...goods, photos: [(await call("POST", "/v1/photos", { token: o2.token, raw: jpeg })).data.key], title: "Juul pods" } });
 ok("英文 juul 拦下", r.status === 422, r);
 
+// 删掉的 30 天内一步重新上架
+const rl = await login("rl");
+await call("POST", "/v1/me/agree", { token: rl.token });
+const rlKey = (await call("POST", "/v1/photos", { token: rl.token, raw: jpeg })).data.key;
+const rlPost = (await call("POST", "/v1/listings", { token: rl.token, body: { ...goods, photos: [rlKey], title: "删了再发" } })).data;
+await fetch(`${BASE}/v1/listings/${rlPost.id}`, { method: "DELETE", headers: { authorization: `Bearer ${rl.token}`, "content-type": "image/jpeg" }, body: jpeg });
+r = await fetch(BASE + "/p/" + rlKey);
+ok("删了旧照片网址马上失效", r.status === 404);
+r = await call("GET", "/v1/me/listings", { token: rl.token });
+const rlRec = r.data.items.find(x => x.id === rlPost.id);
+ok("记录里照片还在，另有小图", rlRec.status === "deleted" && rlRec.photos.length === 1 && rlRec.photos[0].key !== rlKey && !!rlRec.thumb, rlRec);
+r = await call("GET", "/v1/listings/" + rlPost.id);
+ok("删了别人看不到", r.status === 404, r);
+r = await call("PUT", "/v1/listings/" + rlPost.id, { token: rl.token, body: { ...goods, title: "删了再发", photos: rlRec.photos.map(p => p.key) } });
+ok("不带 relist 不能改删掉的", r.status === 400, r);
+r = await call("PUT", "/v1/listings/" + rlPost.id, { token: rl.token, body: { ...goods, title: "删了再发", photos: rlRec.photos.map(p => p.key), relist: true } });
+ok("一步重新上架", r.status === 200 && r.data.status === "on" && r.data.photos.length === 1, r);
+r = await fetch(BASE + "/p/" + rlRec.photos[0].key);
+ok("重新上架后照片能看", r.status === 200);
+await fetch(`${BASE}/v1/listings/${rlPost.id}`, { method: "DELETE", headers: { authorization: `Bearer ${rl.token}` } });
+execSync(`npx wrangler d1 execute fengji --local --command "UPDATE listings SET deleted_at = 1000 WHERE id = '${rlPost.id}'"`, { stdio: "ignore" });
+await call("GET", "/cdn-cgi/handler/scheduled");
+r = await call("GET", "/v1/me/listings", { token: rl.token });
+ok("30 天后照片清掉", r.data.items.find(x => x.id === rlPost.id).photos.length === 0, r);
+
 console.log(`全部通过：${n} 项`);
