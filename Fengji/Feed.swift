@@ -551,4 +551,3 @@ struct RentRow: View {
         .accessibilityLabel(item.title)
     }
 }
-}
