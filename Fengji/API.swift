@@ -7,6 +7,8 @@ extension Notification.Name {
 
 struct APIError: LocalizedError {
     let code: String
+    /// 批量发布时，是第几件出了问题
+    var index: Int? = nil
 
     var errorDescription: String? {
         switch code {
@@ -30,6 +32,9 @@ struct APIError: LocalizedError {
         case "not_found": return "这条已经没有了。"
         case "bad_identity": return "苹果登录没通过，再试一次。"
         case "bad_wechat": return "微信号格式不对：字母开头，6～20 位。"
+        case "ai_limit": return "AI 今天用完了，先自己填。"
+        case "ai_budget", "ai_off", "ai_failed": return "AI 这会儿用不了，先自己填。"
+        case "bad_count": return "照片张数不对。"
         default: return "没连上，再试一次。"
         }
     }
@@ -39,11 +44,16 @@ final class API: @unchecked Sendable {
     static let shared = API()
     var token: String?
 
-    private func send(_ method: String, _ path: String, body: Data? = nil, contentType: String = "application/json") async throws -> Data {
+    private struct ErrorBody: Decodable {
+        let error: String?
+        let index: Int?
+    }
+
+    private func send(_ method: String, _ path: String, body: Data? = nil, contentType: String = "application/json", timeout: TimeInterval = 30) async throws -> Data {
         guard let url = URL(string: Config.base + path) else { throw APIError(code: "bad_url") }
         var req = URLRequest(url: url)
         req.httpMethod = method
-        req.timeoutInterval = 30
+        req.timeoutInterval = timeout
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "authorization") }
         if let body {
             req.httpBody = body
@@ -52,11 +62,12 @@ final class API: @unchecked Sendable {
         let (data, response) = try await URLSession.shared.data(for: req)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if (200..<300).contains(status) { return data }
-        let code = (try? JSONDecoder().decode([String: String].self, from: data))?["error"] ?? "http_\(status)"
+        let body = try? JSONDecoder().decode(ErrorBody.self, from: data)
+        let code = body?.error ?? "http_\(status)"
         if status == 401, token != nil, code == "login_required" {
             NotificationCenter.default.post(name: .sessionExpired, object: nil)
         }
-        throw APIError(code: code)
+        throw APIError(code: code, index: body?.index)
     }
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
@@ -111,6 +122,23 @@ final class API: @unchecked Sendable {
         return r.items
     }
     func create(_ input: ListingInput) async throws -> Listing { try await post("POST", "/v1/listings", input) }
+
+    /// 多张照片让 AI 分成一件一件；照片先缩到长边 768
+    func group(jpegs: [Data], consent: Bool) async throws -> [GroupItem] {
+        let body = try JSONEncoder().encode(["photos": jpegs.map { $0.base64EncodedString() }])
+        let data = try await send("POST", "/v1/ai/group" + (consent ? "?consent=1" : ""), body: body, timeout: 70)
+        return try JSONDecoder().decode(GroupResult.self, from: data).items
+    }
+
+    /// 一次发好几件：全过了才一起发；有一件不行，错误里带是第几件
+    func createBatch(_ items: [ListingInput], aiConsent: Bool) async throws -> [Listing] {
+        struct Body: Encodable {
+            let items: [ListingInput]
+            let aiConsent: Bool
+        }
+        let data = try await send("POST", "/v1/listings/batch", body: try JSONEncoder().encode(Body(items: items, aiConsent: aiConsent)), timeout: 60)
+        return try JSONDecoder().decode(ListingList.self, from: data).items
+    }
     func update(_ id: String, _ input: ListingInput) async throws -> Listing { try await post("PUT", "/v1/listings/\(id)", input) }
     private struct StatusBody: Encodable {
         let status: String

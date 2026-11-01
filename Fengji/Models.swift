@@ -241,6 +241,19 @@ struct SellerPage: Codable {
     let items: [Listing]
 }
 
+/// AI 分出来的一件：照片编号、名字、建议价
+struct GroupItem: Codable {
+    let photos: [Int]
+    let title: String
+    let price: Int?
+    let cat: String?
+    let cond: String?
+}
+
+struct GroupResult: Codable {
+    let items: [GroupItem]
+}
+
 struct ListingPage: Codable {
     let items: [Listing]
     let next: Int?
