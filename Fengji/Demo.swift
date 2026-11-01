@@ -170,7 +170,7 @@ enum DemoServer {
         if method == "GET", path == "/v1/me/claim" { return (200, encode(ClaimStatus(claimed: false, count: 0, contact: nil)), json) }
         if method == "POST", path == "/v1/claim/code" { return (200, encode(ClaimCode(code: "K7M2QX", expiresAt: now + 900_000)), json) }
         if method == "POST", path == "/v1/ai/describe" { return (200, encode(AIGuess(name: "宜家小书桌", cat: "furn", cond: "几乎全新", price: 30)), json) }
-        if method == "GET", path == "/v1/config" { return (200, encode(AppConfig(opsWechat: "demo_ops", aiDescribe: true)), json) }
+        if method == "GET", path == "/v1/config" { return (200, encode(AppConfig(opsWechat: "demo_ops", contactWechat: "demo_ops", aiDescribe: true)), json) }
         if method == "GET", path == "/v1/me/blocks" {
             let sample = Demo.scene == "blocked" ? [Blocked(id: "u5", at: now - 3 * 86_400_000, name: "林夏", color: 2, named: true), Blocked(id: "u6", at: now - 20 * 86_400_000, name: "同学 A21", color: 4, named: false)] : []
             return (200, encode(BlockList(items: sample)), json)
