@@ -465,8 +465,8 @@ async function feed(req, env, url) {
     // 分层：一层排完再排下一层，同一层里照旧按综合分；卖完的都放最后
     const direct = directTerms(q), expanded = searchTerms(q);
     const qv = await queryVector(env, q);
-    // bge-m3 对短词偏高：不相干的也有 0.4～0.5，相近的 0.55 以上（11-01 拿 32 条样本试的）
-    const minSim = Number(env.SEARCH_MIN_SIM || (env.AI_MOCK === "1" ? 0.5 : 0.55));
+    // bge-m3 对短词偏高：不相干的也有 0.4～0.5，相近的 0.55 以上（11-01 拿 32 条样本试的，总管定 0.57）
+    const minSim = Number(env.SEARCH_MIN_SIM || (env.AI_MOCK === "1" ? 0.5 : 0.57));
     tierOf = new Map(rows.map(r => [r.id, searchTier(r, direct, expanded, qv, minSim)]));
     const hit = rows.filter(r => tierOf.get(r.id).tier > 0);
     // 第三层按相似度排，越像越前
