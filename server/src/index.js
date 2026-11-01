@@ -382,11 +382,14 @@ async function embedListing(env, id) {
 }
 
 // 搜索时分三层：名字直接有；同义词、备注、地点、标签有；语义相近。完全不沾边的不给
+// 英文按整词算（table 不算 tablet），中文按包含
+const hasTerm = (text, t) => /^[a-z0-9 ]+$/.test(t) ? new RegExp(`(^|[^a-z0-9])${t}([^a-z0-9]|$)`).test(text) : text.includes(t);
+
 function searchTier(row, direct, expanded, qv, minSim) {
   const title = (row.title || "").toLowerCase();
-  if (direct.some(t => title.includes(t))) return { tier: 1, sim: null };
+  if (direct.some(t => hasTerm(title, t))) return { tier: 1, sim: null };
   const rest = [title, row.descr, row.place, row.tags].map(x => (x || "").toLowerCase());
-  if (expanded.some(t => rest.some(x => x.includes(t)))) return { tier: 2, sim: null };
+  if (expanded.some(t => rest.some(x => hasTerm(x, t)))) return { tier: 2, sim: null };
   const sim = qv ? cosine(qv, fromBlob(row.embedding)) : 0;
   return sim >= minSim ? { tier: 3, sim } : { tier: 0, sim };
 }

@@ -888,6 +888,9 @@ r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("尺子"
 ok("不是管理员看不到层", r.data.items.every(x => x.tier === undefined), r.data.items[0]);
 r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("直尺套") + "&debug=1", { token: ADMIN });
 ok("语义相近的算第三层", r.data.items.some(x => x.tier === 3) || r.data.items.every(x => x.tier <= 2), r.data.items.map(x => [x.title, x.tier, x.sim]));
+const srTablet = await srPost("drawing tablet " + stamp);
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("桌子") + "&debug=1", { token: ADMIN });
+ok("英文按整词：table 不算 tablet", !(r.data.items.find(x => x.id === srTablet.id)?.tier <= 2), r.data.items.map(x => [x.title, x.tier]));
 r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("尺子") + "&cat=furn");
 ok("同义词照样受分类筛选", !ids(r.data.items).includes(srIpad.id), r.data);
 const tagOf = id => JSON.parse(execSync(`npx wrangler d1 execute fengji --local --json --command "SELECT tags FROM listings WHERE id = '${id}'"`).toString())[0].results[0].tags;
