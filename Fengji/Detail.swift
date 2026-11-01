@@ -137,23 +137,26 @@ struct DetailView: View {
         }
     }
 
+    /// 卖家一行：头像、昵称，群帖后面跟“来自群 · 群名”，只占一行；放不下先截群名，昵称不截
     private var sellerLine: some View {
-        HStack(spacing: 12) {
-            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 34, url: item.sellerAvatar)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.sellerLabel)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Theme.ink)
+        HStack(spacing: 10) {
+            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 44, url: item.sellerAvatar)
+            Text(item.sellerLabel)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .fixedSize()
+            if item.isGroup {
+                Text(["来自群", item.sourceGroup ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.sub)
                     .lineLimit(1)
-                if item.isGroup {
-                    Text(["来自群", item.sourceGroup ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.sub)
-                }
+                    .truncationMode(.tail)
             }
-            Spacer(minLength: 8)
-            if showHint {
-                Text("左滑看主页 ›").font(.system(size: 13)).foregroundStyle(Theme.sub)
+            Spacer(minLength: 6)
+            // 群帖这一行挤，提示先收掉，只留箭头
+            if showHint, !item.isGroup {
+                Text("左滑看主页 ›").font(.system(size: 13)).foregroundStyle(Theme.sub).fixedSize()
             } else {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
