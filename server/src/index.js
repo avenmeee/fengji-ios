@@ -1,5 +1,5 @@
 // 蜂集后端：买、卖、租房的条目，登录，照片，举报、屏蔽、删号、管理。
-import { describePhoto, groupPhotos } from "./ai.js";
+import { describePhoto, groupPhotos, tagWords } from "./ai.js";
 import { exchangeCode, fetchAppleKeys, revokeToken, verifyIdentityToken } from "./apple.js";
 import { listingPage, privacyPage, rulesPage, supportPage } from "./pages.js";
 import { pushToUser } from "./push.js";
@@ -277,6 +277,87 @@ function rankFeed(rows, now) {
   return [...spreadSellers([...fresh, ...older]), ...sold];
 }
 
+// ---- 搜索（11-01）：查询词变形 + 同义词表 + 帖子的 AI 搜索标签 ----
+// 同义词表兜底：一组里搜哪个都算。零结果词从 event-stats 里看，再往这里补
+const SYNONYMS = [
+  ["电脑", "笔记本", "笔记本电脑", "laptop", "macbook", "平板", "ipad"],
+  ["显示器", "屏幕", "monitor"],
+  ["椅子", "凳子", "chair"],
+  ["桌子", "书桌", "desk", "table"],
+  ["尺", "尺子", "直尺", "ruler"],
+  ["画架", "easel"],
+  ["颜料", "paint"],
+  ["马克笔", "marker"],
+  ["台灯", "灯", "lamp"],
+  ["床垫", "mattress"],
+  ["沙发", "sofa", "couch"],
+  ["冰箱", "fridge"],
+  ["微波炉", "microwave"],
+  ["自行车", "单车", "bike"]
+];
+const SUFFIXES = ["子", "儿", "头"];
+
+// 一个查询词变成几种写法：去空格、去常见词尾、英文单复数，再按同义词表扩开
+function searchTerms(q) {
+  const base = q.toLowerCase().trim();
+  const out = new Set([base, base.replace(/\s+/g, "")]);
+  for (const t of [...out]) {
+    if (/[\u4e00-\u9fff]$/.test(t) && t.length >= 2 && SUFFIXES.includes(t.slice(-1))) out.add(t.slice(0, -1));
+    if (/^[a-z][a-z ]*$/.test(t)) {
+      if (t.endsWith("es") && t.length > 3) out.add(t.slice(0, -2));
+      if (t.endsWith("s") && t.length > 2) out.add(t.slice(0, -1));
+      else out.add(t + "s");
+    }
+  }
+  for (const t of [...out]) {
+    for (const group of SYNONYMS) if (group.includes(t)) group.forEach(w => out.add(w));
+  }
+  return [...out].filter(Boolean).slice(0, 24);
+}
+
+// 发帖、改帖以后在后台做，不耽误返回。拿不到 ctx 就直接等
+const CTX = new WeakMap();
+function later(req, work) {
+  const p = work.catch(e => console.error("later", e && e.message));
+  const ctx = CTX.get(req);
+  if (ctx) ctx.waitUntil(p);
+  return ctx ? null : p;
+}
+
+// 帖子的搜索标签：只给 AI 文字，不传图；记进全站预算，不扣卖家的额度。失败或没钱了就跳过
+async function tagListing(env, id) {
+  if (!aiEnabled(env)) return false;
+  if (await monthSum(env, "ai_microusd") >= Number(env.AI_MONTHLY_USD || 40) * 1e6) return false;
+  const row = await env.DB.prepare("SELECT title, descr, cat, kind FROM listings WHERE id = ?").bind(id).first();
+  if (!row) return false;
+  const r = await tagWords(env, { title: row.title, descr: (row.descr || "").slice(0, 300), cat: row.cat, kind: row.kind });
+  await bumpBy(env, "*", "ai_microusd", r.microUsd);
+  const tags = [...new Set(r.tags.map(t => scrubText(t).toLowerCase()).filter(t => t && t.length <= 20))].slice(0, 10);
+  await env.DB.prepare("UPDATE listings SET tags = ? WHERE id = ?").bind(" " + tags.join(" ") + " ", id).run();
+  return true;
+}
+
+// 没标签的补上：管理员接口和每天的定时任务都用它。一次最多 n 条
+async function tagMissing(env, n) {
+  const rows = (await env.DB.prepare("SELECT id FROM listings WHERE tags IS NULL AND status IN ('on', 'reserved', 'off') ORDER BY bumped_at DESC LIMIT ?").bind(n).all()).results;
+  let done = 0;
+  for (const r of rows) {
+    try {
+      if (await tagListing(env, r.id)) done++; else break;
+    } catch (e) {
+      console.error("tag", r.id, e && e.message);
+    }
+  }
+  const left = (await env.DB.prepare("SELECT COUNT(*) AS n FROM listings WHERE tags IS NULL AND status IN ('on', 'reserved', 'off')").first()).n;
+  return { done, left };
+}
+
+async function backfillTags(req, env, url) {
+  await needStaff(req, env);
+  const n = Math.min(50, Math.max(1, Number(url.searchParams.get("n")) || 20));
+  return json(await tagMissing(env, n));
+}
+
 async function feed(req, env, url) {
   const viewer = await currentUser(req, env);
   const p = url.searchParams, kind = p.get("kind") === "rent" ? "rent" : "goods";
@@ -291,9 +372,13 @@ async function feed(req, env, url) {
   if (kind === "rent" && (unit === "whole" || unit === "room")) { where.push("l.unit_type IN (?, 'both')"); args.push(unit); }
   const q = clean(p.get("q"), 40);
   if (q) {
-    const like = "%" + q.replace(/[\\%_]/g, c => "\\" + c) + "%";
-    where.push("(l.title LIKE ? ESCAPE '\\' OR l.descr LIKE ? ESCAPE '\\' OR l.place LIKE ? ESCAPE '\\')");
-    args.push(like, like, like);
+    const ors = [];
+    for (const t of searchTerms(q)) {
+      const like = "%" + t.replace(/[\\%_]/g, c => "\\" + c) + "%";
+      ors.push("l.title LIKE ? ESCAPE '\\' OR l.descr LIKE ? ESCAPE '\\' OR l.place LIKE ? ESCAPE '\\' OR l.tags LIKE ? ESCAPE '\\'");
+      args.push(like, like, like, like);
+    }
+    where.push("(" + ors.join(" OR ") + ")");
   }
   if (viewer) { where.push("l.user_id NOT IN (SELECT blocked_id FROM blocks WHERE user_id = ?)"); args.push(viewer.id); }
   // 候选先取最近的 300 条，在这里算分、打散、切页；量大了再搬进数据库
@@ -369,6 +454,7 @@ async function createListing(req, env, url) {
   await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, from_date, to_date, lease_end, from_prec, to_prec, utilities, private_bath, delivery, delivery_fee, pickup_before, pickup_after, long_term, furnished, room_type, unit_type, furniture, internet, deposit, app_fee, parking, pets, roommates, place, descr, contact, avail_time, photos, status, created_at, updated_at, bumped_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?)")
     .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.from_prec, v.to_prec, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.avail_time, v.photos, now, now, now).run();
   const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
+  await later(req, tagListing(env, id));
   return json(view(row, url.origin, u), 201);
 }
 
@@ -395,6 +481,11 @@ async function updateListing(req, env, url, id) {
   await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, from_date=?, to_date=?, lease_end=?, from_prec=?, to_prec=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, room_type=?, unit_type=?, furniture=?, internet=?, deposit=?, app_fee=?, parking=?, pets=?, roommates=?, place=?, descr=?, contact=?, avail_time=?, photos=?, updated_at=? WHERE id=?")
     .bind(v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.from_prec, v.to_prec, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.avail_time, v.photos, Date.now(), id).run();
   if (v.price !== row.price) await clearScore(env, id);
+  // 名字、备注、分类变了，搜索标签重做
+  if (v.title !== row.title || v.descr !== row.descr || v.cat !== row.cat) {
+    await env.DB.prepare("UPDATE listings SET tags = NULL WHERE id = ?").bind(id).run();
+    await later(req, tagListing(env, id));
+  }
   const kept = new Set(JSON.parse(v.photos));
   await removePhotos(env, JSON.parse(row.photos).filter(k => !kept.has(k)));
   if (relist) {
@@ -1183,6 +1274,7 @@ async function createBatch(req, env, url) {
   await bumpBy(env, "*", "post", checked.length);
   const rows = (await env.DB.prepare(`SELECT * FROM listings WHERE id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all()).results;
   const byId = new Map(rows.map(r => [r.id, r]));
+  await later(req, (async () => { for (const id of ids) await tagListing(env, id).catch(e => console.error("tag", id, e && e.message)); })());
   return json({ items: ids.map(id => view(byId.get(id), url.origin, u)) }, 201);
 }
 
@@ -1542,6 +1634,7 @@ async function route(req, env) {
   if (method === "POST" && path === "/v1/admin/claim/verify") return verifyClaim(req, env);
   if (method === "GET" && path === "/v1/admin/stats") return adminStats(req, env);
   if (method === "GET" && path === "/v1/admin/event-stats") return eventStats(req, env, url);
+  if (method === "POST" && path === "/v1/admin/tags/backfill") return backfillTags(req, env, url);
   if (method === "POST" && path === "/v1/events") return postEvents(req, env);
   if (method === "GET" && path === "/v1/admin/reports") return adminReports(req, env, url);
   if (method === "POST" && (m = /^\/v1\/admin\/reports\/([0-9a-f]+)\/close$/.exec(path))) return adminCloseReport(req, env, m[1]);
@@ -1558,8 +1651,11 @@ export default {
   async scheduled(event, env) {
     await purgeExpired(env);
     await purgeEvents(env);
+    // 群帖导入和漏掉的，每天补一点标签
+    await tagMissing(env, 30);
   },
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
+    if (ctx) CTX.set(req, ctx);
     try {
       return await route(req, env);
     } catch (e) {

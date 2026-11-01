@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS listings (
   deleted_at INTEGER,            -- 卖家删了：对外消失，只留一张小缩略图和文字给本人看记录            -- 卖家选填的成交价，只用于比价和汇总，不公开
   source_type TEXT NOT NULL DEFAULT 'self', -- self 自己发；group 群里搬来
   source_id TEXT,                -- 群里搬来的去重编号
+  tags TEXT,                     -- AI 写的搜索词，空格隔开、两头带空格；空是还没做
   source_group TEXT,             -- 去哪个群找
   source_poster TEXT,            -- 找谁（群昵称）
   source_posted_at INTEGER,      -- 发在群里的时间，超过 10 天隐藏

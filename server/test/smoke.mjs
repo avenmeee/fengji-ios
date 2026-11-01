@@ -857,6 +857,40 @@ await call("POST", `/v1/blocks/${s1.me.id}`, { token: o1.token });
 r = await call("GET", "/v1/me/blocks", { token: o1.token });
 ok("屏蔽名单带昵称和颜色", r.data.items.some(x => x.id === s1.me.id && x.name === "主页卖家" && Number.isInteger(x.color)), r);
 
+// 搜索：词尾、同义词、英文、AI 标签
+const sr = await login("搜索");
+await call("POST", "/v1/me/agree", { token: sr.token });
+const srKey = async () => (await call("POST", "/v1/photos", { token: sr.token, raw: jpeg })).data.key;
+const srPost = async (title, extra = {}) => (await call("POST", "/v1/listings", { token: sr.token, body: { ...goods, title, desc: "", photos: [await srKey()], ...extra } })).data;
+const srRuler = await srPost("钢尺" + stamp);
+const srIpad = await srPost("iPad 九成新" + stamp, { cat: "elec" });
+const srLaptop = await srPost("Dell laptop " + stamp, { cat: "elec" });
+const srChair = await srPost("办公椅子" + stamp);
+const ids = items => (items || []).map(x => x.id);
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("尺子"));
+ok("“尺子”能搜到“尺”", ids(r.data.items).includes(srRuler.id), r.data);
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("电脑"));
+ok("“电脑”能搜到 iPad 和 laptop", ids(r.data.items).includes(srIpad.id) && ids(r.data.items).includes(srLaptop.id), r.data);
+r = await call("GET", "/v1/listings?kind=goods&q=chair");
+ok("“chair”能搜到椅子", ids(r.data.items).includes(srChair.id), r.data);
+r = await call("GET", "/v1/listings?kind=goods&q=LAPTOPS");
+ok("英文不分大小写、单复数都算", ids(r.data.items).includes(srLaptop.id), r.data);
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("i pad"));
+ok("去掉空格再搜", ids(r.data.items).includes(srIpad.id), r.data);
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("尺子") + "&cat=furn");
+ok("同义词照样受分类筛选", !ids(r.data.items).includes(srIpad.id), r.data);
+const tagOf = id => JSON.parse(execSync(`npx wrangler d1 execute fengji --local --json --command "SELECT tags FROM listings WHERE id = '${id}'"`).toString())[0].results[0].tags;
+ok("发帖后在后台写了搜索标签", (tagOf(srRuler.id) || "").includes("mock"), tagOf(srRuler.id));
+r = await call("GET", "/v1/listings?kind=goods&q=mock");
+ok("搜索标签也能搜到", ids(r.data.items).includes(srRuler.id), r.data);
+await call("PUT", "/v1/listings/" + srRuler.id, { token: sr.token, body: { ...goods, title: "不锈钢尺" + stamp, desc: "", photos: srRuler.photos.map(p => p.key) } });
+ok("改了名字标签重做", (tagOf(srRuler.id) || "").includes("不锈钢尺"), tagOf(srRuler.id));
+execSync(`npx wrangler d1 execute fengji --local --command "UPDATE listings SET tags = NULL WHERE id = '${srChair.id}'"`, { stdio: "ignore" });
+r = await call("POST", "/v1/admin/tags/backfill?n=50", {});
+ok("补标签要管理员", r.status === 401 || r.status === 403, r);
+r = await call("POST", "/v1/admin/tags/backfill?n=50", { token: ADMIN });
+ok("补标签接口能补", r.status === 200 && r.data.done >= 1 && (tagOf(srChair.id) || "").includes("mock"), r.data);
+
 // 匿名使用记录
 const ev = (install, events, token) => call("POST", "/v1/events", { token, body: { install, events } });
 const inst = "a1b2c3d4-e5f6-4a7b-8c9d-0123456789ab", inst2 = "b1b2c3d4-e5f6-4a7b-8c9d-0123456789ab";
