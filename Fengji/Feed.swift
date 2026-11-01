@@ -289,9 +289,9 @@ struct BuyView: View {
                                     PhaseBlock(phase: model.phase)
                                 }
                             } else {
-                                LazyVStack(spacing: 22) {
+                                LazyVStack(spacing: 14) {
                                     ForEach(rows) { row in
-                                        HStack(alignment: .top, spacing: 16) {
+                                        HStack(alignment: .top, spacing: 12) {
                                             card(row.a)
                                             if let b = row.b {
                                                 card(b)
@@ -366,39 +366,72 @@ struct BuyView: View {
     }
 }
 
+/// 卡片（C 版）：浅色卡纸留一圈边，像装裱；价格和蜜蜂做成价签贴在照片左下，照片下面只放名字，卖家最淡
 struct GoodsCard: View {
     let item: Listing
-    var aspect: CGFloat = 0.8
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             Color.clear
-                .aspectRatio(aspect, contentMode: .fit)
+                .aspectRatio(0.8, contentMode: .fit)
                 .overlay { ListingImage(item: item, maxPixel: 900).soldCover(item) }
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-                .background(CardShadow(radius: 10, y: 4))
-            // 名字和价格一样大，只一行
-            Text(item.title)
-                .font(.system(size: 16))
-                .foregroundStyle(Theme.ink)
-                .lineLimit(1)
-            HStack(spacing: 6) {
-                Text(item.priceText)
-                    .font(.system(size: 16, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.ink)
-                if item.isReserved {
-                    Text("已预订").font(.footnote).foregroundStyle(Theme.sub)
-                }
-                Spacer(minLength: 4)
-                ScoreBadge(score: item.score, playID: item.id)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(alignment: .bottomLeading) { PriceTag(item: item) }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(item.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(item.isSold ? Theme.sub : Theme.ink)
+                    .lineLimit(1)
+                SellerLine(item: item, avatarSize: 15, fontSize: 12)
             }
-            SellerLine(item: item)
+            .padding(.horizontal, 5)
+            .padding(.top, 9)
+            .padding(.bottom, 5)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
+        .padding(7)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
+        .contentShape(RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(item.title)
+    }
+}
+
+/// 照片左下的价签：价格加蜜蜂分；卖完了换成黑底“已卖出 / 已租出”
+struct PriceTag: View {
+    let item: Listing
+
+    var body: some View {
+        Group {
+            if item.isSold {
+                Text(item.isRent ? "已租出" : "已卖出")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.bg)
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(Theme.ink, in: RoundedRectangle(cornerRadius: 9))
+            } else {
+                HStack(spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        Text(item.priceText)
+                            .font(.system(size: 14, weight: .semibold))
+                            .monospacedDigit()
+                        if item.isRent {
+                            Text("/月").font(.system(size: 11.5)).foregroundStyle(Theme.sub)
+                        }
+                    }
+                    if item.isReserved {
+                        Text("已预订").font(.system(size: 11.5, weight: .medium)).foregroundStyle(Theme.warn)
+                    }
+                    ScoreBadge(score: item.score, size: 15, playID: item.id, labelSize: 11.5)
+                }
+                .foregroundStyle(Theme.ink)
+                .padding(.horizontal, 9)
+                .frame(height: 28)
+                .background(Theme.priceTag, in: RoundedRectangle(cornerRadius: 9))
+                .shadow(color: .black.opacity(0.12), radius: 4, y: 1)
+            }
+        }
+        .padding(8)
     }
 }
 
@@ -427,7 +460,7 @@ struct RentView: View {
                                     PhaseBlock(phase: model.phase)
                                 }
                             } else {
-                                LazyVStack(spacing: 22) {
+                                LazyVStack(spacing: 14) {
                                     ForEach(model.items.filter { $0.id != state.pendingDelete?.id }) { item in
                                         NavigationLink(value: item) { RentRow(item: item) }
                                             .buttonStyle(.plain)
@@ -485,36 +518,37 @@ struct RentView: View {
     }
 }
 
+/// 房子的卡片：同一张卡纸，照片 1.6:1，标题一行，地段和日期一行
 struct RentRow: View {
     let item: Listing
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
             Color.clear
-                .aspectRatio(1.5, contentMode: .fit)
+                .aspectRatio(1.6, contentMode: .fit)
                 .overlay { ListingImage(item: item, maxPixel: 1200).soldCover(item) }
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-                .background(CardShadow(radius: 10, y: 4))
-                .padding(.bottom, 6)
-            Text(item.title)
-                .font(.system(size: 16))
-                .foregroundStyle(Theme.ink)
-                .lineLimit(1)
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(item.priceText)
-                    .font(.system(size: 19, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.ink)
-                Text("/月").font(.footnote).foregroundStyle(Theme.sub)
-                if item.isReserved {
-                    Text("已预订").font(.footnote).foregroundStyle(Theme.sub).padding(.leading, 6)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(alignment: .bottomLeading) { PriceTag(item: item) }
+            VStack(alignment: .leading, spacing: 5) {
+                Text(item.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(item.isSold ? Theme.sub : Theme.ink)
+                    .lineLimit(1)
+                let facts = [item.place, item.shortPeriod].filter { !$0.isEmpty }.joined(separator: " · ")
+                if !facts.isEmpty {
+                    Text(facts).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
                 }
+                SellerLine(item: item, avatarSize: 15, fontSize: 12)
             }
-            SellerLine(item: item, extra: [item.place, item.shortPeriod])
+            .padding(.horizontal, 5)
+            .padding(.top, 9)
+            .padding(.bottom, 5)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
+        .padding(7)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
+        .contentShape(RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(item.title)
     }
+}
 }

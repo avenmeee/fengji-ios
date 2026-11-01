@@ -31,6 +31,9 @@ enum Theme {
     static let rentSoft = dyn(0xE6EFE8, 0x344036)
     static let sellSoft = dyn(0xFAF0EB, 0x3D2C26)
     static let accentSoft = dyn(0xFDF1C7, 0x4A3D14)
+    /// 卡片的卡纸、照片上的价签
+    static let paper = dyn(0xF3F1EC, 0x312F2C)
+    static let priceTag = dyn(0xFFFFFF, 0x312F2C)
 
     static let accent = buy
     /// 系统控件的强调色：黄字在白底上看不清，浅色下压深。
@@ -171,7 +174,7 @@ struct SearchBox: View {
 }
 
 /// 空状态只写一行，不放框
-/// 卖完的照片：变灰，压一个“已卖出 / 已租出”。样子等设计定稿，改这里一处就行
+/// 卖完的照片：变灰。“已卖出 / 已租出”在价签的位置
 struct SoldCover: ViewModifier {
     let item: Listing
 
@@ -179,15 +182,7 @@ struct SoldCover: ViewModifier {
         if item.isSold {
             content
                 .grayscale(1)
-                .opacity(0.75)
-                .overlay {
-                    Text(item.isRent ? "已租出" : "已卖出")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10)
-                        .frame(height: 28)
-                        .background(Color.black.opacity(0.6), in: Capsule())
-                }
+                .opacity(0.8)
         } else {
             content
         }
@@ -381,12 +376,14 @@ private struct SellerBee: View {
 struct SellerLine: View {
     let item: Listing
     var extra: [String] = []
+    var avatarSize: CGFloat = 20
+    var fontSize: CGFloat? = nil
 
     var body: some View {
         HStack(spacing: 6) {
-            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: 20, url: item.sellerAvatar)
+            SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: avatarSize, url: item.sellerAvatar)
             Text(([item.sellerLabel] + (item.isGroup ? ["来自群"] : []) + extra).filter { !$0.isEmpty }.joined(separator: " · "))
-                .font(.footnote)
+                .font(fontSize.map { .system(size: $0) } ?? .footnote)
                 .foregroundStyle(Theme.sub)
                 .lineLimit(1)
         }

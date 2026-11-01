@@ -329,6 +329,8 @@ struct ScoreBadge: View {
     /// 列表里传条目编号：同一次打开只飞一次。详情传 nil，打开就飞。
     var playID: String?
     var plays = true
+    /// 档位字的大小；不给就按蜜蜂大小定
+    var labelSize: CGFloat? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tick = 0
     @State private var waiting: Task<Void, Never>?
@@ -366,7 +368,7 @@ struct ScoreBadge: View {
                     BeeIcon(level: score, size: size)
                 }
                 Text(scoreLabel(score))
-                    .font(.system(size: size >= 24 ? 16 : 13, weight: score >= 4 ? .semibold : .regular))
+                    .font(.system(size: labelSize ?? (size >= 24 ? 16 : 13), weight: score >= 4 ? .semibold : .regular))
                     .foregroundStyle(score >= 4 ? Theme.ink : Theme.sub)
                     .lineLimit(1)
                     .fixedSize()

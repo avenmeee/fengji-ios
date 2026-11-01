@@ -105,9 +105,9 @@ struct SellerView: View {
 
     /// 和买东西页一样：一行两个，一样大
     private var goodsGrid: some View {
-        LazyVStack(spacing: 22) {
+        LazyVStack(spacing: 14) {
             ForEach(Array(stride(from: 0, to: goods.count, by: 2)), id: \.self) { i in
-                HStack(alignment: .top, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
                     card(goods[i])
                     if i + 1 < goods.count {
                         card(goods[i + 1])
