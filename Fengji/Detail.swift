@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// 详情：照片像挂在墙上，下面是展签。颜色只给六边形。
+/// 详情：先文字后照片。从上到下是卖家、名字和价格、文字信息，照片一张接一张排在最下面。
 struct DetailView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
@@ -11,26 +11,20 @@ struct DetailView: View {
     @State private var shareImage: ShareImage?
     @State private var panel = Demo.scene == "detail-panel" || Demo.scene == "detail-report"
     @State private var stage: PanelStage = Demo.scene == "detail-report" ? .reportWhat : .main
-    @State private var page = 0
+    /// 点开看大图：从第几张开始
+    @State private var viewing: PhotoIndex?
     @State private var wanting = false
     @State private var popCheck = ""
     @State private var goSeller = false
     @State private var showHint = false
-    /// 照片翻页时，手指按下时在第几张：只有从最后一张再往左滑才进主页
-    @State private var dragStartPage: Int?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// 展签第二行：分类、成色或房子的情况
-    private var line1: String {
-        // 分类和成色是 AI 后台用的，不显示
-        let parts = item.isRent ? [item.rentFacts] : []
-        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
-    }
-
-    /// 第三行：地点、时间、什么时候发的
-    private var line2: String {
-        let parts = item.isRent ? [item.place, item.period, postedText] : [item.place, item.pickupText, postedText]
-        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+    /// 文字信息：一行一项。东西是地点和怎么拿，房子是地段、可住日期、房子情况
+    private var facts: [(String, String)] {
+        let rows: [(String, String)] = item.isRent
+            ? [("地段", item.place), ("可住", item.period), ("房子", item.rentFacts)]
+            : [("地点", item.place), ("怎么拿", item.pickupText)]
+        return rows.filter { !$0.1.isEmpty }
     }
 
     /// 一周内写“3 天前发布”“今天发布”，再早写日期。群帖写“群里 10月28日发”。重新上架或擦亮按最近一次算。
@@ -59,9 +53,12 @@ struct DetailView: View {
             .frame(height: 44)
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    photo
+                    sellerRow
                     label
+                    photos
                 }
+                .contentShape(Rectangle())
+                .simultaneousGesture(swipeToSeller())
             }
         }
         .background(Theme.bg)
@@ -98,55 +95,43 @@ struct DetailView: View {
         }
         .sheet(isPresented: $wanting) { WantSheet(item: item) }
         .overlay { BottomPanel(shown: $panel) { panelContent } }
+        .fullScreenCover(item: $viewing) { start in
+            PhotoViewer(item: item, start: start.index)
+        }
     }
 
-    private var photo: some View {
+    private var photos: some View {
         VStack(spacing: 10) {
-            Color.clear
-                .aspectRatio(0.78, contentMode: .fit)
-                .overlay {
-                    if item.photos.count > 1 {
-                        TabView(selection: $page) {
-                            ForEach(item.photos.indices, id: \.self) { i in
-                                ListingImage(item: item, index: i, maxPixel: 1600)
-                                    .clipped()
-                                    .background(NoScrollsToTop())
-                                    .tag(i)
-                            }
+            ForEach(item.photos.indices, id: \.self) { i in
+                Button { viewing = PhotoIndex(index: i) } label: {
+                    DetailPhoto(item: item, index: i)
+                        .overlay(alignment: .topLeading) {
+                            if i == 0, item.isSold { soldTag }
                         }
-                        .tabViewStyle(.page(indexDisplayMode: .never))
-                        .simultaneousGesture(swipeToSeller(fromLastPhoto: true))
-                    } else {
-                        ListingImage(item: item, maxPixel: 1600)
-                            .contentShape(Rectangle())
-                            .simultaneousGesture(swipeToSeller())
-                    }
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
-                .overlay(alignment: .topLeading) {
-                    if item.isSold {
-                        Text(item.isRent ? "已租出" : "已卖出")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 10)
-                            .frame(height: 28)
-                            .background(Color.black.opacity(0.6), in: Capsule())
-                            .padding(12)
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-                .background(CardShadow(radius: 14, y: 6))
-            if item.photos.count > 1 {
-                HStack(spacing: 6) {
-                    ForEach(item.photos.indices, id: \.self) { i in
-                        Circle()
-                            .fill(i == page ? Theme.ink : Theme.line)
-                            .frame(width: 6, height: 6)
-                    }
-                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("第 \(i + 1) 张照片，点开看大图")
+            }
+            if item.photos.isEmpty {
+                DetailPhoto(item: item, index: 0)
+                    .overlay(alignment: .topLeading) { if item.isSold { soldTag } }
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
         }
-        .padding(.horizontal, 28)
+        .padding(.horizontal, 16)
         .padding(.top, 4)
+        .padding(.bottom, 16)
+    }
+
+    private var soldTag: some View {
+        Text(item.isRent ? "已租出" : "已卖出")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(Theme.bg)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(Theme.ink, in: RoundedRectangle(cornerRadius: 9))
+            .padding(12)
     }
 
     /// 点进卖家主页；自己的就去“我”
@@ -182,7 +167,8 @@ struct DetailView: View {
                     .foregroundStyle(Theme.sub)
             }
         }
-        .padding(.top, 10)
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint("看他发的其他东西")
@@ -191,59 +177,57 @@ struct DetailView: View {
     private var label: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(item.title)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(Theme.ink)
-            if !line1.isEmpty {
-                Text(line1).font(.subheadline).foregroundStyle(Theme.sub)
-            }
-            if !line2.isEmpty {
-                Text(line2).font(.subheadline).foregroundStyle(Theme.sub)
-            }
-            if gone {
-                Text("这条已经没有了").font(.subheadline).foregroundStyle(Theme.warn)
-            } else if !item.isOn {
-                Text(item.statusText).font(.subheadline).foregroundStyle(Theme.warn)
-            }
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(item.priceText)
                     .font(.system(size: 26, weight: .bold))
                     .tracking(-0.3)
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(item.isSold ? Theme.sub : Theme.ink)
                 if item.isRent { Text("/月").font(.subheadline).foregroundStyle(Theme.sub) }
                 Spacer(minLength: 8)
                 ScoreBadge(score: item.score, size: 26)
             }
-            .padding(.top, 6)
-            sellerRow
+            if !postedText.isEmpty {
+                Text(postedText).font(.subheadline).foregroundStyle(Theme.sub)
+            }
+            if gone {
+                Text("这条已经没有了").font(.subheadline).foregroundStyle(Theme.warn)
+            } else if !item.isOn {
+                Text(item.statusText).font(.subheadline.weight(.medium)).foregroundStyle(item.isSold ? Theme.ink : Theme.warn)
+            }
             if !item.desc.isEmpty {
                 Text(item.desc)
                     .foregroundStyle(Theme.ink)
                     .lineSpacing(4)
-                    .padding(.top, 6)
+                    .padding(.top, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            if !facts.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(facts, id: \.0) { label, value in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(label).font(.subheadline).foregroundStyle(Theme.sub).frame(width: 52, alignment: .leading)
+                            Text(value).font(.subheadline).foregroundStyle(Theme.ink).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .padding(.top, 10)
+            }
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 18)
-        .padding(.bottom, 16)
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .simultaneousGesture(swipeToSeller())
     }
 
     /// 像抖音左滑进作者主页：手指从右往左，横着滑够远才算。自己的帖子没反应。
     /// 从左边缘往右滑是系统返回，方向相反，不冲突。
-    private func swipeToSeller(fromLastPhoto: Bool = false) -> some Gesture {
+    private func swipeToSeller() -> some Gesture {
         DragGesture(minimumDistance: 24)
-            .onChanged { _ in
-                if dragStartPage == nil { dragStartPage = page }
-            }
             .onEnded { v in
-                let start = dragStartPage
-                dragStartPage = nil
                 guard !item.mine, !gone, v.translation.width < -70,
                       abs(v.translation.width) > abs(v.translation.height) * 1.5 else { return }
-                if fromLastPhoto, start != item.photos.count - 1 { return }
                 openSeller()
             }
     }
@@ -604,5 +588,107 @@ struct WantSheet: View {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+}
+
+private struct PhotoIndex: Identifiable {
+    let index: Int
+    var id: Int { index }
+}
+
+/// 详情里的一张照片：全宽，按原图比例；没加载出来先占 4:5
+struct DetailPhoto: View {
+    let item: Listing
+    let index: Int
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().aspectRatio(contentMode: .fit)
+            } else {
+                Color.clear.aspectRatio(0.8, contentMode: .fit).overlay { ListingImage(item: item, index: index, maxPixel: 1600) }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .task(id: item.photos.indices.contains(index) ? item.photos[index].url : "") { await load() }
+    }
+
+    private func load() async {
+        guard item.photos.indices.contains(index) else { return }
+        let url = item.photos[index].url, key = "\(url)#1600"
+        if let hit = ImageCache.shared.get(key) { image = hit; return }
+        guard let u = URL(string: url), let (data, _) = try? await URLSession.shared.data(from: u), let full = UIImage(data: data) else { return }
+        let k = min(1, 1600 / max(full.size.width, full.size.height, 1))
+        let thumb = await full.byPreparingThumbnail(ofSize: CGSize(width: full.size.width * k, height: full.size.height * k)) ?? full
+        ImageCache.shared.set(key, thumb)
+        image = thumb
+    }
+}
+
+/// 看大图：黑底，左右滑换张，双指或双击放大
+struct PhotoViewer: View {
+    let item: Listing
+    let start: Int
+    @Environment(\.dismiss) private var dismiss
+    @State private var page = 0
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            TabView(selection: $page) {
+                ForEach(item.photos.indices, id: \.self) { i in
+                    ZoomablePhoto(item: item, index: i).tag(i)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: item.photos.count > 1 ? .always : .never))
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(.black.opacity(0.4), in: Circle())
+            }
+            .padding(16)
+            .accessibilityLabel("关闭")
+        }
+        .onAppear { page = start }
+    }
+}
+
+private struct ZoomablePhoto: View {
+    let item: Listing
+    let index: Int
+    @State private var scale: CGFloat = 1
+    @State private var base: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    var body: some View {
+        RemoteImage(url: item.photos[index].url, maxPixel: 2400, fill: false)
+            .scaleEffect(scale)
+            .offset(offset)
+            .gesture(
+                MagnifyGesture()
+                    .onChanged { scale = min(max(base * $0.magnification, 1), 4) }
+                    .onEnded { _ in
+                        base = scale
+                        if scale <= 1 { withAnimation(.snappy) { offset = .zero; lastOffset = .zero } }
+                    }
+            )
+            .simultaneousGesture(
+                DragGesture()
+                    .onChanged { v in
+                        guard scale > 1 else { return }
+                        offset = CGSize(width: lastOffset.width + v.translation.width, height: lastOffset.height + v.translation.height)
+                    }
+                    .onEnded { _ in lastOffset = offset },
+                including: scale > 1 ? .all : .subviews
+            )
+            .onTapGesture(count: 2) {
+                withAnimation(.snappy) {
+                    if scale > 1 { scale = 1; base = 1; offset = .zero; lastOffset = .zero } else { scale = 2.5; base = 2.5 }
+                }
+            }
     }
 }
