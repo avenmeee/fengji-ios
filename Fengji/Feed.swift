@@ -36,7 +36,9 @@ final class FeedModel: ObservableObject {
         loadingMore = true
         defer { loadingMore = false }
         if let page = try? await API.shared.feed(kind: kind, filter: filter, q: q.trimmingCharacters(in: .whitespaces), offset: offset) {
-            items += page.items
+            // 翻页时排序可能挪动，已有的不再加
+            let seen = Set(items.map(\.id))
+            items += page.items.filter { !seen.contains($0.id) }
             next = page.next
         }
     }

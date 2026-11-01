@@ -234,7 +234,7 @@ async function feed(req, env, url) {
   }
   const offset = Math.max(0, Math.floor(Number(p.get("offset")) || 0));
   if (viewer) { where.push("l.user_id NOT IN (SELECT blocked_id FROM blocks WHERE user_id = ?)"); args.push(viewer.id); }
-  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY COALESCE(l.score, 2) DESC, l.bumped_at DESC LIMIT ? OFFSET ?`).bind(...args, PAGE, offset).all()).results;
+  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY COALESCE(l.score, 2) DESC, l.bumped_at DESC, l.id DESC LIMIT ? OFFSET ?`).bind(...args, PAGE, offset).all()).results;
   return json({ items: rows.map(r => view(r, url.origin, viewer)), next: rows.length === PAGE ? offset + PAGE : null });
 }
 
