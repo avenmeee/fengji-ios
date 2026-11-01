@@ -18,6 +18,8 @@ struct DetailView: View {
     @State private var goSeller = false
     @State private var showHint = false
     @State private var tipOpen = false
+    /// 点价签：讲清楚蜜蜂分怎么来的
+    @State private var scoreInfo = Demo.scene == "detail-score"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 一周内写“3 天前发布”“今天发布”，再早写日期。群帖写“群里 10月28日发”。重新上架或擦亮按最近一次算。
@@ -92,6 +94,7 @@ struct DetailView: View {
         }
         .sheet(isPresented: $wanting) { WantSheet(item: item) }
         .overlay { BottomPanel(shown: $panel) { panelContent } }
+        .overlay { BottomPanel(shown: $scoreInfo) { ScoreInfo(score: item.score) } }
         .fullScreenCover(item: $viewing) { start in
             PhotoViewer(item: item, start: start.index)
         }
@@ -174,7 +177,14 @@ struct DetailView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 HStack(alignment: .center, spacing: 8) {
-                    detailPriceTag
+                    // 东西的价签能点开看评分怎么来的；房子没有分，自己的看不到分，卖完的也不点
+                    if !item.isRent, !item.mine, !item.isSold {
+                        Button { scoreInfo = true } label: { detailPriceTag }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("看蜜蜂价格分怎么来的")
+                    } else {
+                        detailPriceTag
+                    }
                     Spacer(minLength: 8)
                     Text(statusLine)
                         .font(.system(size: 13))
@@ -770,5 +780,53 @@ private struct ZoomablePhoto: View {
                     if scale > 1 { scale = 1; base = 1; offset = .zero; lastOffset = .zero } else { scale = 2.5; base = 2.5 }
                 }
             }
+    }
+}
+
+/// 蜜蜂价格分的说明卡：四档，这件所在的那档高亮
+struct ScoreInfo: View {
+    let score: Int?
+
+    private let levels: [(Int, String)] = [
+        (4, "远低于同类二手价"), (3, "比同类便宜"), (2, "符合同类二手价"), (1, "明显高于同类二手价")
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("蜜蜂价格分").font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.ink)
+            Text(score == nil ? "这件还没打分，通常半天内会有。" : "由 AI 打分，仅供参考。")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.sub)
+            VStack(spacing: 4) {
+                ForEach(levels, id: \.0) { level, text in
+                    let on = score.map { max(1, min(4, $0)) } == level
+                    HStack(spacing: 10) {
+                        BeeIcon(level: level, size: 22).frame(width: 28)
+                        Text(scoreLabel(level))
+                            .font(.system(size: 15, weight: on ? .semibold : .regular))
+                            .foregroundStyle(Theme.ink)
+                            .frame(width: 70, alignment: .leading)
+                        Text(text).font(.system(size: 14)).foregroundStyle(on ? Theme.ink : Theme.sub)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 44)
+                    .background(on ? Theme.accentSoft : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+            Text("依据：参考蜂集上同类东西的价格、公开二手平台的价格，再结合照片看成色。")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.sub)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("卖家看不到、也改不了这个分。价格改了会重新打分。")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.sub)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 2)
+        .padding(.bottom, 8)
     }
 }

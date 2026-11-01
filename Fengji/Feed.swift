@@ -333,7 +333,7 @@ struct BuyView: View {
             }
             .reloads(model, version: state.version)
             .onChange(of: model.items) { _, items in
-                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "want-detail" || Demo.scene == "pop-check" || Demo.scene == "live-detail" || Demo.scene == "detail-panel" || Demo.scene == "detail-report", !demoOpened, let first = items.first {
+                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "want-detail" || Demo.scene == "pop-check" || Demo.scene == "live-detail" || Demo.scene == "detail-panel" || Demo.scene == "detail-report" || Demo.scene == "detail-score", !demoOpened, let first = items.first {
                     demoOpened = true
                     path.append(first)
                 }
