@@ -375,6 +375,8 @@ struct BuyView: View {
 /// 卡片（C 版）：浅色卡纸留一圈边，像装裱；价格和蜜蜂做成价签贴在照片左下，照片下面只放名字，卖家最淡
 struct GoodsCard: View {
     let item: Listing
+    /// 卖家主页里不重复写他名字
+    var showSeller = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -388,7 +390,7 @@ struct GoodsCard: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(item.isSold ? Theme.sub : Theme.ink)
                     .lineLimit(1)
-                SellerLine(item: item, avatarSize: 15, fontSize: 12)
+                if showSeller { SellerLine(item: item, avatarSize: 15, fontSize: 12) }
             }
             .padding(.horizontal, 5)
             .padding(.top, 9)
@@ -527,6 +529,7 @@ struct RentView: View {
 /// 房子的卡片：同一张卡纸，照片 1.6:1，标题一行，地段和日期一行
 struct RentRow: View {
     let item: Listing
+    var showSeller = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -544,7 +547,7 @@ struct RentRow: View {
                 if !facts.isEmpty {
                     Text(facts).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
                 }
-                SellerLine(item: item, avatarSize: 15, fontSize: 12)
+                if showSeller { SellerLine(item: item, avatarSize: 15, fontSize: 12) }
             }
             .padding(.horizontal, 5)
             .padding(.top, 9)

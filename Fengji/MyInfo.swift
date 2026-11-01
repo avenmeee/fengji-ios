@@ -93,119 +93,116 @@ struct EmailReveal: View {
 
 // MARK: - 我的信息
 
-/// 头像、昵称，和发布时自动带上的默认地点、取货、微信号
+/// 我的信息（B 版）：上面名片，下面“发布时自动带上”一行一项，点一行弹出来改，改完就存
 struct MyInfoView: View {
     @EnvironmentObject var state: AppState
-    @Environment(\.dismiss) private var dismiss
     @AppStorage("defaultPlace") private var defaultPlace = ""
     @AppStorage("defaultDelivery") private var defaultDelivery = ""
+    @AppStorage("defaultTime") private var defaultTime = ""
     @AppStorage("contact") private var savedContact = ""
-    @State private var name = ""
-    @State private var place = ""
-    @State private var pickup = false
-    @State private var deliver = false
-    @State private var contact = ""
-    @State private var loaded = false
-    @State private var busy = false
+    @State private var editing: InfoField? = Demo.scene == "myinfo-edit" ? .place : nil
+    @State private var draft = Demo.scene == "myinfo-edit" ? "Monty 楼下" : ""
+    @State private var draftPickup = false
+    @State private var draftDeliver = false
     @State private var uploading = false
     @State private var error: String?
     @State private var choosing = false
     @State private var showCamera = false
     @State private var showLibrary = false
     @State private var picked: PhotosPickerItem?
+    @State private var claiming = false
 
     private var me: Me? { state.me }
+
+    enum InfoField: String, Identifiable {
+        case name, delivery, place, time, wechat
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .name: return "昵称"
+            case .delivery: return "取货方式"
+            case .place: return "自取地点"
+            case .time: return "方便的时间"
+            case .wechat: return "微信号"
+            }
+        }
+        var note: String {
+            switch self {
+            case .name: return "别人看到的你"
+            case .wechat: return "填了别人能看到；不填，别人点“想要”联系你"
+            default: return "发东西时自动带上，发之前还能改"
+            }
+        }
+        var placeholder: String {
+            switch self {
+            case .place: return "比如 Monty 楼下"
+            case .time: return "比如 工作日晚上、周末"
+            case .wechat: return "微信号"
+            default: return "昵称"
+            }
+        }
+    }
+
+    private var pickup: Bool { defaultDelivery == "pickup" || defaultDelivery == "both" }
+    private var deliveryText: String {
+        switch defaultDelivery {
+        case "pickup": return "自取"
+        case "deliver": return "可配送"
+        case "both": return "自取、可配送"
+        default: return ""
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             PageTop(title: "我的信息")
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    VStack(spacing: 14) {
-                        Button { choosing = true } label: {
-                            ZStack(alignment: .bottomTrailing) {
-                                SellerAvatar(name: me?.name ?? "", color: me?.color, named: me?.named ?? false, size: 104, url: me?.avatar)
-                                    .opacity(uploading ? 0.5 : 1)
-                                ZStack {
-                                    Hexagon().fill(Theme.ink).frame(width: 30, height: 30)
-                                    Image(systemName: "camera.fill").font(.system(size: 12)).foregroundStyle(Theme.bg)
-                                }
-                                if uploading { HoneyLoader(size: 28).frame(width: 104, height: 104) }
-                            }
+                VStack(alignment: .leading, spacing: 14) {
+                    card
+                    GroupHeader(title: "发布时自动带上", note: "发东西时自动填好").padding(.top, 14)
+                    FormCard {
+                        infoRow("shippingbox", "取货方式", deliveryText, .delivery)
+                        if pickup {
+                            FormDivider()
+                            infoRow("mappin", "自取地点", defaultPlace, .place)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("换头像")
-                        VStack(spacing: 6) {
-                            TextField("昵称", text: $name)
-                                .font(.system(size: 18, weight: .semibold))
-                                .multilineTextAlignment(.center)
-                                .autocorrectionDisabled()
-                            Theme.line.frame(height: 0.5)
-                        }
-                        .padding(.horizontal, 40)
+                        FormDivider()
+                        infoRow("clock", "方便的时间", defaultTime, .time)
+                        FormDivider()
+                        infoRow("message", "微信号", savedContact, .wechat)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 8)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 8) {
-                            ZStack {
-                                Hexagon().fill(Theme.buy).frame(width: 24, height: 24)
-                                Image(systemName: "mappin").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.onBuy)
-                            }
-                            Text("默认地点").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
-                            Spacer()
-                            Text("发东西时自动带上").font(.footnote).foregroundStyle(Theme.sub)
-                        }
-                        FlowLayout(spacing: 6) {
-                            ForEach(PLACES, id: \.self) { p in
-                                Chip(text: p, on: place == p, act: .buy) { place = place == p ? "" : p }
-                            }
-                        }
-                        LineFieldPlain(placeholder: "手动填地点", text: Binding(
-                            get: { PLACES.contains(place) ? "" : place },
-                            set: { place = $0 }
-                        ))
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        GroupLabel(text: "默认取货")
-                        HStack(spacing: 6) {
-                            Chip(text: "自取", on: pickup, act: .buy) { pickup.toggle() }
-                            Chip(text: "可配送", on: deliver, act: .buy) { deliver.toggle() }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        GroupLabel(text: "微信号 · 选填")
-                        LineFieldPlain(placeholder: "不填买家可以点想要留言", text: $contact)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    }
-
+                    Text("微信号别人能看到。不填微信号，别人点“想要”联系你。")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Theme.hint)
+                        .padding(.horizontal, 4)
                     if let error {
                         Text(error).font(.subheadline).foregroundStyle(Theme.warn)
                     }
+                    // 认领入口：送审时 OPS_WECHAT 删掉就不显示
+                    if state.opsWechat != nil {
+                        Text("不常用").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.hint).padding(.top, 16).padding(.horizontal, 4)
+                        Button { claiming = true } label: {
+                            SettingRow(symbol: "hand.raised", title: "认领我在群里发的") {
+                                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.hint)
+                            }
+                            .frame(minHeight: 54)
+                            .padding(.horizontal, 4)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 20)
+                .padding(.bottom, 24)
             }
-            .scrollDismissesKeyboard(.interactively)
-            Button {
-                Task { await save() }
-            } label: {
-                HStack(spacing: 8) {
-                    if busy { HoneyLoader(size: 22) }
-                    Text(busy ? "正在保存" : "保存")
-                }
-            }
-            .buttonStyle(PrimaryButtonStyle(act: .ink))
-            .disabled(busy)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
         }
         .background(Theme.bg)
         .toolbar(.hidden, for: .navigationBar)
+        .overlay {
+            BottomPanel(shown: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
+                if let field = editing { editor(field) }
+            }
+        }
+        .sheet(isPresented: $claiming) { ClaimView() }
         .confirmationDialog("换头像", isPresented: $choosing, titleVisibility: .visible) {
             if UIImagePickerController.isSourceTypeAvailable(.camera) {
                 Button("拍照") { showCamera = true }
@@ -229,16 +226,123 @@ struct MyInfoView: View {
             CameraPicker { image in Task { await upload(image) } }
                 .ignoresSafeArea()
         }
-        .task(id: me?.id) {
-            // 资料可能晚一步到，到了再填
-            guard !loaded, let me else { return }
-            loaded = true
-            name = me.name ?? ""
-            place = defaultPlace
-            pickup = defaultDelivery == "pickup" || defaultDelivery == "both"
-            deliver = defaultDelivery == "deliver" || defaultDelivery == "both"
-            contact = savedContact
+    }
+
+    /// 名片：头像（右下角蜂蜜色相机）、昵称和一支小笔
+    private var card: some View {
+        HStack(spacing: 18) {
+            Button { choosing = true } label: {
+                ZStack(alignment: .bottomTrailing) {
+                    SellerAvatar(name: me?.name ?? "", color: me?.color, named: me?.named ?? false, size: 92, url: me?.avatar)
+                        .opacity(uploading ? 0.5 : 1)
+                    ZStack {
+                        Hexagon().fill(Theme.accent).frame(width: 32, height: 32)
+                        Image(systemName: "camera.fill").font(.system(size: 13)).foregroundStyle(Theme.onBuy)
+                    }
+                    .offset(x: 4, y: 2)
+                    if uploading { HoneyLoader(size: 28).frame(width: 92, height: 92) }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("换头像")
+            Button { open(.name) } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text(me?.name ?? "").font(.system(size: 25, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1)
+                        Image(systemName: "pencil").font(.system(size: 15)).foregroundStyle(Theme.hint)
+                    }
+                    Text("别人看到的你").font(.system(size: 13)).foregroundStyle(Theme.hint)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("改昵称，现在是 " + (me?.name ?? ""))
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func infoRow(_ symbol: String, _ title: String, _ value: String, _ field: InfoField) -> some View {
+        Button { open(field) } label: {
+            SettingRow(symbol: symbol, title: title) {
+                HStack(spacing: 6) {
+                    Text(value.isEmpty ? (field == .delivery ? "没选" : "选填") : value)
+                        .font(.system(size: 15))
+                        .foregroundStyle(value.isEmpty ? Theme.hint : Theme.sub)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.hint)
+                }
+            }
+            .frame(minHeight: 54)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func open(_ field: InfoField) {
+        switch field {
+        case .name: draft = me?.named == true ? (me?.name ?? "") : ""
+        case .delivery:
+            draftPickup = pickup
+            draftDeliver = defaultDelivery == "deliver" || defaultDelivery == "both"
+        case .place: draft = defaultPlace
+        case .time: draft = defaultTime
+        case .wechat: draft = savedContact
+        }
+        error = nil
+        editing = field
+    }
+
+    /// 改一项的弹层：标题、一句说明、输入框、“好”
+    private func editor(_ field: InfoField) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(field.title).font(.system(size: 18, weight: .bold)).foregroundStyle(Theme.ink)
+                Text(field.note).font(.system(size: 13)).foregroundStyle(Theme.sub)
+            }
+            if field == .delivery {
+                HStack(spacing: 8) {
+                    Chip(text: "自取", on: draftPickup) { draftPickup.toggle() }
+                    Chip(text: "可配送", on: draftDeliver) { draftDeliver.toggle() }
+                }
+                .environment(\.formLarge, true)
+            } else {
+                TextField(field.placeholder, text: $draft)
+                    .font(.system(size: 17))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(.horizontal, 16)
+                    .frame(height: 50)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 12))
+            }
+            if let error {
+                Text(error).font(.system(size: 13)).foregroundStyle(Theme.warn)
+            }
+            Button("好") { Task { await save(field) } }
+                .buttonStyle(PrimaryButtonStyle(act: .ink))
+        }
+        .padding(.top, 2)
+        .padding(.bottom, 8)
+    }
+
+    private func save(_ field: InfoField) async {
+        let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch field {
+        case .name:
+            do {
+                state.setProfile(try await API.shared.updateProfile(nickname: t, color: me?.color ?? 0))
+            } catch {
+                self.error = error.localizedDescription
+                return
+            }
+        case .delivery:
+            defaultDelivery = draftPickup && draftDeliver ? "both" : (draftPickup ? "pickup" : (draftDeliver ? "deliver" : ""))
+        case .place: defaultPlace = t
+        case .time: defaultTime = t
+        case .wechat: savedContact = t
+        }
+        editing = nil
+        state.toast("存好了")
     }
 
     /// 裁成正方形、缩到 512，去掉定位
@@ -269,24 +373,6 @@ struct MyInfoView: View {
     private func removeAvatar() async {
         do {
             state.setProfile(try await API.shared.removeAvatar())
-        } catch {
-            self.error = error.localizedDescription
-        }
-    }
-
-    private func save() async {
-        busy = true
-        defer { busy = false }
-        error = nil
-        let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isDefault = t.isEmpty || (me?.named != true && t == me?.name)
-        do {
-            state.setProfile(try await API.shared.updateProfile(nickname: isDefault ? "" : t, color: me?.color ?? 0))
-            defaultPlace = place.trimmingCharacters(in: .whitespacesAndNewlines)
-            defaultDelivery = pickup && deliver ? "both" : (pickup ? "pickup" : (deliver ? "deliver" : ""))
-            savedContact = contact.trimmingCharacters(in: .whitespacesAndNewlines)
-            state.toast("保存好了")
-            dismiss()
         } catch {
             self.error = error.localizedDescription
         }
@@ -322,17 +408,17 @@ struct RecordsView: View {
         VStack(spacing: 0) {
             PageTop(title: "记录")
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    Text("只有你看得到。照片保留 30 天，之后只留文字。")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.sub)
+                        .padding(.horizontal, 4)
                     if items.isEmpty {
-                        if phase == .ok { EmptyBlock(text: "卖掉和删掉的会在这里") } else { PhaseBlock(phase: phase) }
+                        if phase == .ok { EmptyBlock(text: "删掉的会在这里") } else { PhaseBlock(phase: phase) }
                     }
                     ForEach(items) { item in
                         RecordRow(item: item, relist: { relist(item) }, purge: { purging = item })
                     }
-                    Text("只有你看得到。删除后 30 天内可以一步重新上架，照片都在；之后照片删除，只留一张小图。")
-                        .font(.footnote)
-                        .foregroundStyle(Theme.sub)
-                        .padding(.top, 8)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -350,20 +436,22 @@ struct RecordsView: View {
                 }
             }
         }
-        .alert("彻底删除？", isPresented: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } }), presenting: purging) { item in
-            Button("删除", role: .destructive) {
-                Task {
-                    do {
-                        try await API.shared.purge(item.id)
-                        items.removeAll { $0.id == item.id }
-                    } catch {
-                        state.toast(error.localizedDescription)
-                    }
+        .overlay {
+            BottomPanel(shown: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } })) {
+                if let item = purging {
+                    PanelConfirm(title: "永久删除？", message: "记录和照片都会删掉，不能恢复。", confirm: "永久删除") {
+                        purging = nil
+                        Task {
+                            do {
+                                try await API.shared.purge(item.id)
+                                items.removeAll { $0.id == item.id }
+                            } catch {
+                                state.toast(error.localizedDescription)
+                            }
+                        }
+                    } onCancel: { purging = nil }
                 }
             }
-            Button("取消", role: .cancel) {}
-        } message: { _ in
-            Text("记录和小图都会删掉，不能恢复。")
         }
     }
 
@@ -389,45 +477,69 @@ struct RecordRow: View {
     let relist: () -> Void
     let purge: () -> Void
 
+    private var deletedDate: Date {
+        Date(timeIntervalSince1970: Double(item.deletedAt ?? item.updatedAt ?? item.createdAt) / 1000)
+    }
+
     private var line: String {
-        let when = Date(timeIntervalSince1970: Double(item.deletedAt ?? item.updatedAt ?? item.createdAt) / 1000)
-        let c = Calendar.current.dateComponents([.month, .day], from: when)
-        let status = item.status == "deleted" ? "已删" : (item.isRent ? "已租" : "已卖")
-        var parts = [status, "\(c.month ?? 0)月\(c.day ?? 0)日"]
-        if let sold = item.soldPrice { parts.append("成交 $\(sold)") }
-        return parts.joined(separator: " · ")
+        let c = Calendar.current.dateComponents([.month, .day], from: deletedDate)
+        return item.priceText + (item.isRent ? " /月" : "") + " · \(c.month ?? 0)月\(c.day ?? 0)日删掉"
+    }
+
+    /// 照片还留几天：30 天减去删了几天
+    private var keepText: String {
+        if item.photos.isEmpty { return "照片过了 30 天，已删掉" }
+        let days = Int(Date().timeIntervalSince(deletedDate) / 86400)
+        return "照片还留 \(max(1, 30 - days)) 天"
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Color.clear
-                .frame(width: 60, height: 60)
-                .overlay {
-                    if item.photos.isEmpty, let thumb = item.thumb {
-                        RemoteImage(url: thumb, maxPixel: 200)
-                    } else {
-                        ListingImage(item: item, maxPixel: 200)
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                Color.clear
+                    .frame(width: 74, height: 92)
+                    .overlay {
+                        if item.photos.isEmpty {
+                            ZStack {
+                                Theme.fill
+                                Hexagon().fill(Theme.bg).frame(width: 34, height: 34)
+                                Image(systemName: "photo").font(.system(size: 13)).foregroundStyle(Theme.sub)
+                            }
+                        } else {
+                            ListingImage(item: item, maxPixel: 300).grayscale(1).opacity(0.8)
+                        }
                     }
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
+                    Text(line).font(.system(size: 15)).tracking(-0.2).foregroundStyle(Theme.sub)
+                    Text(keepText).font(.system(size: 13)).foregroundStyle(Theme.hint)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.title).font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
-                Text(item.priceText + (item.isRent ? " /月" : "")).font(.subheadline).tracking(-0.3).foregroundStyle(Theme.sub)
-                Text(line).font(.footnote).foregroundStyle(Theme.sub)
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
-            Menu {
-                Button("重新上架", systemImage: "arrow.uturn.up", action: relist)
-                Button("永久删除", systemImage: "trash", role: .destructive, action: purge)
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Theme.sub)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+            .padding(.bottom, 10)
+            FormDivider()
+            HStack(spacing: 10) {
+                Button(action: relist) {
+                    Label("重新上架", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                Button(action: purge) {
+                    Text("永久删除")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Theme.warn)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.plain)
             }
-            .accessibilityLabel("更多")
+            .padding(.top, 8)
         }
+        .padding(7)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
     }
 }
 

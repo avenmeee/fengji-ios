@@ -22,7 +22,7 @@ enum Demo {
 
     /// 开场就推到“我”的截图
     static var opensMe: Bool {
-        ["me", "guest-me", "mine-actions", "undo", "settings", "settings-contact", "claim", "wants", "profile", "sold-ask", "myinfo", "records", "rules"].contains(scene ?? "")
+        ["me", "guest-me", "mine-actions", "undo", "settings", "settings-contact", "claim", "wants", "profile", "sold-ask", "myinfo", "myinfo-edit", "myinfo-dark", "records", "rules"].contains(scene ?? "")
     }
 
     static var initialPosting: PostKind? {

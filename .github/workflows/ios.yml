@@ -135,6 +135,8 @@ jobs:
           shot "39-改昵称" profile light
           shot "40-卖了多少钱" sold-ask light
           shot "41-我的信息" myinfo light
+          shot "41b-我的信息-深" myinfo dark
+          shot "41c-我的信息-改一项" myinfo-edit light
           shot "42-记录" records light
           shot "43-举报规则" rules light
           shot "44-设置-深" settings dark

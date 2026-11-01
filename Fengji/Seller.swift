@@ -44,12 +44,12 @@ struct SellerView: View {
                             EmptyBlock(text: "现在没有在架上的")
                         } else {
                             if !goods.isEmpty {
-                                section(rents.isEmpty ? nil : "在卖") { goodsGrid }
+                                section("在卖", count: "\(goods.count) 件") { goodsGrid }
                             }
                             if !rents.isEmpty {
-                                section(goods.isEmpty ? nil : "出租") {
+                                section("出租", count: "\(rents.count) 套") {
                                     ForEach(rents) { r in
-                                        NavigationLink(value: r) { RentRow(item: r) }.buttonStyle(.plain)
+                                        NavigationLink(value: r) { RentRow(item: r, showSeller: false) }.buttonStyle(.plain)
                                     }
                                 }
                             }
@@ -73,32 +73,42 @@ struct SellerView: View {
         }
     }
 
+    /// 名片：卡纸里头像、名字、在卖几件
     private var header: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 16) {
             SellerAvatar(name: name, color: page?.seller.color ?? item.sellerColor, named: isGroup || (page?.seller.named ?? item.sellerNamed ?? false), size: 64, url: avatar)
             VStack(alignment: .leading, spacing: 4) {
                 Text(name)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 25, weight: .bold))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
                 if isGroup {
                     Text(["来自群", page?.seller.groupName ?? item.sourceGroup ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(.subheadline)
+                        .font(.system(size: 13))
                         .foregroundStyle(Theme.sub)
+                        .lineLimit(1)
                 }
                 if !counts.isEmpty {
-                    Text(counts).font(.subheadline).foregroundStyle(Theme.sub)
+                    Text(counts).font(.system(size: 13)).foregroundStyle(Theme.sub)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(.top, 8)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
     }
 
-    private func section<Content: View>(_ title: String?, @ViewBuilder content: () -> Content) -> some View {
+    /// 组标题 15 粗，右边件数
+    private func section<Content: View>(_ title: String, count: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let title { GroupLabel(text: title) }
+            HStack {
+                Text(title).font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.ink)
+                Spacer()
+                Text(count).font(.system(size: 13)).foregroundStyle(Theme.hint)
+            }
+            .padding(.horizontal, 4)
             content()
         }
     }
@@ -120,7 +130,7 @@ struct SellerView: View {
     }
 
     private func card(_ l: Listing) -> some View {
-        NavigationLink(value: l) { GoodsCard(item: l) }.buttonStyle(.plain)
+        NavigationLink(value: l) { GoodsCard(item: l, showSeller: false) }.buttonStyle(.plain)
     }
 
     private var moreMenu: some View {

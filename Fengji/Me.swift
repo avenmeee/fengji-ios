@@ -46,7 +46,7 @@ struct MeView: View {
         }
         .task {
             if Demo.scene == "settings" || Demo.scene == "settings-contact" { path.append("settings") }
-            if Demo.scene == "profile" || Demo.scene == "myinfo" { path.append("myinfo") }
+            if Demo.scene == "profile" || Demo.scene?.hasPrefix("myinfo") == true { path.append("myinfo") }
             if Demo.scene == "records" { path.append("records") }
             if Demo.scene == "rules" { path.append("settings"); path.append("rules") }
         }
@@ -57,22 +57,15 @@ struct MeView: View {
         }
         .sheet(isPresented: $claiming) { ClaimView() }
         .sheet(item: $editing) { item in PostForm(kind: item.kind, editing: item) }
-        .sheet(item: $acting, onDismiss: {
-            afterActing?()
-            afterActing = nil
-        }) { item in
-            MineActions(item: item) { action in
-                afterActing = { run(action, item) }
-                acting = nil
+        .overlay {
+            BottomPanel(shown: Binding(get: { acting != nil }, set: { if !$0 { acting = nil } })) {
+                if let item = acting {
+                    MineActions(item: item) { action in
+                        acting = nil
+                        run(action, item)
+                    }
+                }
             }
-            .presentationDetents([.height(item.status == "hidden" ? 130 : (item.isSold ? 190 : 250))])
-        }
-        .alert("卖了多少钱？", isPresented: Binding(get: { selling != nil }, set: { if !$0 { selling = nil } }), presenting: selling) { item in
-            TextField("选填", text: $soldPrice).keyboardType(.numberPad)
-            Button("保存") { Task { await setStatus(item, "off", soldPrice: Int(soldPrice.trimmingCharacters(in: .whitespaces))) } }
-            Button("跳过", role: .cancel) { Task { await setStatus(item, "off") } }
-        } message: { _ in
-            Text("选填，只用来比价，不公开")
         }
         .confirmationDialog("举报这条留言", isPresented: Binding(get: { reportingWant != nil }, set: { if !$0 { reportingWant = nil } }), titleVisibility: .visible, presenting: reportingWant) { want in
             ForEach(REASONS, id: \.self) { reason in
@@ -88,18 +81,23 @@ struct MeView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             if state.isLoggedIn {
                 Button { path.append("myinfo") } label: {
-                    HStack(spacing: 12) {
-                        SellerAvatar(name: state.me?.name ?? "", color: state.me?.color ?? 0, named: state.me?.named ?? false, size: 48, url: state.me?.avatar)
-                        Text(state.me?.name ?? "")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundStyle(Theme.ink)
-                            .lineLimit(1)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
+                    HStack(spacing: 14) {
+                        SellerAvatar(name: state.me?.name ?? "", color: state.me?.color ?? 0, named: state.me?.named ?? false, size: 64, url: state.me?.avatar)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(state.me?.name ?? "")
+                                .font(.system(size: 25, weight: .bold))
+                                .foregroundStyle(Theme.ink)
+                                .lineLimit(1)
+                            HStack(spacing: 4) {
+                                Text("我的信息")
+                                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
+                            }
+                            .font(.system(size: 15))
                             .foregroundStyle(Theme.sub)
+                        }
                     }
                     .contentShape(Rectangle())
                 }
@@ -121,76 +119,82 @@ struct MeView: View {
         .padding(.bottom, 8)
     }
 
+    /// 在卖几件、卖完几件
+    private var mineCounts: String {
+        let live = visible.filter { !$0.isSold }.count, sold = visible.filter(\.isSold).count
+        return ["在卖 \(live)", sold > 0 ? "卖完 \(sold)" : ""].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    private func listRow<V: View>(_ v: V) -> some View {
+        v.listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+    }
+
     private var list: some View {
         List {
             if !wants.isEmpty {
-                Text("有人想要")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                ForEach(wants) { want in
-                    WantRow(want: want, copy: {
-                        UIPasteboard.general.string = want.contact
-                        state.toast("已复制")
-                    }, remove: { Task { await deleteWant(want) } }, report: { reportingWant = want }, block: { blockingWant = want })
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 8))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                }
+                listRow(HStack(spacing: 8) {
+                    Text("有人想要").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+                    Text("\(wants.count)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Theme.onBuy)
+                        .padding(.horizontal, 8)
+                        .frame(minWidth: 26, minHeight: 24)
+                        .background(Theme.accent, in: RoundedRectangle(cornerRadius: 7))
+                }.padding(.top, 6))
+                listRow(FormCard {
+                    ForEach(Array(wants.enumerated()), id: \.element.id) { i, want in
+                        if i > 0 { FormDivider() }
+                        WantRow(want: want, copy: {
+                            UIPasteboard.general.string = want.contact
+                            state.toast("已复制")
+                        }, remove: { Task { await deleteWant(want) } }, report: { reportingWant = want }, block: { blockingWant = want })
+                    }
+                })
             }
-            Text("我发的")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Theme.ink)
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
+            listRow(HStack(alignment: .firstTextBaseline) {
+                Text("我发的").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+                Spacer()
+                if !visible.isEmpty {
+                    Text(mineCounts).font(.system(size: 13)).foregroundStyle(Theme.hint)
+                }
+            }.padding(.top, 10))
             if visible.isEmpty {
-                Group {
+                listRow(Group {
                     if phase == .ok {
                         EmptyBlock(text: "还没发过")
                     } else {
                         PhaseBlock(phase: phase)
                     }
-                }
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
+                })
             }
             ForEach(visible) { item in
-                MineRow(item: item, open: { path.append(item) }, more: { acting = item })
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 8))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button("删除", role: .destructive) { state.softDelete(item) }
+                listRow(MineRow(item: item, open: { path.append(item) }, more: { acting = item }))
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button { state.softDelete(item) } label: { Label("删除", systemImage: "trash") }
                             .tint(Theme.warn)
                         if item.isSold {
-                            Button("重新上架") { run(.status("on"), item) }.tint(Theme.rent)
+                            Button { run(.status("on"), item) } label: { Label("重新上架", systemImage: "arrow.uturn.up") }
+                                .tint(Theme.sub)
                         } else if item.status != "hidden" {
-                            Button(item.isRent ? "租出去了" : "卖完了") { run(.status("off"), item) }.tint(Theme.sub)
+                            Button { run(.status("off"), item) } label: { Label(item.isRent ? "租出去了" : "卖完了", systemImage: "tag") }
+                                .tint(Theme.sub)
                         }
                     }
             }
             if recordCount > 0 {
-                Button { path.append("records") } label: {
-                    HStack {
-                        Text("记录").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
-                        Text("删掉的 \(recordCount) 件").font(.subheadline).foregroundStyle(Theme.sub)
-                        Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.sub)
+                listRow(Button { path.append("records") } label: {
+                    SettingRow(symbol: "archivebox", title: "记录") {
+                        HStack(spacing: 6) {
+                            Text("删掉的 \(recordCount) 件").font(.system(size: 15)).foregroundStyle(Theme.sub)
+                            Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.hint)
+                        }
                     }
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
+                    .frame(minHeight: 54)
                 }
                 .buttonStyle(.plain)
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-            }
-            if state.opsWechat != nil {
-                Button("认领我在群里发的东西") { claiming = true }
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.sub)
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
+                .padding(.top, 6))
             }
         }
         .listStyle(.plain)
@@ -297,7 +301,7 @@ struct MeView: View {
     }
 }
 
-/// 一条“想要”：哪件东西、留言、对方联系方式
+/// 一条“想要”：哪件东西、什么时候、留言，联系方式是能点的小块
 struct WantRow: View {
     let want: Want
     let copy: () -> Void
@@ -305,10 +309,18 @@ struct WantRow: View {
     let report: () -> Void
     let block: () -> Void
 
+    private var when: String {
+        let s = max(0, Date().timeIntervalSince1970 - Double(want.createdAt) / 1000)
+        if s < 3600 { return "刚刚" }
+        if s < 86400 { return "\(Int(s / 3600)) 小时前" }
+        if s < 2 * 86400 { return "昨天" }
+        return "\(Int(s / 86400)) 天前"
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Color.clear
-                .frame(width: 66, height: 66)
+                .frame(width: 56, height: 56)
                 .overlay {
                     if let photo = want.photo {
                         RemoteImage(url: photo, maxPixel: 240)
@@ -316,18 +328,21 @@ struct WantRow: View {
                         Theme.fill
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(want.title).font(.subheadline).foregroundStyle(Theme.sub).lineLimit(1)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 6) {
+                Text(want.title + " · " + when).font(.system(size: 13)).foregroundStyle(Theme.sub).lineLimit(1)
                 if !want.message.isEmpty {
-                    Text(want.message).font(.subheadline).foregroundStyle(Theme.ink)
+                    Text(want.message).font(.system(size: 16)).foregroundStyle(Theme.ink)
                 }
                 Button(action: copy) {
                     HStack(spacing: 6) {
-                        Text(want.contact).font(.system(size: 15, weight: .semibold))
+                        Text(want.contact).font(.system(size: 16, weight: .semibold))
                         Image(systemName: "doc.on.doc").font(.system(size: 13))
                     }
                     .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 12)
+                    .frame(height: 34)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 10))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("复制联系方式 " + want.contact)
@@ -341,40 +356,37 @@ struct WantRow: View {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Theme.sub)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 36, height: 36)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("更多")
         }
+        .padding(.vertical, 14)
     }
 }
 
+/// 我发的一件：一张横卡纸，4:5 照片 + 名字 + 首页同款价签（已预订、已卖出都在价签上）
 struct MineRow: View {
     let item: Listing
     let open: () -> Void
     let more: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             Button(action: open) {
-                HStack(spacing: 12) {
+                HStack(spacing: 14) {
                     Color.clear
-                        .frame(width: 66, height: 66)
-                        .overlay { ListingImage(item: item, maxPixel: 240).grayscale(item.isSold ? 1 : 0) }
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.priceText + (item.isRent ? " /月" : ""))
-                            .font(.system(size: 17, weight: .bold))
-                            .tracking(-0.3)
-                            .foregroundStyle(Theme.ink)
+                        .frame(width: 74, height: 92)
+                        .overlay { ListingImage(item: item, maxPixel: 300).soldCover(item) }
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    VStack(alignment: .leading, spacing: 10) {
                         Text(item.title)
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.sub)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(item.isSold ? Theme.sub : Theme.ink)
                             .lineLimit(1)
-                        if !item.isOn {
-                            Text(item.statusText)
-                                .font(.footnote)
-                                .foregroundStyle(item.isSold ? Theme.sub : Theme.warn)
+                        PriceTag(item: item).padding(-8)
+                        if item.status == "hidden" {
+                            Text(item.statusText).font(.system(size: 13)).foregroundStyle(Theme.warn)
                         }
                     }
                     Spacer(minLength: 0)
@@ -382,21 +394,23 @@ struct MineRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .opacity(item.isSold ? 0.6 : 1)
             Button(action: more) {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Theme.sub)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 36, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("更多")
         }
+        .padding(7)
+        .padding(.trailing, 6)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
-/// 点“…”弹出的动作：纯文字，没有框
+/// 点“…”弹出来的：上面是这件的小卡，下面一行一项
 struct MineActions: View {
     enum Action {
         case status(String), price, bump, edit, delete
@@ -407,31 +421,28 @@ struct MineActions: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 14) {
+                Color.clear
+                    .frame(width: 56, height: 70)
+                    .overlay { ListingImage(item: item, maxPixel: 240).soldCover(item) }
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(item.title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
+                    PriceTag(item: item).padding(-8)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.bottom, 12)
+            FormDivider()
             // 改价、已预订在编辑页里；卖完了的只能重新上架或删除
             if item.isSold {
-                row("重新上架") { pick(.status("on")) }
+                PanelRow(symbol: "arrow.uturn.up", title: "重新上架") { pick(.status("on")) }
             } else if item.status != "hidden" {
-                row("编辑") { pick(.edit) }
-                row(item.isRent ? "租出去了" : "卖完了") { pick(.status("off")) }
+                PanelRow(symbol: "pencil", title: "编辑") { pick(.edit) }
+                PanelRow(symbol: "tag", title: item.isRent ? "租出去了" : "卖完了") { pick(.status("off")) }
             }
-            row("删除", color: Theme.warn) { pick(.delete) }
-            Spacer(minLength: 0)
+            PanelRow(symbol: "trash", title: "删除", color: Theme.warn) { pick(.delete) }
         }
-        .padding(.horizontal, 22)
-        .padding(.top, 18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.bg)
-    }
-
-    private func row(_ text: String, color: Color = Theme.ink, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(text)
-                .font(.system(size: 17))
-                .foregroundStyle(color)
-                .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }
 
