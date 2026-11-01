@@ -889,6 +889,9 @@ ok("不是管理员看不到层", r.data.items.every(x => x.tier === undefined),
 r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("直尺套") + "&debug=1", { token: ADMIN });
 ok("语义相近的算第三层", r.data.items.some(x => x.tier === 3) || r.data.items.every(x => x.tier <= 2), r.data.items.map(x => [x.title, x.tier, x.sim]));
 const srTablet = await srPost("drawing tablet " + stamp);
+const srMove = await srPost("搬家清仓台灯" + stamp);
+r = await call("GET", "/v1/listings?kind=goods&q=moving&debug=1", { token: ADMIN });
+ok("“moving”能搜到搬家", r.data.items.find(x => x.id === srMove.id)?.tier === 2, r.data.items.map(x => [x.title, x.tier]));
 r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("桌子") + "&debug=1", { token: ADMIN });
 ok("英文按整词：table 不算 tablet", !(r.data.items.find(x => x.id === srTablet.id)?.tier <= 2), r.data.items.map(x => [x.title, x.tier]));
 r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("尺子") + "&cat=furn");

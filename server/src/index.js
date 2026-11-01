@@ -297,7 +297,9 @@ const SYNONYMS = [
   ["沙发", "sofa", "couch"],
   ["冰箱", "fridge"],
   ["微波炉", "microwave"],
-  ["自行车", "单车", "bike"]
+  ["自行车", "单车", "bike"],
+  ["画画", "画画用的", "画材", "美术用品", "art supplies"],
+  ["搬家", "清仓", "moving"]
 ];
 const SUFFIXES = ["子", "儿", "头"];
 
