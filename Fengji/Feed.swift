@@ -12,6 +12,8 @@ final class FeedModel: ObservableObject {
     @Published private(set) var phase: Phase = .loading
     private var next: Int?
     private var loadingMore = false
+    private var searchLog: Task<Void, Never>?
+    private var lastSearch = ""
 
     init(kind: String) {
         self.kind = kind
@@ -25,9 +27,23 @@ final class FeedModel: ObservableObject {
             items = page.items
             next = page.next
             phase = .ok
+            logSearch(results: page.items.count)
         } catch {
             if isCancel(error) { return }
             if items.isEmpty { phase = .failed }
+        }
+    }
+
+    /// 打字停下来才算搜了一次
+    private func logSearch(results: Int) {
+        searchLog?.cancel()
+        let term = q.trimmingCharacters(in: .whitespaces)
+        guard !term.isEmpty, term != lastSearch else { return }
+        searchLog = Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled, q.trimmingCharacters(in: .whitespaces) == term else { return }
+            lastSearch = term
+            Events.shared.log(.init(name: "search", kind: kind, q: term, results: results))
         }
     }
 

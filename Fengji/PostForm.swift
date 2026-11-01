@@ -155,6 +155,10 @@ struct PostForm: View {
     @State private var showSplit = Demo.scene == "batch-choose"
     @State private var inBatch = Demo.scene?.hasPrefix("batch-") == true && Demo.scene != "batch-choose"
     @State private var readingPhotos = false
+    // 使用记录：开始发了没发完算放弃
+    @State private var postOpen = false
+    @State private var aiSaidName: String?
+    @State private var aiSaidPrice: Int?
     @State private var error: String?
     @State private var busy = false
     /// 点过发布：缺的那项下面出红字
@@ -310,7 +314,14 @@ struct PostForm: View {
             guard !items.isEmpty else { return }
             Task { await addPicked(items) }
         }
+        .onDisappear {
+            if postOpen, !showCamera {
+                postOpen = false
+                Events.shared.log(.init(name: "post_abandon", kind: kind, step: abandonStep))
+            }
+        }
         .onAppear {
+            startPost()
             if state.me?.aiConsent == true { aiConsent = true }
             if !isRent, editing == nil, !aiConsent { showConsent = true }
             if let f = Self.demoFocus {
@@ -373,6 +384,22 @@ struct PostForm: View {
         case .to: to = value
         case .leaseEnd: leaseEnd = value
         }
+    }
+
+    private func startPost() {
+        guard editing == nil, !posted, !postOpen else { return }
+        postOpen = true
+        Events.shared.log(.init(name: "post_start", kind: kind))
+    }
+
+    /// 放弃时停在哪一步
+    private var abandonStep: String {
+        if inBatch { return batch.grouping ? "batch_recognize" : "batch_confirm" }
+        if showSplit { return "batch_choose" }
+        if photos.isEmpty { return "photos" }
+        if title.trimmingCharacters(in: .whitespaces).isEmpty { return "name" }
+        if price.trimmingCharacters(in: .whitespaces).isEmpty { return "price" }
+        return "details"
     }
 
     // MARK: - 一次发好几件
@@ -452,6 +479,8 @@ struct PostForm: View {
             state.changed()
             Haptics.beeBuzz()
             if contact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { Notifier.ask() }
+            postOpen = false
+            batch.logResults()
             batch.reset()
             inBatch = false
             posted = true
@@ -477,6 +506,9 @@ struct PostForm: View {
             pickupAfter = nil
             error = nil
             posted = false
+            aiSaidName = nil
+            aiSaidPrice = nil
+            startPost()
             if UIImagePickerController.isSourceTypeAvailable(.camera) { showCamera = true }
         } share: {
             Task { hiveShare = await HiveShareCard.make(items: hive, contact: contact, total: hive.count) }
@@ -1057,6 +1089,8 @@ struct PostForm: View {
             guard !Task.isCancelled else { return }
             let guess = result
             state.setAILeft(guess.aiLeft)
+            aiSaidName = guess.name
+            aiSaidPrice = guess.price
             if !nameTouched, title.isEmpty {
                 title = guess.name
                 aiGuessed = true
@@ -1201,6 +1235,13 @@ struct PostForm: View {
             onSaved?(saved)
             state.changed()
             if editing == nil {
+                postOpen = false
+                Events.shared.log(.init(name: "post_done", kind: kind, mode: "single", count: 1))
+                if aiSaidName != nil || aiSaidPrice != nil {
+                    Events.shared.log(.init(name: "ai_result", aiName: aiSaidName, nameEdited: aiSaidName.map { $0 != saved.title },
+                                            aiPrice: aiSaidPrice, priceEdited: aiSaidPrice.map { $0 != saved.price },
+                                            priceDiff: aiSaidPrice.map { saved.price - $0 }))
+                }
                 Haptics.beeBuzz()
                 // 没留微信才靠留言，这时问通知，卖家知道为什么
                 if c.isEmpty { Notifier.ask() }

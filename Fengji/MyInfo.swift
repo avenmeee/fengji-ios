@@ -184,7 +184,6 @@ struct MyInfoView: View {
                     }
                     // 认领入口：送审时 OPS_WECHAT 删掉就不显示
                     if state.opsWechat != nil {
-                        Text("不常用").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.hint).padding(.top, 16).padding(.horizontal, 4)
                         Button { claiming = true } label: {
                             SettingRow(symbol: "hand.raised", title: "认领我在群里发的") {
                                 Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.hint)

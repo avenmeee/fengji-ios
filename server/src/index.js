@@ -667,14 +667,14 @@ async function adminReports(req, env, url) {
 }
 async function adminCloseReport(req, env, id) {
   await needStaff(req, env);
-  await env.DB.prepare("UPDATE reports SET status = 'done' WHERE id = ?").bind(id).run();
+  await env.DB.prepare("UPDATE reports SET status = 'done', done_at = unixepoch() * 1000 WHERE id = ?").bind(id).run();
   return json({ ok: true });
 }
 // 忽略举报后恢复上架
 async function adminRestore(req, env, id) {
   await needStaff(req, env);
   await env.DB.batch([
-    env.DB.prepare("UPDATE reports SET status = 'done' WHERE listing_id = ?").bind(id),
+    env.DB.prepare("UPDATE reports SET status = 'done', done_at = unixepoch() * 1000 WHERE listing_id = ? AND status != 'done'").bind(id),
     env.DB.prepare("UPDATE listings SET status = 'on' WHERE id = ? AND status = 'hidden'").bind(id)
   ]);
   return json({ ok: true });
@@ -725,6 +725,193 @@ async function adminStats(req, env) {
   const rows = (await env.DB.prepare("SELECT what, SUM(n) AS n FROM daily_counts WHERE user_id = '*' AND day >= ? GROUP BY what").bind(since).all()).results;
   const of = w => (rows.find(r => r.what === w) || { n: 0 }).n;
   return json({ posts: of("post"), views: of("view"), sold: of("sold"), copies: of("copy"), groupClicks: of("group_click") });
+}
+
+// ---- 匿名使用记录（11-01）：只有本机随机的安装编号，不跟账号挂。原始事件留 90 天，之后只留每日汇总 ----
+const EVENT_KEEP = 90 * 86400000, EVENT_BATCH = 50, EVENT_BODY_MAX = 32000, EVENTS_PER_DEVICE = 500, EVENTS_PER_SITE = 100000;
+const EVENT_STEPS = ["photos", "name", "price", "details", "batch_choose", "batch_recognize", "batch_confirm"];
+const EVENT_METHODS = ["copy_wechat", "want", "group"];
+
+// 搜索词和 AI 名字：微信号、电话、邮箱这类格式的去掉，封顶 40
+function scrubText(v) {
+  if (typeof v !== "string") return "";
+  return v
+    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, " ")
+    .replace(/(?:微信号?|vx|wx|wechat)[:：\s]*[a-z0-9_-]+/gi, " ")
+    .replace(/\+?\d[\d\s()-]{5,}\d/g, " ")
+    .replace(/\b[a-z][-_a-z0-9]{5,19}\b/gi, w => /[-_0-9]/.test(w) ? " " : w)
+    .replace(/\s+/g, " ").trim().slice(0, 40);
+}
+
+const eventInt = (v, lo, hi) => Number.isInteger(v) ? Math.min(hi, Math.max(lo, v)) : null;
+const eventBool = v => v === true ? 1 : v === false ? 0 : null;
+const eventOneOf = (v, list) => list.includes(v) ? v : null;
+const eventId = v => typeof v === "string" && /^[0-9a-f]{8,64}$/.test(v) ? v : null;
+const eventCat = v => typeof v === "string" && /^[a-z]{1,16}$/.test(v) ? v : null;
+const eventKind = v => eventOneOf(v, ["goods", "rent"]);
+
+// 字段白名单：每种事件只留该有的，别的都丢。名字不认识的整条丢
+function cleanEvent(e) {
+  if (!e || typeof e !== "object") return null;
+  const r = { name: e.name };
+  switch (e.name) {
+    case "app_open": case "post_start":
+      if (e.name === "post_start") r.kind = eventKind(e.kind);
+      return r;
+    case "detail_view":
+      r.listing = eventId(e.listing);
+      if (!r.listing) return null;
+      return { ...r, kind: eventKind(e.kind), cat: eventCat(e.cat), tier: eventInt(e.tier, 1, 4), seconds: eventInt(e.seconds, 0, 600) ?? 0 };
+    case "search":
+      r.q = scrubText(e.q).toLowerCase();
+      if (!r.q) return null;
+      return { ...r, kind: eventKind(e.kind), results: eventInt(e.results, 0, 100000) ?? 0 };
+    case "contact":
+      r.listing = eventId(e.listing);
+      r.method = eventOneOf(e.method, EVENT_METHODS);
+      if (!r.listing || !r.method) return null;
+      return { ...r, kind: eventKind(e.kind), cat: eventCat(e.cat), tier: eventInt(e.tier, 1, 4) };
+    case "post_abandon":
+      r.step = eventOneOf(e.step, EVENT_STEPS);
+      if (!r.step) return null;
+      return { ...r, kind: eventKind(e.kind) };
+    case "post_done":
+      r.mode = eventOneOf(e.mode, ["single", "batch"]);
+      if (!r.mode) return null;
+      return { ...r, kind: eventKind(e.kind), count: eventInt(e.count, 1, 30) ?? 1 };
+    case "ai_result":
+      return { ...r, ai_name: scrubText(e.aiName) || null, name_edited: eventBool(e.nameEdited), ai_price: eventInt(e.aiPrice, 0, 100000), price_edited: eventBool(e.priceEdited), price_diff: eventInt(e.priceDiff, -100000, 100000) };
+    default:
+      return null;
+  }
+}
+
+async function postEvents(req, env) {
+  const raw = await req.text();
+  if (raw.length > EVENT_BODY_MAX) throw new Fail(413, "too_big");
+  let b;
+  try { b = JSON.parse(raw); } catch (e) { throw new Fail(400, "bad_json"); }
+  const install = b && b.install;
+  if (typeof install !== "string" || !/^[0-9a-f-]{32,36}$/.test(install)) throw new Fail(400, "bad_install");
+  if (!Array.isArray(b.events) || b.events.length > EVENT_BATCH) throw new Fail(400, "bad_count");
+  const rows = b.events.map(cleanEvent).filter(Boolean);
+  if (!rows.length) return json({ kept: 0 });
+  const used = (await env.DB.prepare("SELECT user_id, n FROM daily_counts WHERE day = ? AND what = 'event' AND user_id IN (?, '*')").bind(today(), install).all()).results;
+  const usedBy = id => (used.find(r => r.user_id === id) || { n: 0 }).n;
+  if (usedBy(install) + rows.length > EVENTS_PER_DEVICE) throw new Fail(429, "daily_limit");
+  // 全站封顶：有人换编号乱写时，到顶就不收
+  if (usedBy("*") + rows.length > EVENTS_PER_SITE) return json({ kept: 0 });
+  const now = Date.now();
+  const insert = env.DB.prepare(`INSERT INTO events (install, name, at, listing, kind, cat, tier, seconds, q, results, method, step, mode, count, ai_name, name_edited, ai_price, price_edited, price_diff)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const v = x => x === undefined ? null : x;
+  await env.DB.batch(rows.map(r => insert.bind(install, r.name, now, v(r.listing), v(r.kind), v(r.cat), v(r.tier), v(r.seconds), v(r.q), v(r.results), v(r.method), v(r.step), v(r.mode), v(r.count), v(r.ai_name), v(r.name_edited), v(r.ai_price), v(r.price_edited), v(r.price_diff))));
+  await bumpBy(env, install, "event", rows.length);
+  await bumpBy(env, "*", "event", rows.length);
+  return json({ kept: rows.length });
+}
+
+function median(list) {
+  const s = list.filter(x => x !== null && x !== undefined).sort((a, b) => a - b);
+  if (!s.length) return null;
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+const ratio = (a, b) => b ? Math.round(a / b * 1000) / 1000 : null;
+const hoursOf = ms => ms === null ? null : Math.round(ms / 360000) / 10;
+
+// ADMIN_TOKEN 能读。days 默认 30，最多 90
+async function eventStats(req, env, url) {
+  await needStaff(req, env);
+  const days = Math.min(90, Math.max(1, Number(url.searchParams.get("days")) || 30));
+  const since = Date.now() - days * 86400000;
+  const all = async (sql, ...args) => (await env.DB.prepare(sql).bind(...args).all()).results;
+
+  // 1、7 联系率：看过详情的设备里，有多少联系了。按类别、按蜜蜂分档
+  const rates = async dim => {
+    const views = await all(`SELECT ${dim} AS k, COUNT(DISTINCT install) AS n FROM events WHERE name = 'detail_view' AND at >= ? GROUP BY k`, since);
+    const contacts = await all(`SELECT ${dim} AS k, COUNT(DISTINCT install) AS n FROM events WHERE name = 'contact' AND at >= ? GROUP BY k`, since);
+    return views.map(r => {
+      const c = (contacts.find(x => x.k === r.k) || { n: 0 }).n;
+      return { key: r.k, viewers: r.n, contacted: c, rate: ratio(c, r.n) };
+    });
+  };
+  const viewers = (await env.DB.prepare("SELECT COUNT(DISTINCT install) AS n FROM events WHERE name = 'detail_view' AND at >= ?").bind(since).first()).n;
+  const contacted = (await env.DB.prepare("SELECT COUNT(DISTINCT install) AS n FROM events WHERE name = 'contact' AND at >= ? AND install IN (SELECT install FROM events WHERE name = 'detail_view' AND at >= ?)").bind(since, since).first()).n;
+
+  // 2 搜索词
+  const topSearches = await all("SELECT q, COUNT(*) AS n FROM events WHERE name = 'search' AND at >= ? GROUP BY q ORDER BY n DESC, q LIMIT 30", since);
+  const zeroSearches = await all("SELECT q, COUNT(*) AS n FROM events WHERE name = 'search' AND results = 0 AND at >= ? GROUP BY q ORDER BY n DESC, q LIMIT 30", since);
+
+  // 3 发布到首次联系、发布到卖出。联系 = 想要留言或联系事件里最早的。内部示例号不算
+  const listings = await all(`SELECT l.created_at AS c, l.sold_at AS sold,
+      (SELECT MIN(w.created_at) FROM wants w WHERE w.listing_id = l.id) AS want,
+      (SELECT MIN(e.at) FROM events e WHERE e.listing = l.id AND e.name = 'contact') AS ev
+    FROM listings l WHERE l.created_at >= ? AND l.user_id NOT LIKE 'ffffffff%'`, since);
+  const firstContact = listings.map(r => {
+    const t = [r.want, r.ev].filter(Boolean);
+    return t.length ? Math.max(0, Math.min(...t) - r.c) : null;
+  });
+  const toSold = listings.map(r => r.sold ? Math.max(0, r.sold - r.c) : null);
+
+  // 4 回访：首次打开当天算第 1 天，第 2 天是次日，第 7 天是六天后。按美东算日子；日子还没到的设备不算进分母
+  const dayOf = "((at - 18000000) / 86400000)";
+  const firsts = await all(`SELECT install, MIN(${dayOf}) AS d FROM events WHERE name = 'app_open' GROUP BY install`);
+  const visits = await all(`SELECT DISTINCT install, ${dayOf} AS d FROM events WHERE name = 'app_open'`);
+  const todayNo = Math.floor((Date.now() - 18000000) / 86400000);
+  const seen = new Set(visits.map(r => r.install + "#" + r.d));
+  const retained = gap => {
+    const due = firsts.filter(r => r.d + gap <= todayNo);
+    const back = due.filter(r => seen.has(r.install + "#" + (r.d + gap))).length;
+    return { devices: due.length, back, rate: ratio(back, due.length) };
+  };
+
+  // 5 发布漏斗
+  const funnelRows = await all("SELECT name, COUNT(*) AS n, COALESCE(SUM(count), 0) AS items FROM events WHERE name IN ('post_start', 'post_abandon', 'post_done') AND at >= ? GROUP BY name", since);
+  const funnelOf = n => funnelRows.find(r => r.name === n) || { n: 0, items: 0 };
+  const abandonSteps = await all("SELECT step, COUNT(*) AS n FROM events WHERE name = 'post_abandon' AND at >= ? GROUP BY step ORDER BY n DESC", since);
+
+  // 6 AI 改了多少
+  const ai = await all("SELECT name_edited, price_edited, price_diff FROM events WHERE name = 'ai_result' AND at >= ?", since);
+  const named = ai.filter(r => r.name_edited !== null), priced = ai.filter(r => r.price_edited !== null);
+
+  // 8 各大类停留，用中位数
+  const stays = await all("SELECT COALESCE(cat, kind) AS k, seconds FROM events WHERE name = 'detail_view' AND at >= ?", since);
+  const stayBy = {};
+  for (const r of stays) (stayBy[r.k ?? ""] ||= []).push(r.seconds);
+
+  // 复制微信算到每条帖子
+  const contactsByListing = await all("SELECT listing, method, COUNT(*) AS n FROM events WHERE name = 'contact' AND at >= ? GROUP BY listing, method ORDER BY n DESC LIMIT 50", since);
+
+  // 9 举报
+  const reports = await all("SELECT status, created_at, done_at FROM reports WHERE created_at >= ?", since);
+  const handled = reports.filter(r => r.done_at);
+
+  return json({
+    days,
+    contactRate: { viewers, contacted, rate: ratio(contacted, viewers), byCat: await rates("COALESCE(cat, kind)"), byTier: await rates("tier") },
+    searches: { top: topSearches, zero: zeroSearches },
+    timing: { firstContactHours: hoursOf(median(firstContact)), firstContactSample: firstContact.filter(x => x !== null).length, soldHours: hoursOf(median(toSold)), soldSample: toSold.filter(x => x !== null).length },
+    retention: { day2: retained(1), day7: retained(6) },
+    funnel: { start: funnelOf("post_start").n, abandon: funnelOf("post_abandon").n, done: funnelOf("post_done").n, items: funnelOf("post_done").items, abandonSteps },
+    ai: { total: ai.length, nameEditedRate: ratio(named.filter(r => r.name_edited).length, named.length), priceEditedRate: ratio(priced.filter(r => r.price_edited).length, priced.length), medianPriceDiff: median(ai.map(r => r.price_diff)) },
+    staySeconds: Object.entries(stayBy).map(([key, list]) => ({ key, views: list.length, medianSeconds: median(list) })),
+    contactsByListing,
+    reports: { total: reports.length, done: reports.filter(r => r.status === "done").length, medianHandleHours: hoursOf(median(handled.map(r => Math.max(0, r.done_at - r.created_at)))) }
+  });
+}
+
+// 每天：过期的原始事件并进汇总再删；设备计数只留一周
+async function purgeEvents(env, keep = EVENT_KEEP) {
+  const before = Date.now() - keep;
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO event_daily (day, metric, dim, n, devices)
+      SELECT strftime('%Y-%m-%d', at / 1000, 'unixepoch'), name, COALESCE(q, method, step, mode, cat, kind, ''), COUNT(*), COUNT(DISTINCT install)
+      FROM events WHERE at < ? GROUP BY 1, 2, 3
+      ON CONFLICT (day, metric, dim) DO UPDATE SET n = n + excluded.n, devices = devices + excluded.devices`).bind(before),
+    env.DB.prepare("DELETE FROM events WHERE at < ?").bind(before),
+    env.DB.prepare("DELETE FROM daily_counts WHERE what = 'event' AND user_id != '*' AND day < ?").bind(new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10))
+  ]);
 }
 
 // ---- “想要”留言：卖家没留微信时，买家留一句话和联系方式。只有卖家看得到 ----
@@ -798,7 +985,7 @@ async function adminResetName(req, env, id) {
   await needStaff(req, env);
   await env.DB.batch([
     env.DB.prepare("UPDATE users SET nickname = NULL WHERE id = ?").bind(id),
-    env.DB.prepare("UPDATE reports SET status = 'done' WHERE reported_user = ? AND reason = '昵称不当'").bind(id)
+    env.DB.prepare("UPDATE reports SET status = 'done', done_at = unixepoch() * 1000 WHERE reported_user = ? AND reason = '昵称不当' AND status != 'done'").bind(id)
   ]);
   return json({ ok: true });
 }
@@ -831,7 +1018,7 @@ async function adminRemoveAvatar(req, env, id) {
   if (row?.avatar_key) await removePhotos(env, [row.avatar_key]);
   await env.DB.batch([
     env.DB.prepare("UPDATE users SET avatar_key = NULL WHERE id = ?").bind(id),
-    env.DB.prepare("UPDATE reports SET status = 'done' WHERE reported_user = ? AND reason = '头像不当'").bind(id)
+    env.DB.prepare("UPDATE reports SET status = 'done', done_at = unixepoch() * 1000 WHERE reported_user = ? AND reason = '头像不当' AND status != 'done'").bind(id)
   ]);
   return json({ ok: true });
 }
@@ -1354,6 +1541,8 @@ async function route(req, env) {
   if (method === "POST" && path === "/v1/admin/scores") return setScores(req, env);
   if (method === "POST" && path === "/v1/admin/claim/verify") return verifyClaim(req, env);
   if (method === "GET" && path === "/v1/admin/stats") return adminStats(req, env);
+  if (method === "GET" && path === "/v1/admin/event-stats") return eventStats(req, env, url);
+  if (method === "POST" && path === "/v1/events") return postEvents(req, env);
   if (method === "GET" && path === "/v1/admin/reports") return adminReports(req, env, url);
   if (method === "POST" && (m = /^\/v1\/admin\/reports\/([0-9a-f]+)\/close$/.exec(path))) return adminCloseReport(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/admin\/listings\/([0-9a-f]+)\/restore$/.exec(path))) return adminRestore(req, env, m[1]);
@@ -1368,6 +1557,7 @@ async function route(req, env) {
 export default {
   async scheduled(event, env) {
     await purgeExpired(env);
+    await purgeEvents(env);
   },
   async fetch(req, env) {
     try {

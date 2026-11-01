@@ -857,4 +857,61 @@ await call("POST", `/v1/blocks/${s1.me.id}`, { token: o1.token });
 r = await call("GET", "/v1/me/blocks", { token: o1.token });
 ok("屏蔽名单带昵称和颜色", r.data.items.some(x => x.id === s1.me.id && x.name === "主页卖家" && Number.isInteger(x.color)), r);
 
+// 匿名使用记录
+const ev = (install, events, token) => call("POST", "/v1/events", { token, body: { install, events } });
+const inst = "a1b2c3d4-e5f6-4a7b-8c9d-0123456789ab", inst2 = "b1b2c3d4-e5f6-4a7b-8c9d-0123456789ab";
+const lid = "abcdef0123456789abcdef0123456789";
+r = await ev("不是编号", [{ name: "app_open" }]);
+ok("安装编号格式不对拒", r.status === 400 && r.data.error === "bad_install", r);
+r = await ev(inst, Array(51).fill({ name: "app_open" }));
+ok("一批最多 50 条", r.status === 400 && r.data.error === "bad_count", r);
+r = await call("POST", "/v1/events", { raw: new TextEncoder().encode("{oops") });
+ok("不是 JSON 拒", r.status === 400, r);
+r = await ev(inst, [{ name: "没有这种事件" }, { name: "detail_view" }, { name: "contact", listing: lid, method: "偷看" }, { name: "post_abandon", step: "乱写" }, "字符串"]);
+ok("不认识的事件和缺字段的都丢", r.status === 200 && r.data.kept === 0, r);
+r = await ev(inst, [
+  { name: "app_open", evil: "x".repeat(1000) },
+  { name: "detail_view", listing: lid, kind: "goods", cat: "furn", tier: 3, seconds: 9999 },
+  { name: "detail_view", listing: lid, kind: "goods", cat: "furn", tier: 3, seconds: 20 },
+  { name: "detail_view", listing: lid, kind: "goods", cat: "elec", tier: 1, seconds: 40 },
+  { name: "contact", listing: lid, kind: "goods", cat: "furn", tier: 3, method: "copy_wechat" },
+  { name: "search", q: "书桌 wx_seller123 13912345678 me@example.com", results: 5 },
+  { name: "search", q: "书桌", results: 5 },
+  { name: "search", q: "没有的东西", results: 0 },
+  { name: "search", q: "wx_seller123", results: 0 },
+  { name: "search", q: "长".repeat(100), results: 1 },
+  { name: "post_start", kind: "goods" },
+  { name: "post_abandon", kind: "goods", step: "price" },
+  { name: "post_start", kind: "goods" },
+  { name: "post_done", kind: "goods", mode: "batch", count: 4 },
+  { name: "ai_result", aiName: "书桌", nameEdited: true, aiPrice: 40, priceEdited: true, priceDiff: -10 },
+  { name: "ai_result", aiName: "台灯", nameEdited: false, aiPrice: 15, priceEdited: false, priceDiff: 0 }
+]);
+ok("不用登录也能记，只记有效的", r.status === 200 && r.data.kept === 15, r);
+await ev(inst2, [{ name: "detail_view", listing: lid, kind: "rent", tier: 3, seconds: 10 }]);
+r = await call("GET", "/v1/admin/event-stats", {});
+ok("统计要管理员", r.status === 401 || r.status === 403, r);
+r = await call("GET", "/v1/admin/event-stats?days=30", { token: ADMIN });
+const st = r.data;
+ok("联系率按设备算", st.contactRate.viewers === 2 && st.contactRate.contacted === 1 && st.contactRate.rate === 0.5, st.contactRate);
+ok("联系率按类别", st.contactRate.byCat.find(x => x.key === "furn").rate === 1 && st.contactRate.byCat.find(x => x.key === "rent").rate === 0, st.contactRate);
+ok("联系率按蜜蜂分档", st.contactRate.byTier.find(x => x.key === 3).viewers === 2 && st.contactRate.byTier.find(x => x.key === 3).contacted === 1, st.contactRate);
+ok("搜索词去掉微信号、电话、邮箱", st.searches.top[0].q === "书桌" && st.searches.top[0].n === 2 && !JSON.stringify(st.searches).match(/seller|139|example/), st.searches);
+ok("搜索词封顶 40", st.searches.top.some(x => x.q.length === 40), st.searches);
+ok("零结果词单独排", st.searches.zero.length === 1 && st.searches.zero[0].q === "没有的东西", st.searches);
+ok("停留封顶 600，取中位数", st.staySeconds.find(x => x.key === "furn").medianSeconds === 310, st.staySeconds);
+ok("发布漏斗", st.funnel.start === 2 && st.funnel.abandon === 1 && st.funnel.done === 1 && st.funnel.items === 4 && st.funnel.abandonSteps[0].step === "price", st.funnel);
+ok("AI 修改比例", st.ai.total === 2 && st.ai.nameEditedRate === 0.5 && st.ai.priceEditedRate === 0.5, st.ai);
+ok("每条帖子的联系数", st.contactsByListing[0].listing === lid && st.contactsByListing[0].method === "copy_wechat", st.contactsByListing);
+ok("回访算得出", st.retention.day2.devices === 0, st.retention);
+ok("举报数和处理时长", typeof st.reports.total === "number" && st.reports.total > 0 && st.reports.medianHandleHours !== undefined, st.reports);
+ok("卖出和首次联系时长有字段", "firstContactHours" in st.timing && "soldHours" in st.timing, st.timing);
+for (let i = 0; i < 9; i++) await ev(inst, Array(50).fill({ name: "app_open" }));
+r = await ev(inst, Array(50).fill({ name: "app_open" }));
+ok("每台设备每天有上限", r.status === 429 && r.data.error === "daily_limit", r);
+execSync(`npx wrangler d1 execute fengji --local --command "UPDATE events SET at = ${Date.now() - 91 * 86400000} WHERE install = '${inst2}'"`, { stdio: "ignore" });
+await call("GET", "/__scheduled");
+const left = execSync(`npx wrangler d1 execute fengji --local --json --command "SELECT (SELECT COUNT(*) FROM events WHERE install = '${inst2}') AS raw, (SELECT COALESCE(SUM(n), 0) FROM event_daily WHERE metric = 'detail_view') AS kept"`).toString();
+ok("过了 90 天原始事件删掉，只留汇总", JSON.parse(left)[0].results[0].raw === 0 && JSON.parse(left)[0].results[0].kept === 1, left);
+
 console.log(`全部通过：${n} 项`);

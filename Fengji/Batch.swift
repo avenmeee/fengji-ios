@@ -22,6 +22,9 @@ final class BatchModel: ObservableObject {
         var cat: String?
         var cond: String?
         var priceSuggested: Bool
+        // AI 当时说的，发布时比一比卖家改了没有
+        var aiTitle: String? = nil
+        var aiPrice: Int? = nil
     }
 
     /// 刚删掉的一件，黑条上能撤销
@@ -152,7 +155,7 @@ final class BatchModel: ObservableObject {
             aiLeft = result.aiLeft
             items = result.items.map { g in
                 Item(shots: g.photos.compactMap { small.indices.contains($0) ? small[$0].0 : nil },
-                     title: g.title, price: g.price.map(String.init) ?? "", cat: g.cat, cond: g.cond, priceSuggested: g.price != nil)
+                     title: g.title, price: g.price.map(String.init) ?? "", cat: g.cat, cond: g.cond, priceSuggested: g.price != nil, aiTitle: g.title.isEmpty ? nil : g.title, aiPrice: g.price)
             }.filter { !$0.shots.isEmpty }
             if items.isEmpty {
                 eachOne()
@@ -214,6 +217,8 @@ final class BatchModel: ObservableObject {
                 items[i].price = String(p)
                 items[i].priceSuggested = true
             }
+            items[i].aiTitle = g.name
+            items[i].aiPrice = g.price
             items[i].cat = items[i].cat ?? g.cat
             items[i].cond = items[i].cond ?? g.cond
         } catch {
@@ -339,6 +344,18 @@ final class BatchModel: ObservableObject {
             badIndex = index
             self.error = (index.map { "第 \($0 + 1) 件：" } ?? "") + error.localizedDescription
             return nil
+        }
+    }
+
+    /// 发好以后记一笔：AI 说的和卖家最后发的差多少
+    func logResults() {
+        Events.shared.log(.init(name: "post_done", kind: "goods", mode: "batch", count: items.count))
+        for it in items where it.aiTitle != nil || it.aiPrice != nil {
+            let final = Int(it.price.trimmingCharacters(in: .whitespaces))
+            Events.shared.log(.init(name: "ai_result", aiName: it.aiTitle,
+                                    nameEdited: it.aiTitle.map { $0 != it.title.trimmingCharacters(in: .whitespacesAndNewlines) },
+                                    aiPrice: it.aiPrice, priceEdited: it.aiPrice.map { $0 != final },
+                                    priceDiff: it.aiPrice.flatMap { a in final.map { $0 - a } }))
         }
     }
 

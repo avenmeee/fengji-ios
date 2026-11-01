@@ -193,6 +193,8 @@ struct RootView: View {
             state.plusAction(.me)
         }
         .onChange(of: phase) { _, p in
+            if p == .active { Events.shared.appOpen() }
+            if p == .background { Events.shared.flush() }
             if p != .active { state.flushDelete() }
             // 切走再回来：键盘还在的话系统会再发一次，不在的话底栏不能卡住
             if p == .background {
@@ -201,6 +203,7 @@ struct RootView: View {
             }
         }
         .task {
+            Events.shared.appOpen()
             await state.loadConfig()
             await state.refreshMe()
             if state.isLoggedIn { Notifier.refresh() }

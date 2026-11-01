@@ -54,6 +54,7 @@ export function privacyPage(env) {
   <p>“想要”留言：你留的一句话和联系方式只有卖家能看到。删帖或删号时一起删除。</p>
   <p>推送：同意通知后，我们保存设备的推送令牌，只用来告诉你有人想要。退出登录或删号时删除。</p>
   <p>发布、浏览、成交的每日总数，只是数字，不关联到个人。</p>
+  <p>我们记录匿名的使用情况，比如打开了哪类页面、停留多久、搜了什么词，用来改进 App。这些记录不跟你的账号关联，90 天后删除。</p>
   <p>AI：放上照片后，照片会发给 AI（Anthropic 的 Claude）自动生成名字、分类和成色，不保存到我们这里，直到你发布。东西的名字、价格、分类、成色、地点和第一张照片也会发给 AI 打分。第一次发布东西前会征得你的同意。</p>
   <h2>不做什么</h2>
   <p>不追踪你，不放广告，不卖数据。照片上传前去掉定位信息。App 不读你的相册，只拿到你选中的照片。</p>
@@ -64,7 +65,7 @@ export function privacyPage(env) {
   <h2>联系</h2>
   <p>${contactLine(env)}</p>
   <h2 lang="en">In English</h2>
-  <p lang="en">Fengji only needs sign-in to post, using Sign in with Apple; we receive an anonymous identifier, not your name or email. What you post (photos, text, location, WeChat ID if you add one) is public. A "want" message and the contact you leave are visible only to the seller. If you allow notifications we store a device push token, removed on sign-out or account deletion. We keep daily totals of posts, views and sales that are not linked to anyone. We do not track you, show ads or sell data. Listing details and the first photo are sent to AI (Anthropic's Claude) to produce a rating; you are asked to agree before posting. Delete your account any time in the app (+ → Me → Settings → Delete account); your posts and photos are deleted immediately. Data is stored on Cloudflare.</p>`);
+  <p lang="en">Fengji only needs sign-in to post, using Sign in with Apple; we receive an anonymous identifier, not your name or email. What you post (photos, text, location, WeChat ID if you add one) is public. A "want" message and the contact you leave are visible only to the seller. If you allow notifications we store a device push token, removed on sign-out or account deletion. We keep daily totals of posts, views and sales that are not linked to anyone. We keep anonymous usage records, such as which kinds of pages were opened, for how long and what was searched, to improve the app; they are not linked to your account and are deleted after 90 days. We do not track you, show ads or sell data. Listing details and the first photo are sent to AI (Anthropic's Claude) to produce a rating; you are asked to agree before posting. Delete your account any time in the app (+ → Me → Settings → Delete account); your posts and photos are deleted immediately. Data is stored on Cloudflare.</p>`);
 }
 
 // 点开才显示邮箱：字在页面里，不开 JS 也能点开、能选中；开了 JS 多一个复制按钮

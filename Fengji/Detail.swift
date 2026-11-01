@@ -22,6 +22,11 @@ struct DetailView: View {
     @State private var copied: String?
     /// 点价签：讲清楚蜜蜂分怎么来的
     @State private var scoreInfo = Demo.scene == "detail-score"
+    // 停留多久：切到后台不算
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var onScreen = false
+    @State private var stayStart: Date?
+    @State private var stayTotal: TimeInterval = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 一周内写“3 天前发布”“今天发布”，再早写日期。群帖写“群里 10月28日发”。重新上架或擦亮按最近一次算。
@@ -85,7 +90,22 @@ struct DetailView: View {
         }
         .task(id: state.version) { await reload() }
         .navigationDestination(isPresented: $goSeller) { SellerView(ref: SellerRef(listing: item)) }
+        .onChange(of: scenePhase) { _, p in
+            if p == .active {
+                if onScreen { stayStart = Date() }
+            } else {
+                pauseStay()
+            }
+        }
+        .onDisappear {
+            onScreen = false
+            pauseStay()
+            if !item.mine { Events.shared.detailView(item, seconds: stayTotal) }
+            stayTotal = 0
+        }
         .onAppear {
+            onScreen = true
+            stayStart = Date()
             // 第一次看别人的帖子时提示一次左滑
             let key = "sellerSwipeHintSeen"
             if !item.mine, !UserDefaults.standard.bool(forKey: key) {
@@ -465,6 +485,7 @@ struct DetailView: View {
                 state.toast("已复制，去微信加对方")
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 Task { try? await API.shared.countClick(item.id, "copy") }
+                Events.shared.contact(item, method: "copy_wechat")
             } label: {
                 HStack(spacing: 8) {
                     Text(contact)
@@ -502,9 +523,15 @@ struct DetailView: View {
         }
     }
 
+    private func pauseStay() {
+        if let start = stayStart { stayTotal += Date().timeIntervalSince(start) }
+        stayStart = nil
+    }
+
     private func openWeChat(copying text: String, click: String) {
         UIPasteboard.general.string = text
         Task { try? await API.shared.countClick(item.id, click) }
+        Events.shared.contact(item, method: "group")
         guard let url = URL(string: "weixin://") else { return }
         UIApplication.shared.open(url) { opened in
             if !opened { state.toast("已复制") }
@@ -731,6 +758,7 @@ struct WantSheet: View {
         do {
             try await API.shared.want(item.id, message: message.trimmingCharacters(in: .whitespacesAndNewlines), contact: c)
             UserDefaults.standard.set(c, forKey: "wantContact")
+            Events.shared.contact(item, method: "want")
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             state.toast("发好了，等卖家联系你")
             dismiss()

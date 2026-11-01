@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS reports (
   reported_user TEXT,            -- 举报想要留言时是留言人；举报条目时为空
   status TEXT NOT NULL DEFAULT 'open',  -- open / done
   created_at INTEGER NOT NULL,
+  done_at INTEGER,               -- 处理的时间，算处理时长
   UNIQUE (listing_id, reporter_id)
 );
 CREATE INDEX IF NOT EXISTS reports_open ON reports(status, created_at DESC);
@@ -103,6 +104,43 @@ CREATE TABLE IF NOT EXISTS blocks (
 );
 
 -- 发布和传照片的每日计数，防刷爆存储账单。user_id 用 '*' 记全站总数。
+-- 匿名使用记录：只有本机随机的安装编号，不跟账号挂。留 90 天
+CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  install TEXT NOT NULL,
+  name TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  listing TEXT,
+  kind TEXT,
+  cat TEXT,
+  tier INTEGER,
+  seconds INTEGER,
+  q TEXT,
+  results INTEGER,
+  method TEXT,
+  step TEXT,
+  mode TEXT,
+  count INTEGER,
+  ai_name TEXT,
+  name_edited INTEGER,
+  ai_price INTEGER,
+  price_edited INTEGER,
+  price_diff INTEGER
+);
+CREATE INDEX IF NOT EXISTS events_name ON events(name, at);
+CREATE INDEX IF NOT EXISTS events_listing ON events(listing, name);
+CREATE INDEX IF NOT EXISTS events_at ON events(at);
+
+-- 过了 90 天只留每天的汇总
+CREATE TABLE IF NOT EXISTS event_daily (
+  day TEXT NOT NULL,
+  metric TEXT NOT NULL,
+  dim TEXT NOT NULL,
+  n INTEGER NOT NULL,
+  devices INTEGER NOT NULL,
+  PRIMARY KEY (day, metric, dim)
+);
+
 CREATE TABLE IF NOT EXISTS daily_counts (
   day TEXT NOT NULL,
   user_id TEXT NOT NULL,
