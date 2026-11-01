@@ -82,7 +82,7 @@ struct SellerView: View {
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
                 if isGroup {
-                    Text(["来自群", page?.seller.groupName ?? item.sourceGroup ?? "", "未确认"].filter { !$0.isEmpty }.joined(separator: " · "))
+                    Text(["来自群", page?.seller.groupName ?? item.sourceGroup ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.subheadline)
                         .foregroundStyle(Theme.sub)
                 }

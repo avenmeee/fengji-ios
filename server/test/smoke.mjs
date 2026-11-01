@@ -264,7 +264,7 @@ r = await call("GET", "/v1/listings/" + gid);
 ok("详情给群和人，不给微信", r.data.sourceType === "group" && r.data.sourceGroup === "二手群 3" && r.data.sourcePoster === "小林" && r.data.contact === null, r);
 const gPhoto = r.data.photos[0].key;
 r = await call("GET", "/l/" + gid);
-ok("分享页写明未确认", Buffer.from(r.data).toString().includes("未经发布者确认"), r.status);
+ok("分享页写明是群里搬来的", Buffer.from(r.data).toString().includes("从微信群搬来的"), r.status);
 await call("POST", `/v1/listings/${gid}/takedown`, { token: ADMIN });
 const imp2 = { ...imp, sourceId: "test2-" + stamp, title: "搬来的台灯二" + stamp };
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp2, photos: [b64], photosChecked: true } });

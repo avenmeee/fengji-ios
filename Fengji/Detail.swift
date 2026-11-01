@@ -146,7 +146,7 @@ struct DetailView: View {
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
                 if item.isGroup {
-                    Text(["来自群", item.sourceGroup ?? "", "未确认"].filter { !$0.isEmpty }.joined(separator: " · "))
+                    Text(["来自群", item.sourceGroup ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.subheadline)
                         .foregroundStyle(Theme.sub)
                 }
@@ -195,7 +195,7 @@ struct DetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 16)
             .padding(.bottom, 14)
-            if !item.desc.isEmpty || !item.infoRows.isEmpty {
+            if !item.desc.isEmpty || !item.infoRows.isEmpty || item.isGroup {
                 infoBlock
             }
         }
@@ -251,6 +251,13 @@ struct DetailView: View {
             }
             if item.isRent, !item.desc.isEmpty, !item.infoRows.isEmpty { Theme.line.frame(height: 0.5) }
             if item.isRent, !item.desc.isEmpty { descText }
+            // 群里搬来的：提醒先去群里问（认领后就是本人的帖子，不显示）
+            if item.isGroup {
+                Text("这条是从群里搬来的，可能已经卖掉了，先去群里问一下。")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.sub)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
