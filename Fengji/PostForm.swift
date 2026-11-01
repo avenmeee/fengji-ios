@@ -1190,7 +1190,9 @@ private struct CalendarSheet: View {
     private func fit() {
         guard contentHeight > 0, boxHeight > 0 else { return }
         let current = detent > 0 ? detent : sheetHeight
-        let want = (contentHeight + current - boxHeight).rounded()
+        // 弹出途中量到的可能是过渡中的高度，多出来那截只信 0～60
+        let extra = min(max(current - boxHeight, 0), 60)
+        let want = (contentHeight + extra).rounded()
         if abs(want - current) > 1 { detent = want }
     }
 
