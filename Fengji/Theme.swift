@@ -171,6 +171,33 @@ struct SearchBox: View {
 }
 
 /// 空状态只写一行，不放框
+/// 卖完的照片：变灰，压一个“已卖出 / 已租出”。样子等设计定稿，改这里一处就行
+struct SoldCover: ViewModifier {
+    let item: Listing
+
+    func body(content: Content) -> some View {
+        if item.isSold {
+            content
+                .grayscale(1)
+                .opacity(0.75)
+                .overlay {
+                    Text(item.isRent ? "已租出" : "已卖出")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .background(Color.black.opacity(0.6), in: Capsule())
+                }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func soldCover(_ item: Listing) -> some View { modifier(SoldCover(item: item)) }
+}
+
 struct EmptyBlock: View {
     let text: String
 

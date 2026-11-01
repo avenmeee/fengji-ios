@@ -21,8 +21,12 @@ struct MeView: View {
     @State private var reportingWant: Want?
     @State private var blockingWant: Want?
 
-    private var visible: [Listing] { items.filter { $0.id != state.pendingDelete?.id && $0.status != "off" && $0.status != "deleted" } }
-    private var recordCount: Int { items.filter { $0.status == "off" || $0.status == "deleted" }.count }
+    /// 在卖的在前，卖完的排后面；删掉的去“记录”
+    private var visible: [Listing] {
+        let live = items.filter { $0.id != state.pendingDelete?.id && $0.status != "deleted" }
+        return live.filter { !$0.isSold } + live.filter(\.isSold)
+    }
+    private var recordCount: Int { items.filter { $0.status == "deleted" }.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -61,7 +65,14 @@ struct MeView: View {
                 afterActing = { run(action, item) }
                 acting = nil
             }
-            .presentationDetents([.height(item.status == "hidden" ? 130 : 190)])
+            .presentationDetents([.height(item.status == "hidden" ? 130 : (item.isSold ? 190 : 250))])
+        }
+        .alert("卖了多少钱？", isPresented: Binding(get: { selling != nil }, set: { if !$0 { selling = nil } }), presenting: selling) { item in
+            TextField("选填", text: $soldPrice).keyboardType(.numberPad)
+            Button("保存") { Task { await setStatus(item, "off", soldPrice: Int(soldPrice.trimmingCharacters(in: .whitespaces))) } }
+            Button("跳过", role: .cancel) { Task { await setStatus(item, "off") } }
+        } message: { _ in
+            Text("选填，只用来比价，不公开")
         }
         .confirmationDialog("举报这条留言", isPresented: Binding(get: { reportingWant != nil }, set: { if !$0 { reportingWant = nil } }), titleVisibility: .visible, presenting: reportingWant) { want in
             ForEach(REASONS, id: \.self) { reason in
@@ -152,13 +163,18 @@ struct MeView: View {
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button("删除", role: .destructive) { state.softDelete(item) }
                             .tint(Theme.warn)
+                        if item.isSold {
+                            Button("重新上架") { run(.status("on"), item) }.tint(Theme.rent)
+                        } else if item.status != "hidden" {
+                            Button(item.isRent ? "租出去了" : "卖完了") { run(.status("off"), item) }.tint(Theme.sub)
+                        }
                     }
             }
             if recordCount > 0 {
                 Button { path.append("records") } label: {
                     HStack {
                         Text("记录").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
-                        Text("卖掉和删掉的 \(recordCount) 件").font(.subheadline).foregroundStyle(Theme.sub)
+                        Text("删掉的 \(recordCount) 件").font(.subheadline).foregroundStyle(Theme.sub)
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.sub)
                     }
@@ -344,7 +360,7 @@ struct MineRow: View {
                 HStack(spacing: 12) {
                     Color.clear
                         .frame(width: 66, height: 66)
-                        .overlay { ListingImage(item: item, maxPixel: 240) }
+                        .overlay { ListingImage(item: item, maxPixel: 240).grayscale(item.isSold ? 1 : 0) }
                         .clipShape(RoundedRectangle(cornerRadius: 3))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.priceText + (item.isRent ? " /月" : ""))
@@ -358,7 +374,7 @@ struct MineRow: View {
                         if !item.isOn {
                             Text(item.statusText)
                                 .font(.footnote)
-                                .foregroundStyle(item.status == "off" ? Theme.sub : Theme.warn)
+                                .foregroundStyle(item.isSold ? Theme.sub : Theme.warn)
                         }
                     }
                     Spacer(minLength: 0)
@@ -366,7 +382,7 @@ struct MineRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .opacity(item.status == "off" ? 0.5 : 1)
+            .opacity(item.isSold ? 0.6 : 1)
             Button(action: more) {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 16, weight: .semibold))
@@ -391,9 +407,12 @@ struct MineActions: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // 状态和改价都在编辑页里
-            if item.status != "hidden" {
+            // 改价、已预订在编辑页里；卖完了的只能重新上架或删除
+            if item.isSold {
+                row("重新上架") { pick(.status("on")) }
+            } else if item.status != "hidden" {
                 row("编辑") { pick(.edit) }
+                row(item.isRent ? "租出去了" : "卖完了") { pick(.status("off")) }
             }
             row("删除", color: Theme.warn) { pick(.delete) }
             Spacer(minLength: 0)

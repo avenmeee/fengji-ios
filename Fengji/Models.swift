@@ -25,6 +25,8 @@ struct Photo: Codable, Hashable {
 
 struct Listing: Codable, Identifiable, Hashable {
     var sellerAvatar: String? = nil
+    /// 标记卖完的时间
+    var soldAt: Int64? = nil
     /// 只有本人的记录里有
     var soldPrice: Int? = nil
     var deletedAt: Int64? = nil
@@ -79,6 +81,8 @@ struct Listing: Codable, Identifiable, Hashable {
 
     var isRent: Bool { kind == "rent" }
     var isOn: Bool { status == "on" }
+    /// 卖完了 / 租出去了：别人照样看得到，标“已卖出”
+    var isSold: Bool { status == "off" }
     var isReserved: Bool { status == "reserved" }
     /// 群里搬来的
     var isGroup: Bool { sourceType == "group" }

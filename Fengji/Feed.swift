@@ -374,7 +374,7 @@ struct GoodsCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Color.clear
                 .aspectRatio(aspect, contentMode: .fit)
-                .overlay { ListingImage(item: item, maxPixel: 900) }
+                .overlay { ListingImage(item: item, maxPixel: 900).soldCover(item) }
                 .clipShape(RoundedRectangle(cornerRadius: 3))
                 .background(CardShadow(radius: 10, y: 4))
             // 名字和价格一样大；只有一行也留两行高，一行两格对得齐
@@ -493,7 +493,7 @@ struct RentRow: View {
         VStack(alignment: .leading, spacing: 4) {
             Color.clear
                 .aspectRatio(1.5, contentMode: .fit)
-                .overlay { ListingImage(item: item, maxPixel: 1200) }
+                .overlay { ListingImage(item: item, maxPixel: 1200).soldCover(item) }
                 .clipShape(RoundedRectangle(cornerRadius: 3))
                 .background(CardShadow(radius: 10, y: 4))
                 .padding(.bottom, 6)

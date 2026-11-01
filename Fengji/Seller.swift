@@ -21,9 +21,10 @@ struct SellerView: View {
     private var name: String { page?.seller.name ?? item.sellerLabel }
     private var avatar: String? { page?.seller.avatar ?? item.sellerAvatar }
 
-    /// “在卖 N 件 · 出租 N 套”，是 0 的不写
+    /// “在卖 N 件 · 出租 N 套”，只算在卖的，是 0 的不写
     private var counts: String {
-        [goods.isEmpty ? "" : "在卖 \(goods.count) 件", rents.isEmpty ? "" : "出租 \(rents.count) 套"]
+        let g = goods.filter { !$0.isSold }.count, r = rents.filter { !$0.isSold }.count
+        return [g == 0 ? "" : "在卖 \(g) 件", r == 0 ? "" : "出租 \(r) 套"]
             .filter { !$0.isEmpty }.joined(separator: " · ")
     }
 

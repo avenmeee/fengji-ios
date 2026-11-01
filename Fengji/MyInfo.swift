@@ -375,7 +375,8 @@ struct RecordsView: View {
     private func load() async {
         do {
             let all = try await API.shared.mine()
-            items = all.filter { $0.status == "off" || $0.status == "deleted" }
+            // 记录里只放删掉的；卖完的留在“我发的”
+            items = all.filter { $0.status == "deleted" }
                 .sorted { ($0.deletedAt ?? $0.updatedAt ?? $0.createdAt) > ($1.deletedAt ?? $1.updatedAt ?? $1.createdAt) }
             phase = .ok
         } catch {

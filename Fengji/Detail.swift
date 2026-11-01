@@ -106,6 +106,17 @@ struct DetailView: View {
                             .simultaneousGesture(swipeToSeller())
                     }
                 }
+                .overlay(alignment: .topLeading) {
+                    if item.isSold {
+                        Text(item.isRent ? "已租出" : "已卖出")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .frame(height: 28)
+                            .background(Color.black.opacity(0.6), in: Capsule())
+                            .padding(12)
+                    }
+                }
                 .clipShape(RoundedRectangle(cornerRadius: 3))
                 .background(CardShadow(radius: 14, y: 6))
             if item.photos.count > 1 {
@@ -333,7 +344,10 @@ struct DetailView: View {
 
     @ViewBuilder
     private var contactBar: some View {
-        if let contact = item.contact, !contact.isEmpty {
+        if item.isSold {
+            // 卖完了：微信号和“想要”都不显示
+            EmptyView()
+        } else if let contact = item.contact, !contact.isEmpty {
             Button {
                 UIPasteboard.general.string = contact
                 state.toast("已复制，去微信加对方")

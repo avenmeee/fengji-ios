@@ -107,7 +107,8 @@ enum DemoServer {
         goods(5, "设计史教材", 15, "other", "有点旧", "学校门口", photos: [photo("c1")]),
         goods(6, "羽绒服 M 码", 30, "other", "几乎全新", "Victory Dr"),
         goods(7, "小冰箱", 50, "kitchen", "有使用痕迹", "Forsyth Park"),
-        goods(8, "台灯", 8, "furn", "几乎全新", "学校门口")
+        goods(8, "台灯", 8, "furn", "几乎全新", "学校门口"),
+        goods(9, "小边柜", 18, "furn", "有使用痕迹", "Monty", photos: [photo("b1")], status: "off")
     ]
 
     /// 群里搬来的样子
