@@ -71,6 +71,10 @@ async function needAdmin(req, env) {
   if (!u.is_admin) throw new Fail(403, "forbidden");
   return u;
 }
+async function isStaff(req, env) {
+  try { await needStaff(req, env); return true; } catch (e) { return false; }
+}
+
 // 处理举报：管理员在 App 里登录，或者定时任务拿 ADMIN_TOKEN。后者没有账号，id 是 null
 async function needStaff(req, env) {
   const m = /^Bearer (\S+)$/.exec(req.headers.get("authorization") || "");
@@ -297,8 +301,8 @@ const SYNONYMS = [
 ];
 const SUFFIXES = ["子", "儿", "头"];
 
-// 一个查询词变成几种写法：去空格、去常见词尾、英文单复数，再按同义词表扩开
-function searchTerms(q) {
+// 一个查询词的几种写法：去空格、去常见词尾、英文单复数
+function directTerms(q) {
   const base = q.toLowerCase().trim();
   const out = new Set([base, base.replace(/\s+/g, "")]);
   for (const t of [...out]) {
@@ -309,10 +313,82 @@ function searchTerms(q) {
       else out.add(t + "s");
     }
   }
+  return [...out].filter(Boolean);
+}
+
+// 再按同义词表扩开
+function searchTerms(q) {
+  const out = new Set(directTerms(q));
   for (const t of [...out]) {
     for (const group of SYNONYMS) if (group.includes(t)) group.forEach(w => out.add(w));
   }
   return [...out].filter(Boolean).slice(0, 24);
+}
+
+// ---- 语义相近（11-01）：Workers AI 的多语言向量，存在 D1 里。算不出来就只用前两层 ----
+const EMBED_MODEL = "@cf/baai/bge-m3";
+const EMBED_CACHE = new Map();
+
+// 本机测试不连 AI：按字和字母对散列出一个小向量，像的字多就近
+function mockVector(text) {
+  const v = new Float32Array(64), s = text.toLowerCase();
+  for (let i = 0; i < s.length; i++) v[(s.charCodeAt(i) * 31 + (s.charCodeAt(i + 1) || 0)) % 64] += 1;
+  return v;
+}
+
+async function embed(env, texts) {
+  if (env.AI_MOCK === "1") return texts.map(mockVector);
+  if (!env.AI) return null;
+  const r = await env.AI.run(EMBED_MODEL, { text: texts });
+  return r.data.map(d => Float32Array.from(d));
+}
+
+function cosine(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  return na && nb ? dot / Math.sqrt(na * nb) : 0;
+}
+
+const toBlob = v => new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+const fromBlob = b => {
+  if (!b) return null;
+  const bytes = b instanceof ArrayBuffer ? new Uint8Array(b) : Uint8Array.from(b);
+  return new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >> 2);
+};
+
+async function queryVector(env, q) {
+  const key = q.toLowerCase();
+  if (EMBED_CACHE.has(key)) return EMBED_CACHE.get(key);
+  try {
+    const v = (await embed(env, [key]))?.[0] || null;
+    if (EMBED_CACHE.size > 500) EMBED_CACHE.clear();
+    EMBED_CACHE.set(key, v);
+    return v;
+  } catch (e) {
+    console.error("embed q", e && e.message);
+    return null;
+  }
+}
+
+async function embedListing(env, id) {
+  const row = await env.DB.prepare("SELECT title, tags, descr FROM listings WHERE id = ?").bind(id).first();
+  if (!row) return false;
+  const text = [row.title, (row.tags || "").trim(), (row.descr || "").slice(0, 300)].filter(Boolean).join("\n");
+  const v = (await embed(env, [text]))?.[0];
+  if (!v) return false;
+  await env.DB.prepare("UPDATE listings SET embedding = ? WHERE id = ?").bind(toBlob(v), id).run();
+  return true;
+}
+
+// 搜索时分三层：名字直接有；同义词、备注、地点、标签有；语义相近。完全不沾边的不给
+function searchTier(row, direct, expanded, qv, minSim) {
+  const title = (row.title || "").toLowerCase();
+  if (direct.some(t => title.includes(t))) return { tier: 1, sim: null };
+  const rest = [title, row.descr, row.place, row.tags].map(x => (x || "").toLowerCase());
+  if (expanded.some(t => rest.some(x => x.includes(t)))) return { tier: 2, sim: null };
+  const sim = qv ? cosine(qv, fromBlob(row.embedding)) : 0;
+  return sim >= minSim ? { tier: 3, sim } : { tier: 0, sim };
 }
 
 // 发帖、改帖以后在后台做，不耽误返回。拿不到 ctx 就直接等
@@ -324,8 +400,14 @@ function later(req, work) {
   return ctx ? null : p;
 }
 
-// 帖子的搜索标签：只给 AI 文字，不传图；记进全站预算，不扣卖家的额度。失败或没钱了就跳过
+// 帖子的搜索标签：只给 AI 文字，不传图；记进全站预算，不扣卖家的额度。失败或没钱了就跳过。最后算向量
 async function tagListing(env, id) {
+  const tagged = await tagOnly(env, id).catch(e => { console.error("tag", id, e && e.message); return false; });
+  await embedListing(env, id).catch(e => console.error("embed", id, e && e.message));
+  return tagged;
+}
+
+async function tagOnly(env, id) {
   if (!aiEnabled(env)) return false;
   if (await monthSum(env, "ai_microusd") >= Number(env.AI_MONTHLY_USD || 40) * 1e6) return false;
   const row = await env.DB.prepare("SELECT title, descr, cat, kind FROM listings WHERE id = ?").bind(id).first();
@@ -337,19 +419,20 @@ async function tagListing(env, id) {
   return true;
 }
 
-// 没标签的补上：管理员接口和每天的定时任务都用它。一次最多 n 条
+// 没标签、没向量的补上：管理员接口和每天的定时任务都用它。一次最多 n 条
 async function tagMissing(env, n) {
-  const rows = (await env.DB.prepare("SELECT id FROM listings WHERE tags IS NULL AND status IN ('on', 'reserved', 'off') ORDER BY bumped_at DESC LIMIT ?").bind(n).all()).results;
-  let done = 0;
+  const rows = (await env.DB.prepare("SELECT id, tags IS NULL AS needTags FROM listings WHERE (tags IS NULL OR embedding IS NULL) AND status IN ('on', 'reserved', 'off') ORDER BY bumped_at DESC LIMIT ?").bind(n).all()).results;
+  let done = 0, embedded = 0;
   for (const r of rows) {
     try {
-      if (await tagListing(env, r.id)) done++; else break;
+      if (r.needTags && await tagOnly(env, r.id)) done++;
+      if (await embedListing(env, r.id)) embedded++;
     } catch (e) {
       console.error("tag", r.id, e && e.message);
     }
   }
-  const left = (await env.DB.prepare("SELECT COUNT(*) AS n FROM listings WHERE tags IS NULL AND status IN ('on', 'reserved', 'off')").first()).n;
-  return { done, left };
+  const left = (await env.DB.prepare("SELECT COUNT(*) AS n FROM listings WHERE (tags IS NULL OR embedding IS NULL) AND status IN ('on', 'reserved', 'off')").first()).n;
+  return { done, embedded, left };
 }
 
 async function backfillTags(req, env, url) {
@@ -371,22 +454,34 @@ async function feed(req, env, url) {
   const unit = p.get("unit");
   if (kind === "rent" && (unit === "whole" || unit === "room")) { where.push("l.unit_type IN (?, 'both')"); args.push(unit); }
   const q = clean(p.get("q"), 40);
-  if (q) {
-    const ors = [];
-    for (const t of searchTerms(q)) {
-      const like = "%" + t.replace(/[\\%_]/g, c => "\\" + c) + "%";
-      ors.push("l.title LIKE ? ESCAPE '\\' OR l.descr LIKE ? ESCAPE '\\' OR l.place LIKE ? ESCAPE '\\' OR l.tags LIKE ? ESCAPE '\\'");
-      args.push(like, like, like, like);
-    }
-    where.push("(" + ors.join(" OR ") + ")");
-  }
   if (viewer) { where.push("l.user_id NOT IN (SELECT blocked_id FROM blocks WHERE user_id = ?)"); args.push(viewer.id); }
-  // 候选先取最近的 300 条，在这里算分、打散、切页；量大了再搬进数据库
+  // 候选先取最近的 300 条，在这里算分、打散、切页；量大了再搬进数据库。只有搜索才带向量
   const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY l.bumped_at DESC, l.id DESC LIMIT ?`).bind(...args, FEED_POOL).all()).results;
-  const ranked = rankFeed(rows, now);
+  let ranked, tierOf = null;
+  if (q) {
+    // 分层：一层排完再排下一层，同一层里照旧按综合分；卖完的都放最后
+    const direct = directTerms(q), expanded = searchTerms(q);
+    const qv = await queryVector(env, q);
+    // bge-m3 对短词偏高：不相干的也有 0.4～0.5，相近的 0.55 以上（11-01 拿 32 条样本试的）
+    const minSim = Number(env.SEARCH_MIN_SIM || (env.AI_MOCK === "1" ? 0.5 : 0.55));
+    tierOf = new Map(rows.map(r => [r.id, searchTier(r, direct, expanded, qv, minSim)]));
+    const hit = rows.filter(r => tierOf.get(r.id).tier > 0);
+    // 第三层按相似度排，越像越前
+    const layer = (list, t) => t === 3 ? list.sort((a, b) => tierOf.get(b.id).sim - tierOf.get(a.id).sim) : rankFeed(list, now);
+    const live = [1, 2, 3].flatMap(t => layer(hit.filter(r => r.status !== "off" && tierOf.get(r.id).tier === t), t));
+    const sold = [1, 2, 3].flatMap(t => layer(hit.filter(r => r.status === "off" && tierOf.get(r.id).tier === t), t));
+    ranked = [...live, ...sold];
+  } else {
+    ranked = rankFeed(rows, now);
+  }
   const pageRows = ranked.slice(offset, offset + size);
   const more = offset + size < ranked.length;
-  return json({ items: pageRows.map(r => view(r, url.origin, viewer)), next: more ? encodeNext(now, offset + size) : null });
+  // 调阈值用：管理员带 debug=1 能看到每条在第几层、相似度多少
+  const debug = q && p.get("debug") === "1" && await isStaff(req, env);
+  return json({
+    items: pageRows.map(r => debug ? { ...view(r, url.origin, viewer), tier: tierOf.get(r.id).tier, sim: tierOf.get(r.id).sim } : view(r, url.origin, viewer)),
+    next: more ? encodeNext(now, offset + size) : null
+  });
 }
 
 

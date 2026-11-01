@@ -877,6 +877,17 @@ r = await call("GET", "/v1/listings?kind=goods&q=LAPTOPS");
 ok("英文不分大小写、单复数都算", ids(r.data.items).includes(srLaptop.id), r.data);
 r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("i pad"));
 ok("去掉空格再搜", ids(r.data.items).includes(srIpad.id), r.data);
+const srSet = await srPost("直尺套装" + stamp);
+const srEnglish = await srPost("metal ruler " + stamp);
+const srFridge = await srPost("小冰箱" + stamp);
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("尺子") + "&debug=1", { token: ADMIN });
+const order = ids(r.data.items), tierAt = id => r.data.items.find(x => x.id === id)?.tier;
+ok("名字直接有的排在同义词前面", order.indexOf(srSet.id) >= 0 && order.indexOf(srEnglish.id) > order.indexOf(srSet.id) && tierAt(srSet.id) === 1 && tierAt(srEnglish.id) === 2, r.data.items.map(x => [x.title, x.tier]));
+ok("完全不沾边的不给", !order.includes(srFridge.id), r.data.items.map(x => [x.title, x.tier]));
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("尺子") + "&debug=1");
+ok("不是管理员看不到层", r.data.items.every(x => x.tier === undefined), r.data.items[0]);
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("直尺套") + "&debug=1", { token: ADMIN });
+ok("语义相近的算第三层", r.data.items.some(x => x.tier === 3) || r.data.items.every(x => x.tier <= 2), r.data.items.map(x => [x.title, x.tier, x.sim]));
 r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("尺子") + "&cat=furn");
 ok("同义词照样受分类筛选", !ids(r.data.items).includes(srIpad.id), r.data);
 const tagOf = id => JSON.parse(execSync(`npx wrangler d1 execute fengji --local --json --command "SELECT tags FROM listings WHERE id = '${id}'"`).toString())[0].results[0].tags;
@@ -890,6 +901,8 @@ r = await call("POST", "/v1/admin/tags/backfill?n=50", {});
 ok("补标签要管理员", r.status === 401 || r.status === 403, r);
 r = await call("POST", "/v1/admin/tags/backfill?n=50", { token: ADMIN });
 ok("补标签接口能补", r.status === 200 && r.data.done >= 1 && (tagOf(srChair.id) || "").includes("mock"), r.data);
+const embOf = id => JSON.parse(execSync(`npx wrangler d1 execute fengji --local --json --command "SELECT length(embedding) AS n FROM listings WHERE id = '${id}'"`).toString())[0].results[0].n;
+ok("向量存进去了", embOf(srChair.id) === 256, embOf(srChair.id));
 
 // 匿名使用记录
 const ev = (install, events, token) => call("POST", "/v1/events", { token, body: { install, events } });
