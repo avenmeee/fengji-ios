@@ -375,6 +375,12 @@ struct GoodsCard: View {
                 .overlay { ListingImage(item: item, maxPixel: 900) }
                 .clipShape(RoundedRectangle(cornerRadius: 3))
                 .background(CardShadow(radius: 10, y: 4))
+            // 名字和价格一样大；只有一行也留两行高，一行两格对得齐
+            Text(item.title)
+                .font(.system(size: 16))
+                .foregroundStyle(Theme.ink)
+                .lineLimit(2, reservesSpace: true)
+                .multilineTextAlignment(.leading)
             HStack(spacing: 6) {
                 Text(item.priceText)
                     .font(.system(size: 16, weight: .medium))
@@ -489,6 +495,10 @@ struct RentRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 3))
                 .background(CardShadow(radius: 10, y: 4))
                 .padding(.bottom, 6)
+            Text(item.title)
+                .font(.system(size: 16))
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(item.priceText)
                     .font(.system(size: 19, weight: .medium))
