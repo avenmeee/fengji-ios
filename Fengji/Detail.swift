@@ -9,15 +9,17 @@ struct DetailView: View {
     @State private var gone = false
     @State private var editing = false
     @State private var shareImage: ShareImage?
-    @State private var panel = Demo.scene == "detail-panel" || Demo.scene == "detail-report"
-    @State private var stage: PanelStage = Demo.scene == "detail-report" ? .reportWhat : .main
+    @State private var panel = Demo.scene == "detail-panel" || Demo.scene == "detail-report" || Demo.scene == "owner-ask"
+    @State private var stage: PanelStage = Demo.scene == "detail-report" ? .reportWhat : (Demo.scene == "owner-ask" ? .ownerAsk : .main)
     /// 点开看大图：从第几张开始
     @State private var viewing: PhotoIndex?
-    @State private var wanting = false
+    @State private var wanting = Demo.scene == "want-sheet" || Demo.scene == "want-empty"
     @State private var popCheck = ""
     @State private var goSeller = false
     @State private var showHint = false
     @State private var tipOpen = false
+    /// 原帖人弹层里刚复制的是哪一行
+    @State private var copied: String?
     /// 点价签：讲清楚蜜蜂分怎么来的
     @State private var scoreInfo = Demo.scene == "detail-score"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -48,6 +50,11 @@ struct DetailView: View {
             .padding(.horizontal, 16)
             .frame(height: 44)
             ScrollView {
+                if gone {
+                    EmptyCard(symbol: "tag", title: "这条已经没有了", note: "可能卖掉了，或者卖家删了", action: ("回首页", { dismiss() }))
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                } else {
                 VStack(alignment: .leading, spacing: 12) {
                     sellerRow
                     label
@@ -58,6 +65,7 @@ struct DetailView: View {
                 .padding(.bottom, 16)
                 .contentShape(Rectangle())
                 .simultaneousGesture(swipeToSeller())
+                }
             }
         }
         .background(Theme.bg)
@@ -426,19 +434,23 @@ struct DetailView: View {
                 Task { await block() }
             } onCancel: { panel = false }
         case .ownerAsk:
-            VStack(alignment: .leading, spacing: 12) {
-                Text("我是原帖人，想删除").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink)
-                Text(ownerAskText).font(.subheadline).foregroundStyle(Theme.sub).fixedSize(horizontal: false, vertical: true)
-                if let wx = state.contactWechat {
-                    PanelRow(symbol: "message", title: "复制微信号 " + wx) {
-                        UIPasteboard.general.string = wx
-                        state.toast("已复制")
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("我是原帖人，想删除").font(.system(size: 18, weight: .bold)).foregroundStyle(Theme.ink)
+                    Text("联系我们，说一下是哪条，24 小时内删除。").font(.system(size: 13)).foregroundStyle(Theme.sub)
+                }
+                FormCard {
+                    if let wx = state.contactWechat {
+                        copyRow("message", "微信", wx)
+                        FormDivider()
                     }
+                    copyRow("envelope", "邮箱", Config.contactEmail)
                 }
-                PanelRow(symbol: "envelope", title: "复制邮箱 " + Config.contactEmail) {
-                    UIPasteboard.general.string = Config.contactEmail
-                    state.toast("已复制")
-                }
+                Button("好") { panel = false }
+                    .font(.system(size: 17))
+                    .foregroundStyle(Theme.ink)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .buttonStyle(.plain)
             }
         case .adminDelete:
             PanelConfirm(title: "删除这条帖子？", message: "彻底删除，这条的举报一起关掉。", confirm: "删除") {
@@ -511,6 +523,35 @@ struct DetailView: View {
         } catch {
             if (error as? APIError)?.code == "not_found" { gone = true }
         }
+    }
+
+    /// 一行：图标、标签、内容、“复制”；复制后变“已复制”
+    private func copyRow(_ symbol: String, _ label: String, _ value: String) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Hexagon().fill(Theme.fill).frame(width: 30, height: 30)
+                Image(systemName: symbol).font(.system(size: 13)).foregroundStyle(Theme.sub)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(.system(size: 13)).foregroundStyle(Theme.sub)
+                Text(value).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1).minimumScaleFactor(0.7)
+            }
+            Spacer(minLength: 6)
+            Button {
+                UIPasteboard.general.string = value
+                copied = label
+                state.toast("已复制")
+            } label: {
+                Label(copied == label ? "已复制" : "复制", systemImage: copied == label ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 12)
     }
 
     private var ownerAskText: String {
@@ -626,25 +667,45 @@ struct WantSheet: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var message = ""
-    @State private var contact = UserDefaults.standard.string(forKey: "wantContact") ?? UserDefaults.standard.string(forKey: "contact") ?? ""
+    @State private var contact = Demo.scene == "want-empty" ? "" : (UserDefaults.standard.string(forKey: "wantContact") ?? UserDefaults.standard.string(forKey: "contact") ?? "")
     @State private var error: String?
     @State private var busy = false
+    /// 点过发送才提示缺联系方式
+    @State private var tried = Demo.scene == "want-empty"
+
+    private var missing: Bool { contact.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("想要 " + item.title)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Theme.ink)
-                .lineLimit(2)
-            line("说一句（可以不写）", $message)
-            line("你的联系方式，只有卖家能看到", $contact)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                Color.clear
+                    .frame(width: 56, height: 70)
+                    .overlay { ListingImage(item: item, maxPixel: 240) }
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("想要 " + item.title).font(.system(size: 19, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1)
+                    PriceTag(item: item).padding(-8)
+                }
+                Spacer(minLength: 0)
+            }
+            FormCard {
+                FieldBlock(label: "说一句 · 选填") {
+                    TextField("比如 今晚能去拿吗", text: $message).font(.system(size: 17))
+                }
+                FormDivider()
+                FieldBlock(label: "你的联系方式", hint: tried && missing ? "留个联系方式，卖家才联系得上你" : "只有卖家看得到", hintColor: tried && missing ? Theme.warn : Theme.hint) {
+                    TextField("微信号或手机号", text: $contact)
+                        .font(.system(size: 17))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+            }
             if let error {
                 Text(error).font(.subheadline).foregroundStyle(Theme.warn)
             }
             Spacer(minLength: 0)
             Button {
+                tried = true
                 Task { await send() }
             } label: {
                 HStack(spacing: 8) {
@@ -652,31 +713,23 @@ struct WantSheet: View {
                     Text(busy ? "正在发" : "发给卖家")
                 }
             }
-            .buttonStyle(PrimaryButtonStyle(act: .ink, dimmed: contact.trimmingCharacters(in: .whitespaces).isEmpty))
+            .buttonStyle(PrimaryButtonStyle(act: .ink, dimmed: missing))
             .disabled(busy)
         }
-        .padding(16)
-        .padding(.top, 12)
+        .padding(.horizontal, 16)
+        .padding(.top, 24)
+        .padding(.bottom, 8)
         .background(Theme.bg)
         .contentShape(Rectangle())
         .onTapGesture { hideKeyboard() }
-        .presentationDetents([.height(320)])
+        .presentationDetents([.height(420)])
+        .presentationCornerRadius(28)
         .presentationDragIndicator(.visible)
-    }
-
-    private func line(_ placeholder: String, _ text: Binding<String>) -> some View {
-        VStack(spacing: 6) {
-            TextField(placeholder, text: text).font(.system(size: 16))
-            Theme.line.frame(height: 0.5)
-        }
     }
 
     private func send() async {
         let c = contact.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !c.isEmpty else {
-            error = "留个联系方式，卖家才联系得上你。"
-            return
-        }
+        guard !c.isEmpty else { return }
         busy = true
         defer { busy = false }
         do {

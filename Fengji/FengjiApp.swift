@@ -172,7 +172,8 @@ struct RootView: View {
         }
         .sheet(isPresented: $state.showLogin, onDismiss: { state.loginDismissed() }) {
             LoginSheet()
-                .presentationDetents([.height(240)])
+                .presentationDetents([.height(380)])
+                .presentationCornerRadius(28)
         }
         .overlay(alignment: .bottom) {
             if let text = state.toastText {

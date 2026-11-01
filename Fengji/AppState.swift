@@ -7,7 +7,7 @@ final class AppState: ObservableObject {
     @Published var tab: AppTab = .buy
     @Published private(set) var token: String?
     @Published private(set) var me: Me?
-    @Published var showLogin = false
+    @Published var showLogin = Demo.scene == "login"
     @Published private(set) var toastText: String?
     /// 写操作后加一，各列表跟着刷新
     @Published private(set) var version = 0
@@ -230,15 +230,25 @@ struct LoginSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("发布要先登录")
-                .font(.title3.weight(.semibold))
+        VStack(spacing: 10) {
+            ZStack {
+                Hexagon().fill(Theme.accent).frame(width: 64, height: 64)
+                BeeIcon(level: 3, size: 34)
+            }
+            .padding(.bottom, 6)
+            Text("登录后就能发东西")
+                .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(Theme.ink)
-            SignInBlock { dismiss() }
+            Text("用 Apple 账号，不用填手机号")
+                .font(.system(size: 15))
+                .foregroundStyle(Theme.sub)
+                .padding(.bottom, 10)
+            SignInBlock(centered: true) { dismiss() }
             Spacer(minLength: 0)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.top, 28)
+        .frame(maxWidth: .infinity)
         .background(Theme.bg)
         .presentationDragIndicator(.visible)
     }

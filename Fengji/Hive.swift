@@ -74,6 +74,14 @@ struct HivePostedView: View {
 
     var body: some View {
         VStack(spacing: 12) {
+            VStack(spacing: 6) {
+                Text("发好了").font(.system(size: 28, weight: .bold)).foregroundStyle(Theme.ink)
+                Text(items.count == 1 ? "首页已经能看到" : "这次发了 \(items.count) 件，首页已经能看到")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.sub)
+            }
+            .padding(.top, 20)
+            .padding(.bottom, 8)
             GeometryReader { geo in
                 let fit = HiveLayout.fit(shown.count + 1, in: geo.size, maxRadius: 86)
                 ZStack {
@@ -103,16 +111,19 @@ struct HivePostedView: View {
                 }
                 .animation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.3), value: items.count)
             }
-            Text(items.count == 1 ? "发好了" : "\(items.count) 件")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Theme.ink)
-            Button("分享到群", action: share)
-                .buttonStyle(PrimaryButtonStyle(act: .ink))
-                .padding(.top, 20)
+            .padding(14)
+            .frame(maxHeight: 360)
+            .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
+            Spacer(minLength: 0)
+            Button(action: share) {
+                Label("分享到群", systemImage: "square.and.arrow.up")
+            }
+            .buttonStyle(PrimaryButtonStyle(act: .ink))
             Button("完成", action: done)
-                .font(.body.weight(.medium))
+                .font(.system(size: 17))
                 .foregroundStyle(Theme.ink)
-                .frame(height: 44)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .buttonStyle(.plain)
         }
         .padding(16)
         .frame(maxWidth: .infinity)
@@ -158,11 +169,14 @@ struct HiveShareCard: View {
     var body: some View {
         let w = cellWidth, r = w / 3.0.squareRoot()
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                BeeIcon(level: 3, size: 24)
-                Text("蜂集").font(.system(size: 17, weight: .bold))
+            HStack(spacing: 8) {
+                ZStack {
+                    Hexagon().fill(Theme.accent).frame(width: 32, height: 32)
+                    BeeIcon(level: 3, size: 18)
+                }
+                Text("蜂集").font(.system(size: 18, weight: .bold))
                 Spacer()
-                Text("\(total) 件").font(.system(size: 14)).foregroundStyle(Theme.sub)
+                Text("发了 \(total) 件").font(.system(size: 14)).foregroundStyle(Theme.sub)
             }
             VStack(spacing: -r * 0.5) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
@@ -173,9 +187,12 @@ struct HiveShareCard: View {
                                     .frame(width: w, height: r * 2)
                                     .clipShape(Hexagon())
                                 Text(items[i].priceText)
-                                    .font(.system(size: max(15, w * 0.15), weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .shadow(color: .black.opacity(0.6), radius: 3)
+                                    .font(.system(size: max(14, w * 0.12), weight: .bold))
+                                    .foregroundStyle(Theme.ink)
+                                    .padding(.horizontal, 9)
+                                    .frame(height: 28)
+                                    .background(Theme.bg, in: RoundedRectangle(cornerRadius: 9))
+                                    .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
                                     .padding(.bottom, r * 0.32)
                             }
                             .scaleEffect(0.97)
@@ -185,11 +202,24 @@ struct HiveShareCard: View {
                 }
             }
             .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
             if !contact.isEmpty {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("微信").font(.system(size: 13)).foregroundStyle(Theme.sub)
-                    Text(contact).font(.system(size: 20, weight: .bold))
+                HStack(spacing: 12) {
+                    ZStack {
+                        Hexagon().fill(Theme.fill).frame(width: 32, height: 32)
+                        Image(systemName: "message").font(.system(size: 14)).foregroundStyle(Theme.sub)
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("加微信").font(.system(size: 13)).foregroundStyle(Theme.sub)
+                        Text(contact).font(.system(size: 22, weight: .bold))
+                    }
+                    Spacer(minLength: 0)
                 }
+                .padding(14)
+                .background(Theme.bg, in: RoundedRectangle(cornerRadius: 10))
+                .padding(7)
+                .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
             }
         }
         .foregroundStyle(Theme.ink)

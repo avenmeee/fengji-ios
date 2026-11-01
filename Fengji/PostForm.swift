@@ -152,6 +152,8 @@ struct PostForm: View {
     @State private var picked: [PhotosPickerItem] = []
     @State private var error: String?
     @State private var busy = false
+    /// 点过发布：缺的那项下面出红字
+    @State private var tried = Demo.scene == "form-missing"
 
     private static let dayFormat: DateFormatter = {
         let f = DateFormatter()
@@ -383,10 +385,13 @@ struct PostForm: View {
                     statusCard
                     GroupHeader(title: "必填", note: "照片、名字、价格")
                     FormCard {
-                        HStack(alignment: .center, spacing: 8) {
-                            goodsPhotos
-                            Spacer(minLength: 0)
-                            aiHint
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .center, spacing: 8) {
+                                goodsPhotos
+                                Spacer(minLength: 0)
+                                aiHint
+                            }
+                            lackHint("照片", "放一张照片才能发")
                         }
                         .padding(.vertical, 12)
                         FormDivider()
@@ -588,7 +593,7 @@ struct PostForm: View {
     }
 
     private var priceField: some View {
-        FieldBlock(label: isRent ? "月租" : "价格", hint: priceSuggested ? "AI 建议价，可以改" : nil, hintColor: Theme.tint) {
+        FieldBlock(label: isRent ? "月租" : "价格", hint: tried && missingNames.contains(isRent ? "月租" : "价格") ? "填个价格才能发" : (priceSuggested ? "AI 建议价，可以改" : nil), hintColor: tried && missingNames.contains(isRent ? "月租" : "价格") ? Theme.warn : Theme.tint) {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 if !price.isEmpty { Text("$") }
                 TextField("$", text: Binding(
@@ -613,7 +618,7 @@ struct PostForm: View {
     }
 
     private var nameField: some View {
-        FieldBlock(label: isRent ? "标题" : "名字", hint: title.count > 14 ? "名字写短一点，细节放备注" : nil) {
+        FieldBlock(label: isRent ? "标题" : "名字", hint: tried && missingNames.contains(isRent ? "标题" : "名字") ? "写一下\(isRent ? "标题" : "卖什么")才能发" : (title.count > 14 ? "名字写短一点，细节放备注" : nil), hintColor: tried && missingNames.contains(isRent ? "标题" : "名字") ? Theme.warn : Theme.hint) {
             TextField(isRent ? "比如 Monty 旁一室一厅" : "比如 榉木画架", text: Binding(
                 get: { title },
                 set: {
@@ -686,7 +691,11 @@ struct PostForm: View {
                     statusCard
                     GroupHeader(title: "必填", note: "照片、标题、月租、出租、地段、起租、水电")
                     FormCard {
-                        FlowLayout(spacing: 8) { rentPhotos }.padding(.vertical, 12)
+                        VStack(alignment: .leading, spacing: 8) {
+                            FlowLayout(spacing: 8) { rentPhotos }
+                            lackHint("照片", "放一张照片才能发")
+                        }
+                        .padding(.vertical, 12)
                         FormDivider()
                         nameField
                         FormDivider()
@@ -844,6 +853,23 @@ struct PostForm: View {
         .background(Theme.bg)
     }
 
+    /// 必填里还差哪几样
+    private var missingNames: [String] {
+        var out: [String] = []
+        if photos.isEmpty { out.append("照片") }
+        if title.trimmingCharacters(in: .whitespaces).isEmpty, !aiLoading { out.append(isRent ? "标题" : "名字") }
+        if Int(price.trimmingCharacters(in: .whitespaces)) == nil { out.append(isRent ? "月租" : "价格") }
+        return out
+    }
+
+    private func lackHint(_ name: String, _ text: String) -> some View {
+        Group {
+            if tried, missingNames.contains(name) {
+                Label(text, systemImage: "exclamationmark.triangle").font(.system(size: 13)).foregroundStyle(Theme.warn)
+            }
+        }
+    }
+
     private var requiredFilled: Bool {
         guard !photos.isEmpty, Int(price.trimmingCharacters(in: .whitespaces)) != nil else { return false }
         guard !title.trimmingCharacters(in: .whitespaces).isEmpty || aiLoading else { return false }
@@ -923,9 +949,13 @@ struct PostForm: View {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let p = place.trimmingCharacters(in: .whitespacesAndNewlines)
         let c = contact.trimmingCharacters(in: .whitespacesAndNewlines)
-        if photos.isEmpty { error = "要一张实拍照。"; return }
+        tried = true
+        let lack = missingNames
+        if !lack.isEmpty {
+            state.toast("还差" + lack.joined(separator: "和"))
+            return
+        }
         guard let money = Int(price.trimmingCharacters(in: .whitespaces)), money >= 0 else { error = "价格要填整数。"; return }
-        guard !t.isEmpty else { error = isRent ? "写一下标题。" : "写一下卖什么。"; return }
         if isRent {
             if money == 0 { error = "租金要大于 0。"; return }
             if !unitWhole, !unitRoom { error = "选整套或单间，都可以就都选。"; return }

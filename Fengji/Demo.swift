@@ -11,7 +11,7 @@ enum Demo {
 
     /// live- 开头的是商店截图：走线上真实接口，只是自动翻到那一页
     static var isOn: Bool { scene != nil && scene?.hasPrefix("live-") != true }
-    static var initialToken: String? { scene == "guest" || scene == "guest-detail" || scene == "guest-me" ? nil : "demo" }
+    static var initialToken: String? { scene == "guest" || scene == "guest-detail" || scene == "guest-me" || scene == "login" ? nil : "demo" }
 
     static var initialTab: AppTab {
         switch scene {
@@ -22,12 +22,12 @@ enum Demo {
 
     /// 开场就推到“我”的截图
     static var opensMe: Bool {
-        ["me", "guest-me", "mine-actions", "undo", "settings", "settings-contact", "claim", "wants", "profile", "sold-ask", "myinfo", "myinfo-edit", "myinfo-dark", "records", "rules", "blocked", "terms", "admin"].contains(scene ?? "")
+        ["me", "guest-me", "mine-actions", "undo", "settings", "settings-contact", "claim", "wants", "profile", "sold-ask", "myinfo", "myinfo-edit", "myinfo-dark", "records", "rules", "blocked", "terms", "admin", "claim-done", "me-empty"].contains(scene ?? "")
     }
 
     static var initialPosting: PostKind? {
         guard let scene else { return nil }
-        if scene.hasPrefix("posted") || scene == "form" || scene == "form-filled" || scene.hasPrefix("form-kb") { return .goods }
+        if scene.hasPrefix("posted") || scene == "form" || scene == "form-filled" || scene == "form-missing" || scene.hasPrefix("form-kb") { return .goods }
         if scene == "rentform" || scene == "rentform-filled" || scene.hasPrefix("rent-kb") || scene.hasPrefix("rentcal") { return .rent }
         return nil
     }
@@ -160,6 +160,7 @@ enum DemoServer {
         let all = goodsList + rentList + mineList + [groupItem]
 
         if method == "GET", path == "/v1/me" { return (200, encode(Me(id: "me", isAdmin: false, agreed: true, name: "同学 3F7", color: 0, named: false)), json) }
+        if method == "GET", path == "/v1/me/listings", Demo.scene == "me-empty" { return (200, encode(ListingList(items: [])), json) }
         if method == "GET", path == "/v1/me/listings" { return (200, encode(ListingList(items: mineList)), json) }
         if method == "GET", path == "/v1/admin/stats" { return (200, encode(Stats(posts: 12, views: 340, sold: 5, copies: 40, groupClicks: 18)), json) }
         if method == "GET", path == "/v1/me/wants" {
@@ -175,6 +176,9 @@ enum DemoServer {
             return (200, encode(BlockList(items: sample)), json)
         }
         if method == "GET", path == "/v1/listings" {
+            // 截图：没人发、连不上
+            if Demo.scene == "feed-empty" { return (200, encode(ListingPage(items: [], next: nil)), json) }
+            if Demo.scene == "feed-offline" { return (503, encode(["error": "down"]), json) }
             var list = param("kind") == "rent" ? rentList : (Demo.scene == "group" || Demo.scene == "seller-group" ? [groupItem] + goodsList : goodsList)
             if let c = param("cat") { list = list.filter { $0.cat == c } }
             if let u = param("unit") { list = list.filter { $0.unitType == u || $0.unitType == "both" } }
@@ -193,8 +197,9 @@ enum DemoServer {
             return (200, encode(SellerPage(seller: SellerInfo(id: "u2", name: "林夏", color: 2, named: true, avatar: nil, group: false, groupName: nil), items: items)), json)
         }
         if method == "GET", path.hasPrefix("/v1/listings/") {
+            if Demo.scene == "detail-gone" { return (404, encode(["error": "not_found"]), json) }
             if var hit = all.first(where: { $0.id == url.lastPathComponent }) {
-                if Demo.scene == "want-detail" { hit.contact = nil }
+                if Demo.scene == "want-detail" || Demo.scene == "want-sheet" || Demo.scene == "want-empty" { hit.contact = nil }
                 return (200, encode(hit), json)
             }
             return (404, encode(["error": "not_found"]), json)

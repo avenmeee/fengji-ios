@@ -6,7 +6,7 @@ struct ClaimView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var code: ClaimCode?
-    @State private var status: ClaimStatus?
+    @State private var status: ClaimStatus? = Demo.scene == "claim-done" ? ClaimStatus(claimed: true, count: 5, contact: "wx_linxia") : nil
     @State private var contact = UserDefaults.standard.string(forKey: "contact") ?? ""
     @State private var error: String?
     @State private var saving = false
@@ -26,6 +26,7 @@ struct ClaimView: View {
         .padding(.horizontal, 16)
         .padding(.top, 28)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .presentationCornerRadius(28)
         .background(Theme.bg)
         .contentShape(Rectangle())
         .onTapGesture { hideKeyboard() }
@@ -36,61 +37,116 @@ struct ClaimView: View {
 
     private var codeView: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("认领你在群里发的东西").font(.title3.weight(.semibold)).foregroundStyle(Theme.ink)
-            if let code {
-                Text(code.code)
-                    .font(.system(size: 40, weight: .heavy, design: .monospaced))
-                    .foregroundStyle(Theme.ink)
-                    .textSelection(.enabled)
-                Button("复制代码") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("认领你在群里发的东西").font(.system(size: 24, weight: .bold)).foregroundStyle(Theme.ink)
+                Text("认领以后，群里搬来的帖子就是你的，可以改、可以下架。").font(.system(size: 14)).foregroundStyle(Theme.sub)
+            }
+            // 代码放大在卡纸里，下面黑色“复制代码”
+            VStack(spacing: 7) {
+                VStack(spacing: 6) {
+                    Text("你的代码").font(.system(size: 14)).foregroundStyle(Theme.sub)
+                    if let code {
+                        Text(code.code.map(String.init).joined(separator: " "))
+                            .font(.system(size: 40, weight: .heavy, design: .monospaced))
+                            .foregroundStyle(Theme.ink)
+                            .textSelection(.enabled)
+                            .minimumScaleFactor(0.6)
+                            .lineLimit(1)
+                    } else {
+                        HoneyLoader().frame(height: 48)
+                    }
+                    Text("24 小时内有效").font(.system(size: 13)).foregroundStyle(Theme.hint)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
+                .background(Theme.bg, in: RoundedRectangle(cornerRadius: 10))
+                Button {
+                    guard let code else { return }
                     UIPasteboard.general.string = code.code
                     state.toast("已复制")
+                } label: {
+                    Label("复制代码", systemImage: "doc.on.doc")
                 }
-                .buttonStyle(PrimaryButtonStyle())
-            } else {
-                HoneyLoader()
+                .buttonStyle(PrimaryButtonStyle(act: .ink))
             }
-            VStack(alignment: .leading, spacing: 8) {
-                step("①", "复制上面的代码")
-                HStack(alignment: .firstTextBaseline) {
-                    step("②", "在微信里加 \(state.opsWechat ?? "运营微信") 为好友，备注写“蜂集认领”")
+            .padding(7)
+            .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
+            GroupHeader(title: "怎么做").padding(.top, 8)
+            FormCard {
+                HStack(spacing: 12) {
+                    NumberHex(n: 1, size: 26)
+                    Text("在微信里加 \(state.opsWechat ?? "运营微信") 为好友").font(.system(size: 16)).foregroundStyle(Theme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 6)
                     if let ops = state.opsWechat {
-                        Spacer(minLength: 8)
-                        ActionChip(text: "复制") {
+                        Button {
                             UIPasteboard.general.string = ops
                             state.toast("已复制")
+                        } label: {
+                            Label("复制", systemImage: "doc.on.doc")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Theme.ink)
+                                .padding(.horizontal, 12)
+                                .frame(height: 36)
+                                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 10))
                         }
+                        .buttonStyle(.plain)
                     }
                 }
-                step("③", "通过后，把代码私聊发过去")
-                step("④", "一般当天完成，完成后 App 里会显示认领了几件")
+                .padding(.vertical, 12)
+                FormDivider()
+                step(2, "通过后，私聊把代码发给他")
+                FormDivider()
+                step(3, "一般当天完成，这里会显示认领了几件")
             }
-            Text("代码 24 小时内有效。")
-                .font(.footnote)
-                .foregroundStyle(Theme.sub)
+            HStack(spacing: 8) {
+                ZStack {
+                    Hexagon().fill(Theme.accentSoft).frame(width: 28, height: 28)
+                    Image(systemName: "clock").font(.system(size: 12)).foregroundStyle(Theme.tint)
+                }
+                Text("等核对…").font(.system(size: 15)).foregroundStyle(Theme.sub)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 6)
         }
     }
 
-    private func step(_ n: String, _ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(n).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
-            Text(text).font(.subheadline).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true)
+    private func step(_ n: Int, _ text: String) -> some View {
+        HStack(spacing: 12) {
+            NumberHex(n: n, size: 26)
+            Text(text).font(.system(size: 16)).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
+        .padding(.vertical, 12)
     }
 
+    /// 认领好了：小蜂巢 + 认领了几件 + 公开的微信号
     private var claimedView: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("认领了 \(status?.count ?? 0) 条").font(.title3.weight(.semibold)).foregroundStyle(Theme.ink)
-            Text("填你愿意公开的微信号。买家会看到，可以直接加你。不填就继续显示“去群里找”。")
-                .font(.subheadline)
-                .foregroundStyle(Theme.sub)
-            TextField("微信号", text: $contact)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.system(size: 17))
-            Theme.line.frame(height: 0.5)
+        VStack(spacing: 14) {
+            ZStack {
+                ForEach(0..<3) { i in
+                    Hexagon().fill(i == 1 ? Theme.accent : Theme.paper)
+                        .frame(width: 46, height: 46)
+                        .offset(x: CGFloat(i - 1) * 42, y: i == 1 ? 18 : 0)
+                }
+                BeeIcon(level: 3, size: 22).offset(y: 18)
+            }
+            .frame(height: 80)
+            VStack(spacing: 4) {
+                Text("认领了 \(status?.count ?? 0) 件").font(.system(size: 26, weight: .bold)).foregroundStyle(Theme.ink)
+                Text("都在“我发的”里了").font(.system(size: 15)).foregroundStyle(Theme.sub)
+            }
+            FormCard {
+                FieldBlock(label: "公开的微信号 · 选填", hint: "买家能看到，直接加你。不填，买家还是去群里找你。") {
+                    TextField("微信号", text: $contact)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(size: 17))
+                }
+            }
+            .padding(.top, 6)
             Button(saving ? "正在存…" : "保存") { Task { await save() } }
-                .buttonStyle(PrimaryButtonStyle())
+                .buttonStyle(PrimaryButtonStyle(act: .ink))
                 .disabled(saving)
         }
     }

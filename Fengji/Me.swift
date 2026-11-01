@@ -8,7 +8,7 @@ struct MeView: View {
     @Binding var path: NavigationPath
     @State private var items: [Listing] = []
     @State private var phase: FeedModel.Phase = .loading
-    @State private var claiming = Demo.scene == "claim"
+    @State private var claiming = Demo.scene == "claim" || Demo.scene == "claim-done"
     @State private var editing: Listing?
     @State private var acting: Listing?
     @State private var afterActing: (() -> Void)?
@@ -165,7 +165,7 @@ struct MeView: View {
             if visible.isEmpty {
                 listRow(Group {
                     if phase == .ok {
-                        EmptyBlock(text: "还没发过")
+                        EmptyCard(symbol: "shippingbox", title: "还没发过", note: "点下面的加号也能发", action: ("发第一件", { state.plusAction(.goods) }))
                     } else {
                         PhaseBlock(phase: phase)
                     }
@@ -462,26 +462,31 @@ struct HexGear: View {
 struct SignInBlock: View {
     @EnvironmentObject var state: AppState
     @Environment(\.colorScheme) private var scheme
+    /// 登录弹层里居中
+    var centered = false
     var onDone: () -> Void = {}
     @State private var error: String?
     @State private var showTerms = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: centered ? .center : .leading, spacing: 12) {
             SignInWithAppleButton(.signIn) { req in
                 req.requestedScopes = []
             } onCompletion: { result in
                 Task { await finish(result) }
             }
             .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
-            .frame(height: 44)
+            .frame(height: centered ? 54 : 44)
+            .clipShape(RoundedRectangle(cornerRadius: centered ? 17 : 8))
             if let error {
                 Text(error).font(.footnote).foregroundStyle(Theme.warn)
             }
-            Button("登录即同意用户协议") { showTerms = true }
-                .font(.footnote)
-                .foregroundStyle(Theme.sub)
-                .buttonStyle(.plain)
+            Button { showTerms = true } label: {
+                (Text("登录即同意") + Text("用户协议").underline())
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.sub)
+            }
+            .buttonStyle(.plain)
         }
         .sheet(isPresented: $showTerms) {
             NavigationStack { TermsView() }

@@ -120,26 +120,45 @@ private struct HoneyRefresh: ViewModifier {
 
 struct PhaseBlock: View {
     let phase: FeedModel.Phase
+    var retry: (() -> Void)? = nil
 
     var body: some View {
         if phase == .failed {
-            EmptyBlock(text: "没连上，下拉再试")
+            EmptyCard(symbol: "wifi.exclamationmark", title: "没连上", note: "看看网络，下拉也能再试", action: retry.map { ("再试", $0) })
         } else {
             HoneyLoader().frame(maxWidth: .infinity).padding(.vertical, 60)
         }
     }
 }
 
-/// 顶上固定一排：左边筛选，右边搜索。点搜索换成搜索框。
+/// 连不上但还有旧内容：顶上一条红浅底，“再试”
+struct OfflineBanner: View {
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "wifi").font(.system(size: 15, weight: .semibold))
+            Text("没连上，下拉也能再试").font(.system(size: 15))
+            Spacer()
+            Button("再试", action: retry).font(.system(size: 15, weight: .bold)).buttonStyle(.plain)
+        }
+        .foregroundStyle(Theme.warn)
+        .padding(.horizontal, 16)
+        .frame(height: 50)
+        .background(Theme.warnSoft, in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+/// 顶上固定一排：卡纸色圆角条装筛选，右边一个搜索方块。点搜索换成搜索框 + 取消。
 struct TopBar<Filters: View>: View {
     let placeholder: String
     @Binding var query: String
     @ViewBuilder var filters: () -> Filters
-    @State private var searching = Demo.scene == "search-kb"
+    @State private var searching = Demo.scene == "search-kb" || Demo.scene?.hasPrefix("search") == true
     @FocusState private var focused: Bool
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             if searching {
                 SearchBox(placeholder: placeholder, text: $query)
                     .focused($focused)
@@ -147,41 +166,45 @@ struct TopBar<Filters: View>: View {
                     query = ""
                     searching = false
                 }
-                .font(.subheadline)
+                .font(.system(size: 17))
                 .foregroundStyle(Theme.ink)
+                .buttonStyle(.plain)
             } else {
                 filters()
+                    .padding(5)
+                    .frame(height: 54)
+                    .background(Theme.paper, in: RoundedRectangle(cornerRadius: 17))
                 Button {
                     searching = true
                     focused = true
                 } label: {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 18))
+                        .font(.system(size: 19, weight: .medium))
                         .foregroundStyle(Theme.ink)
-                        .frame(width: 36, height: 44)
+                        .frame(width: 54, height: 54)
+                        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 17))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("搜索")
             }
         }
-        .frame(height: 44)
+        .frame(height: 54)
         .padding(.horizontal, 16)
         .padding(.top, 4)
-        .padding(.bottom, 8)
+        .padding(.bottom, 10)
         .onAppear {
-            if searching { DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { focused = true } }
+            if searching, Demo.scene == "search-kb" { DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { focused = true } }
         }
     }
 }
 
-/// 租房的筛选：几个词，选中变粗加下划线
+/// 租房的筛选：全部 / 整套 / 单间，选中的是白底小块
 struct TextTabs: View {
     @Binding var selected: String
     let options: [Option]
-    @Namespace private var line
 
     var body: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: 4) {
             ForEach(options, id: \.key) { opt in
                 let on = selected == opt.key
                 Button {
@@ -191,27 +214,20 @@ struct TextTabs: View {
                     Text(opt.label)
                         .font(.system(size: 17, weight: on ? .semibold : .regular))
                         .foregroundStyle(on ? Theme.ink : Theme.sub)
+                        .frame(maxWidth: .infinity)
                         .frame(height: 44)
-                        .overlay(alignment: .bottom) {
-                            if on {
-                                Capsule()
-                                    .fill(Theme.ink)
-                                    .frame(height: 3)
-                                    .matchedGeometryEffect(id: "line", in: line)
-                                    .padding(.bottom, 4)
-                            }
-                        }
+                        .background(on ? Theme.priceTagDetail : Color.clear, in: RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .black.opacity(on ? 0.06 : 0), radius: 3, y: 1)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
-            Spacer(minLength: 0)
         }
     }
 }
 
-/// 分类：只有图标。选中的垫六边形，并展开写出名字，一屏放下。
+/// 分类：选中的是白底小块 + 蜂蜜六边形图标 + 名字，其余只有图标
 struct CategoryBar: View {
     @Binding var selected: String
     var options: [Option] = [ALL_OPTION] + CATS
@@ -227,20 +243,25 @@ struct CategoryBar: View {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     withAnimation(.snappy(duration: 0.2)) { selected = opt.key }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 6) {
                         ZStack {
-                            if on { Hexagon().fill(act.fill).frame(width: 36, height: 36) }
-                            CategoryIcon(key: icon(opt.key), size: on ? 20 : 24)
+                            if on { Hexagon().fill(act.fill).frame(width: 32, height: 32) }
+                            CategoryIcon(key: icon(opt.key), size: on ? 18 : 22)
                                 .foregroundStyle(on ? act.on : Theme.sub)
                         }
-                        .frame(width: 36, height: 44)
+                        .frame(width: 34, height: 44)
                         if on {
                             Text(opt.label)
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(.system(size: 16, weight: .bold))
                                 .foregroundStyle(Theme.ink)
                                 .fixedSize()
+                                .padding(.trailing, 8)
                         }
                     }
+                    .padding(.horizontal, on ? 6 : 0)
+                    .frame(height: 44)
+                    .background(on ? Theme.priceTagDetail : Color.clear, in: RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(on ? 0.06 : 0), radius: 3, y: 1)
                     .frame(maxWidth: on ? nil : .infinity)
                     .contentShape(Rectangle())
                 }
@@ -264,6 +285,8 @@ private struct GalleryRow: Identifiable {
 struct BuyView: View {
     @EnvironmentObject var state: AppState
     @StateObject private var model = FeedModel(kind: "goods")
+    /// 截图：搜索有结果、没找到
+    private static let demoQuery = Demo.scene == "search-hit" ? "书桌" : (Demo.scene == "search-none" ? "钢琴" : "")
     @State private var path = NavigationPath()
     @State private var demoOpened = false
 
@@ -284,11 +307,14 @@ struct BuyView: View {
                     ScrollView {
                         VStack(spacing: 22) {
                             Color.clear.frame(height: 0).id("top")
+                            if model.phase == .failed, !model.items.isEmpty {
+                                OfflineBanner { Task { await model.load() } }
+                            }
                             if model.items.isEmpty {
                                 if model.phase == .ok {
-                                    EmptyBlock(text: model.isFiltered ? "没找到" : "还没人发")
+                                    emptyCard
                                 } else {
-                                    PhaseBlock(phase: model.phase)
+                                    PhaseBlock(phase: model.phase) { Task { await model.load() } }
                                 }
                             } else {
                                 LazyVStack(spacing: 14) {
@@ -335,12 +361,17 @@ struct BuyView: View {
                 }
             }
             .reloads(model, version: state.version)
+            .onAppear { if !Self.demoQuery.isEmpty, model.q.isEmpty { model.q = Self.demoQuery } }
             .onChange(of: model.items) { _, items in
-                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "want-detail" || Demo.scene == "pop-check" || Demo.scene == "live-detail" || Demo.scene == "detail-panel" || Demo.scene == "detail-report" || Demo.scene == "detail-score", !demoOpened, let first = items.first {
+                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "want-detail" || Demo.scene == "pop-check" || Demo.scene == "live-detail" || Demo.scene == "detail-panel" || Demo.scene == "detail-report" || Demo.scene == "detail-score" || Demo.scene == "want-sheet" || Demo.scene == "want-empty", !demoOpened, let first = items.first {
                     demoOpened = true
                     path.append(first)
                 }
                 // 截图：卖家主页，自己发的取第二条（有昵称的），群帖取第一条
+                if Demo.scene == "owner-ask" || Demo.scene == "detail-gone", !demoOpened, let first = items.first {
+                    demoOpened = true
+                    path.append(first)
+                }
                 if Demo.scene == "detail-sold", !demoOpened, let sold = items.first(where: \.isSold) {
                     demoOpened = true
                     path.append(sold)
@@ -365,6 +396,18 @@ struct BuyView: View {
             .task {
                 if Demo.opensMe, path.isEmpty { path.append("me") }
             }
+        }
+    }
+
+    /// 没内容：搜索没找到给清空，没人发给发第一件
+    @ViewBuilder
+    private var emptyCard: some View {
+        if !model.q.isEmpty {
+            EmptyCard(symbol: "magnifyingglass", title: "没找到“\(model.q)”", note: "换个词，或者看看全部", action: ("清空搜索", { model.q = "" }))
+        } else if model.filter != "all" {
+            EmptyCard(symbol: "square.grid.2x2", title: "这一类还没有", note: "看看全部", action: ("看全部", { model.filter = "all" }))
+        } else {
+            EmptyCard(symbol: "bag", title: "还没人发", note: "你可以发第一件", action: ("发第一件", { state.plusAction(.goods) }))
         }
     }
 
@@ -464,11 +507,14 @@ struct RentView: View {
                     ScrollView {
                         VStack(spacing: 22) {
                             Color.clear.frame(height: 0).id("top")
+                            if model.phase == .failed, !model.items.isEmpty {
+                                OfflineBanner { Task { await model.load() } }
+                            }
                             if model.items.isEmpty {
                                 if model.phase == .ok {
-                                    EmptyBlock(text: model.isFiltered ? "没找到" : "还没有房源")
+                                    emptyCard
                                 } else {
-                                    PhaseBlock(phase: model.phase)
+                                    PhaseBlock(phase: model.phase) { Task { await model.load() } }
                                 }
                             } else {
                                 LazyVStack(spacing: 14) {
@@ -528,6 +574,17 @@ struct RentView: View {
                 if state.tab == .rent { path.append("me") }
             }
             .onChange(of: state.popRequests) { _, _ in path = NavigationPath() }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyCard: some View {
+        if !model.q.isEmpty {
+            EmptyCard(symbol: "magnifyingglass", title: "没找到“\(model.q)”", note: "换个词，或者看看全部", action: ("清空搜索", { model.q = "" }))
+        } else if model.filter != "all" {
+            EmptyCard(symbol: "house", title: "这一类还没有", note: "看看全部", action: ("看全部", { model.filter = "all" }))
+        } else {
+            EmptyCard(symbol: "house", title: "还没有房源", note: "你可以发第一套", action: ("发一套房子", { state.plusAction(.rent) }))
         }
     }
 }

@@ -2,68 +2,61 @@ import CoreImage.CIFilterBuiltins
 import SwiftUI
 import UIKit
 
-/// 分享卡片：第一张照片、标题、价格，底下蜂集标志、帖子链接和二维码。不放联系方式。浅色。
+/// 分享卡片：首页 C 卡放大（卡纸、价签、名字、卖家和地点），底下蜂集标志、“扫码看详情”和二维码。不放联系方式。浅色。
 struct ShareCard: View {
     let item: Listing
     let photo: UIImage?
 
-    /// 链接去掉 https:// 好看一点
-    private var shortLink: String {
-        item.shareURL.replacingOccurrences(of: "https://", with: "")
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Color.clear
-                .aspectRatio(1, contentMode: .fit)
-                .overlay {
-                    if let photo {
-                        Image(uiImage: photo).resizable().aspectRatio(contentMode: .fill)
-                    } else {
-                        ListingImage(item: item)
-                    }
-                }
-                .clipped()
-            VStack(alignment: .leading, spacing: 6) {
-                Text(item.title)
-                    .font(.title3.weight(.semibold))
-                    .lineLimit(2)
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(item.priceText)
-                        .font(.largeTitle.weight(.bold))
-                        .tracking(-0.3)
-                        .foregroundStyle(item.price == 0 ? Theme.sell : Theme.ink)
-                    if item.isRent { Text("/月").font(.title3).foregroundStyle(Theme.sub) }
-                }
-                Theme.line.frame(height: 0.5).padding(.top, 10).padding(.bottom, 8)
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            BeeIcon(level: 3, size: 24)
-                            Text("蜂集").font(.system(size: 17, weight: .bold))
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 0) {
+                Color.clear
+                    .aspectRatio(item.isRent ? 1.6 : 0.8, contentMode: .fit)
+                    .overlay {
+                        if let photo {
+                            Image(uiImage: photo).resizable().aspectRatio(contentMode: .fill)
+                        } else {
+                            ListingImage(item: item)
                         }
-                        Text(shortLink)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.sub)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                        Text("扫码看详情").font(.system(size: 12)).foregroundStyle(Theme.sub)
                     }
-                    Spacer(minLength: 0)
-                    if let qr = QRCode.image(item.shareURL) {
-                        Image(uiImage: qr)
-                            .interpolation(.none)
-                            .resizable()
-                            .frame(width: 76, height: 76)
-                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(alignment: .bottomLeading) { PriceTag(item: item).scaleEffect(1.2, anchor: .bottomLeading).padding(4) }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.title).font(.system(size: 24, weight: .bold)).lineLimit(2)
+                    SellerLine(item: item, extra: [item.place], avatarSize: 18, fontSize: 14)
+                }
+                .padding(.horizontal, 8)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+            }
+            .padding(8)
+            .background(Theme.paper, in: RoundedRectangle(cornerRadius: 18))
+            HStack(alignment: .center, spacing: 12) {
+                ZStack {
+                    Hexagon().fill(Theme.accent).frame(width: 40, height: 40)
+                    BeeIcon(level: 3, size: 22)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("蜂集").font(.system(size: 18, weight: .bold))
+                    Text("扫码看详情").font(.system(size: 13)).foregroundStyle(Theme.sub)
+                }
+                Spacer(minLength: 0)
+                if let qr = QRCode.image(item.shareURL) {
+                    Image(uiImage: qr)
+                        .interpolation(.none)
+                        .resizable()
+                        .frame(width: 72, height: 72)
+                        .padding(4)
+                        .background(Theme.bg, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line, lineWidth: 1))
                 }
             }
-            .foregroundStyle(Theme.ink)
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 8)
         }
-        .background(Theme.bg)
+        .foregroundStyle(Theme.ink)
+        .padding(14)
         .frame(width: 390)
+        .background(Theme.bg)
         .environment(\.colorScheme, .light)
     }
 }

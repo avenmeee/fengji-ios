@@ -172,21 +172,23 @@ struct SearchBox: View {
     @Binding var text: String
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").foregroundStyle(Theme.sub)
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").font(.system(size: 18)).foregroundStyle(Theme.sub)
             TextField(placeholder, text: $text)
+                .font(.system(size: 17))
                 .submitLabel(.search)
                 .autocorrectionDisabled()
             if !text.isEmpty {
                 Button { text = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.sub)
+                    Image(systemName: "xmark").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.sub)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("清空")
             }
         }
-        .padding(.horizontal, 12)
-        .frame(height: 36)
-        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 16)
+        .frame(height: 54)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 17))
     }
 }
 
@@ -208,6 +210,43 @@ struct SoldCover: ViewModifier {
 
 extension View {
     func soldCover(_ item: Listing) -> some View { modifier(SoldCover(item: item)) }
+}
+
+/// 空状态：卡纸里线条图标 + 一句话 + 一句提示 + 能做的小按钮
+struct EmptyCard: View {
+    let symbol: String
+    let title: String
+    var note: String? = nil
+    var action: (String, () -> Void)? = nil
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Hexagon().fill(Theme.fill).frame(width: 56, height: 56)
+                Image(systemName: symbol).font(.system(size: 21)).foregroundStyle(Theme.sub)
+            }
+            Text(title).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink).multilineTextAlignment(.center)
+            if let note {
+                Text(note).font(.system(size: 15)).foregroundStyle(Theme.sub).multilineTextAlignment(.center)
+            }
+            if let action {
+                Button(action.0, action: action.1)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 18)
+                    .frame(height: 40)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 12))
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 36)
+        .padding(.horizontal, 16)
+        .background(Theme.bg, in: RoundedRectangle(cornerRadius: 10))
+        .padding(7)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
+    }
 }
 
 struct EmptyBlock: View {

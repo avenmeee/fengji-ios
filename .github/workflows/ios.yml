@@ -141,6 +141,22 @@ jobs:
           shot "51-用户协议" terms light
           shot "52-举报处理" admin light
           shot "53-举报规则" rules light
+          shot "60-登录" login light
+          shot "61-登录-深" login dark
+          shot "62-想要" want-sheet light
+          shot "63-想要-没填" want-empty light
+          shot "64-原帖人删除" owner-ask light
+          shot "65-认领" claim light
+          shot "66-认领好了" claim-done light
+          shot "67-发布成功" posted-3 light
+          shot "68-发布成功-深" posted-3 dark
+          shot "69-搜索" search-hit light
+          shot "70-搜索没找到" search-none light
+          shot "71-首页没人发" feed-empty light
+          shot "72-连不上" feed-offline light
+          shot "73-帖子没有了" detail-gone light
+          shot "74-我还没发过" me-empty light
+          shot "75-发布缺必填" form-missing light
           shot "42-记录" records light
           shot "43-举报规则" rules light
           shot "44-设置-深" settings dark
