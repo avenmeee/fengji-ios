@@ -250,17 +250,11 @@ struct CategoryBar: View {
 
 // MARK: - 买东西
 
-/// 画廊的节奏：一张大图、两张小图交替
-private enum GalleryRow: Identifiable {
-    case big(Listing)
-    case pair(Listing, Listing?)
-
-    var id: String {
-        switch self {
-        case .big(let a): return a.id
-        case .pair(let a, _): return a.id
-        }
-    }
+/// 一行两个，一样大；单数时最后一个靠左
+private struct GalleryRow: Identifiable {
+    let a: Listing
+    let b: Listing?
+    var id: String { a.id }
 }
 
 struct BuyView: View {
@@ -271,17 +265,9 @@ struct BuyView: View {
 
     private var rows: [GalleryRow] {
         let items = model.items.filter { $0.id != state.pendingDelete?.id }
-        var out: [GalleryRow] = []
-        var i = 0
-        while i < items.count {
-            out.append(.big(items[i]))
-            i += 1
-            if i < items.count {
-                out.append(.pair(items[i], i + 1 < items.count ? items[i + 1] : nil))
-                i += 2
-            }
+        return stride(from: 0, to: items.count, by: 2).map { i in
+            GalleryRow(a: items[i], b: i + 1 < items.count ? items[i + 1] : nil)
         }
-        return out
     }
 
     var body: some View {
@@ -303,17 +289,12 @@ struct BuyView: View {
                             } else {
                                 LazyVStack(spacing: 22) {
                                     ForEach(rows) { row in
-                                        switch row {
-                                        case .big(let item):
-                                            card(item, aspect: 1.0)
-                                        case .pair(let a, let b):
-                                            HStack(alignment: .top, spacing: 16) {
-                                                card(a, aspect: 0.8)
-                                                if let b {
-                                                    card(b, aspect: 0.8)
-                                                } else {
-                                                    Color.clear.frame(maxWidth: .infinity)
-                                                }
+                                        HStack(alignment: .top, spacing: 16) {
+                                            card(row.a)
+                                            if let b = row.b {
+                                                card(b)
+                                            } else {
+                                                Color.clear.frame(maxWidth: .infinity)
                                             }
                                         }
                                     }
@@ -363,8 +344,8 @@ struct BuyView: View {
         }
     }
 
-    private func card(_ item: Listing, aspect: CGFloat) -> some View {
-        NavigationLink(value: item) { GoodsCard(item: item, aspect: aspect) }
+    private func card(_ item: Listing) -> some View {
+        NavigationLink(value: item) { GoodsCard(item: item) }
             .buttonStyle(.plain)
             .task { await model.loadMoreIfNeeded(item) }
     }
