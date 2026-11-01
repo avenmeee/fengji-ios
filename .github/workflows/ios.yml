@@ -60,6 +60,8 @@ jobs:
           echo "---- 警告（去重）----"
           grep -E "warning:" build.log | sed 's|.*/fengji-ios/||' | sort -u | head -40 || true
           test -x build/Build/Products/Debug-iphonesimulator/Fengji.app/Fengji
+          # 只支持 iPhone：UIDeviceFamily 只能有 1
+          plutil -extract UIDeviceFamily json -o - build/Build/Products/Debug-iphonesimulator/Fengji.app/Info.plist | tee /dev/stderr | grep -qx '\[1\]'
 
       - name: 模拟器里截图
         if: inputs.mode == 'sim' && inputs.shots

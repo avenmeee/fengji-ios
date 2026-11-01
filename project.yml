@@ -23,6 +23,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.avenmeee.fengji
+        # XcodeGen 的 iOS 预设在 target 上写 1,2，会盖掉上面的；这里再写一次，只支持 iPhone
+        TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_FILE: Fengji/Info.plist
         CODE_SIGN_ENTITLEMENTS: Fengji/Fengji.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
