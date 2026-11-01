@@ -101,8 +101,8 @@ enum DemoServer {
 
     static let goodsList: [Listing] = [
         goods(1, "宜家书桌，九成新", 40, "furn", "几乎全新", "学校门口", photos: [photo("a1"), photo("a2")]),
-        goods(2, "木画架", 25, "art", "有使用痕迹", "Starland", photos: [photo("b1")]),
-        goods(3, "Dell 27 寸显示器", 60, "elec", "几乎全新", "宿舍楼下"),
+        goods(2, "木画架", 30, "art", "有使用痕迹", "Starland", photos: [photo("b1")]),
+        goods(3, "Dell 27 寸显示器", 120, "elec", "几乎全新", "宿舍楼下"),
         goods(4, "素描纸一箱", 0, "art", "全新", "Arnold Hall"),
         goods(5, "设计史教材", 15, "other", "有点旧", "学校门口", photos: [photo("c1")]),
         goods(6, "羽绒服 M 码", 30, "other", "几乎全新", "Victory Dr"),

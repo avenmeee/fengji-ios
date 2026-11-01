@@ -365,7 +365,7 @@ struct MineRow: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.priceText + (item.isRent ? " /月" : ""))
                             .font(.system(size: 17, weight: .bold))
-                            .monospacedDigit()
+                            .tracking(-0.3)
                             .foregroundStyle(Theme.ink)
                         Text(item.title)
                             .font(.subheadline)

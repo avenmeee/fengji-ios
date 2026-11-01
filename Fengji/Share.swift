@@ -31,7 +31,7 @@ struct ShareCard: View {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(item.priceText)
                         .font(.largeTitle.weight(.bold))
-                        .monospacedDigit()
+                        .tracking(-0.3)
                         .foregroundStyle(item.price == 0 ? Theme.sell : Theme.ink)
                     if item.isRent { Text("/月").font(.title3).foregroundStyle(Theme.sub) }
                 }

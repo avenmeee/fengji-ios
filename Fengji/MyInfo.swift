@@ -407,7 +407,7 @@ struct RecordRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 3))
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title).font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
-                Text(item.priceText + (item.isRent ? " /月" : "")).font(.subheadline).monospacedDigit().foregroundStyle(Theme.sub)
+                Text(item.priceText + (item.isRent ? " /月" : "")).font(.subheadline).tracking(-0.3).foregroundStyle(Theme.sub)
                 Text(line).font(.footnote).foregroundStyle(Theme.sub)
             }
             Spacer(minLength: 0)

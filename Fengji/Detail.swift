@@ -191,7 +191,7 @@ struct DetailView: View {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(item.priceText)
                     .font(.system(size: 26, weight: .bold))
-                    .monospacedDigit()
+                    .tracking(-0.3)
                     .foregroundStyle(Theme.ink)
                 if item.isRent { Text("/月").font(.subheadline).foregroundStyle(Theme.sub) }
                 Spacer(minLength: 8)

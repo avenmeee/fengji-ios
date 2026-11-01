@@ -414,7 +414,7 @@ struct PriceTag: View {
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(item.priceText)
                             .font(.system(size: 14, weight: .semibold))
-                            .monospacedDigit()
+                            .tracking(-0.3)
                         if item.isRent {
                             Text("/月").font(.system(size: 11.5)).foregroundStyle(Theme.sub)
                         }

@@ -528,7 +528,7 @@ struct PostForm: View {
             }
             .id(Field.price)
             .font(.system(size: 20, weight: .semibold))
-            .monospacedDigit()
+            .tracking(-0.3)
             .foregroundStyle(Theme.ink)
             Theme.line.frame(height: 0.5)
             if priceSuggested {
