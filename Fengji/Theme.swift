@@ -81,21 +81,31 @@ struct Tint {
 // MARK: - 小部件
 
 /// 发布表单里的选项：选中的涂这一页的颜色
+/// 发布页“选填”那块整体放大：胶囊、输入框、行标签都看这个
+private struct FormLargeKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    var formLarge: Bool {
+        get { self[FormLargeKey.self] }
+        set { self[FormLargeKey.self] = newValue }
+    }
+}
+
 struct Chip: View {
     let text: String
     let on: Bool
     var act: Act = .buy
     var surface: Color = Theme.fill
     let action: () -> Void
+    @Environment(\.formLarge) private var large
 
     var body: some View {
         Button(action: action) {
             Text(text)
-                .font(.system(size: 14, weight: on ? .semibold : .regular))
+                .font(.system(size: large ? 17 : 14, weight: on ? .semibold : .regular))
                 .foregroundStyle(on ? act.on : Theme.ink)
-                .padding(.horizontal, 10)
-                .frame(height: 34)
-                .background(on ? act.fill : surface, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, large ? 14 : 10)
+                .frame(height: large ? 44 : 34)
+                .background(on ? act.fill : surface, in: RoundedRectangle(cornerRadius: large ? 12 : 10))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
