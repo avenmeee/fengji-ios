@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS listings (
   source_posted_at INTEGER,      -- 发在群里的时间，超过 10 天隐藏
   merge_key TEXT,                -- 同一人同一物品合并用
   sender_hash TEXT,              -- 发送者的带密钥哈希，只用来匹配，不存不显示明文
+  sold_at INTEGER,               -- 标记卖完的时间；列表里只留 7 天
   place TEXT NOT NULL,
   descr TEXT NOT NULL DEFAULT '',
   contact TEXT NOT NULL,         -- 微信号，只给登录的人看

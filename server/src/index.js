@@ -14,6 +14,7 @@ const LIMITS = { post: 10, photo: 30 }, SITE_PHOTO_LIMIT = 2000;
 const MAX_LIVE_LISTINGS = 50;
 const PAGE = 40;
 const GROUP_MAX_AGE = 10 * 86400 * 1000;  // 群里搬来的超过 10 天隐藏：旧帖多半卖掉了
+const SOLD_SHOWN = 7 * 86400000;  // 卖完的在买、租列表里再留 7 天
 const GROUP_UID = "0".repeat(32);  // 群里搬来的条目挂在这个编号下，不对应真人
 // 导入时拦下联系方式和门牌：这类信息不能存
 const CONTACT_PATTERNS = [/微信号?\s*[:：]?\s*[A-Za-z][-_A-Za-z0-9]{5,}/, /\b(wx|vx|wechat)\s*[:：]?\s*[-_A-Za-z0-9]{5,}/i, /(?<!\d)1\d{10}(?!\d)/, /(?<!\d)(\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}(?!\d)/];
@@ -205,7 +206,8 @@ function view(row, origin, viewer) {
     parking: row.parking || null, pets: row.pets || null, roommates: row.roommates || null, to: row.to_date,
     leaseEnd: row.lease_end, utilities: !!row.utilities, privateBath: triView(row.private_bath), delivery: row.delivery,
     place: row.place, desc: row.descr, status: row.status,
-    contact: group || !row.contact ? null : row.contact,
+    contact: group || !row.contact || (row.status === "off" && !mine) ? null : row.contact,
+    soldAt: row.status === "off" ? (row.sold_at ?? null) : null,
     sellerName: group ? (row.source_poster || null) : (nick || defaultName(row.user_id)),
     sellerColor: group ? null : (color ?? defaultColor(row.user_id)),
     sellerNamed: group ? true : !!nick,
@@ -222,7 +224,8 @@ function view(row, origin, viewer) {
 async function feed(req, env, url) {
   const viewer = await currentUser(req, env);
   const p = url.searchParams, kind = p.get("kind") === "rent" ? "rent" : "goods";
-  const where = ["l.kind = ?", "l.status IN ('on', 'reserved')", "(l.source_type != 'group' OR l.source_posted_at >= ?)"], args = [kind, Date.now() - GROUP_MAX_AGE];
+  // 卖完的照样显示 7 天，排在所有在卖的后面
+  const where = ["l.kind = ?", "(l.status IN ('on', 'reserved') OR (l.status = 'off' AND l.sold_at >= ?))", "(l.source_type != 'group' OR l.source_posted_at >= ?)"], args = [kind, Date.now() - SOLD_SHOWN, Date.now() - GROUP_MAX_AGE];
   if (kind === "goods" && CATS.includes(p.get("cat"))) { where.push("l.cat = ?"); args.push(p.get("cat")); }
   const unit = p.get("unit");
   if (kind === "rent" && (unit === "whole" || unit === "room")) { where.push("l.unit_type IN (?, 'both')"); args.push(unit); }
@@ -234,7 +237,7 @@ async function feed(req, env, url) {
   }
   const offset = Math.max(0, Math.floor(Number(p.get("offset")) || 0));
   if (viewer) { where.push("l.user_id NOT IN (SELECT blocked_id FROM blocks WHERE user_id = ?)"); args.push(viewer.id); }
-  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY COALESCE(l.score, 2) DESC, l.bumped_at DESC, l.id DESC LIMIT ? OFFSET ?`).bind(...args, PAGE, offset).all()).results;
+  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY l.status = 'off', COALESCE(l.score, 2) DESC, l.bumped_at DESC, l.id DESC LIMIT ? OFFSET ?`).bind(...args, PAGE, offset).all()).results;
   return json({ items: rows.map(r => view(r, url.origin, viewer)), next: rows.length === PAGE ? offset + PAGE : null });
 }
 
@@ -247,7 +250,7 @@ async function sellerPage(req, env, url, uid) {
   const u = uid === GROUP_UID ? null : await env.DB.prepare("SELECT id, nickname, avatar_color, avatar_key, banned FROM users WHERE id = ?").bind(uid).first();
   if (!u || u.banned) throw new Fail(404, "not_found");
   if (viewer && await env.DB.prepare("SELECT 1 AS x FROM blocks WHERE user_id = ? AND blocked_id = ?").bind(viewer.id, uid).first()) throw new Fail(404, "not_found");
-  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.user_id = ? AND l.status IN ('on', 'reserved') ORDER BY l.bumped_at DESC LIMIT 100`).bind(uid).all()).results;
+  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.user_id = ? AND l.status IN ('on', 'reserved', 'off') ORDER BY l.status = 'off', l.bumped_at DESC, l.id DESC LIMIT 100`).bind(uid).all()).results;
   return json({
     seller: { id: uid, name: u.nickname || defaultName(uid), color: u.avatar_color ?? defaultColor(uid), named: !!u.nickname, avatar: u.avatar_key ? `${url.origin}/p/${u.avatar_key}` : null, group: false, groupName: null },
     items: rows.map(r => view(r, url.origin, viewer))
@@ -262,7 +265,7 @@ async function posterPage(req, env, url, id) {
   if (row.source_type !== "group") return sellerPage(req, env, url, row.user_id);
   const viewer = await currentUser(req, env);
   const same = row.sender_hash ? ["l.sender_hash = ?", [row.sender_hash]] : ["l.sender_hash IS NULL AND l.source_poster = ? AND l.source_group = ?", [row.source_poster, row.source_group]];
-  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.source_type = 'group' AND l.status IN ('on', 'reserved') AND l.source_posted_at >= ? AND ${same[0]} ORDER BY l.bumped_at DESC LIMIT 100`)
+  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.source_type = 'group' AND l.status IN ('on', 'reserved', 'off') AND l.source_posted_at >= ? AND ${same[0]} ORDER BY l.status = 'off', l.bumped_at DESC, l.id DESC LIMIT 100`)
     .bind(Date.now() - GROUP_MAX_AGE, ...same[1]).all()).results;
   return json({
     seller: { id: null, name: row.source_poster || "群友", color: null, named: true, avatar: null, group: true, groupName: row.source_group || null },
@@ -338,7 +341,9 @@ async function setStatus(req, env, url, id) {
   // 成交价选填，重新上架就作废
   if (soldPrice !== undefined && soldPrice !== null && (!Number.isInteger(soldPrice) || soldPrice < 0 || soldPrice > 1_000_000)) throw new Fail(400, "bad_price");
   const sold = status === "off" ? (soldPrice ?? null) : null;
-  await env.DB.prepare("UPDATE listings SET status=?, sold_price=?, updated_at=? WHERE id=?").bind(status, sold, Date.now(), id).run();
+  const now = Date.now();
+  const soldAt = status === "off" ? (row.status === "off" ? (row.sold_at ?? now) : now) : null;
+  await env.DB.prepare("UPDATE listings SET status=?, sold_price=?, sold_at=?, updated_at=? WHERE id=?").bind(status, sold, soldAt, now, id).run();
   if (status === "off" && row.status !== "off") await bump(env, "*", "sold");
   const next = await env.DB.prepare("SELECT * FROM listings WHERE id = ?").bind(id).first();
   return json(view(next, url.origin, u));

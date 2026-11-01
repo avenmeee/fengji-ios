@@ -102,7 +102,7 @@ ok("别人不能改价", r.status === 403, r);
 r = await call("POST", `/v1/listings/${id}/status`, { token: a.token, body: { status: "off" } });
 ok("标记已卖", r.data.status === "off", r);
 r = await call("GET", "/v1/listings?kind=goods");
-ok("已卖不在买页", !r.data.items.some(x => x.id === id));
+ok("已卖的买页里还在，标已卖出", r.data.items.find(x => x.id === id)?.status === "off");
 r = await call("GET", "/v1/me/listings", { token: a.token });
 ok("我发的里还在", r.data.items.some(x => x.id === id));
 await call("POST", `/v1/listings/${id}/status`, { token: a.token, body: { status: "on" } });
@@ -637,11 +637,11 @@ await call("POST", `/v1/listings/${sSold.id}/status`, { token: s1.token, body: {
 const sGone = (await call("POST", "/v1/listings", { token: s1.token, body: { ...goods, photos: await sPhoto(), title: "删掉的" } })).data;
 await call("DELETE", `/v1/listings/${sGone.id}`, { token: s1.token });
 r = await call("GET", `/v1/users/${s1.me.id}/listings`);
-ok("主页只有在架上的", r.status === 200 && r.data.items.length === 1 && r.data.items[0].id === sOn.id, r);
+ok("主页有在卖的和卖完的，卖完的在后", r.status === 200 && r.data.items.length === 2 && r.data.items[0].id === sOn.id && r.data.items[1].id === sSold.id, r);
 ok("主页带昵称和头像信息", r.data.seller.name === "主页卖家" && r.data.seller.named === true && r.data.seller.group === false, r);
-ok("主页不带联系方式以外的记录", !JSON.stringify(r.data).includes("卖掉的") && !JSON.stringify(r.data).includes("删掉的"), r);
+ok("主页不带删掉的", !JSON.stringify(r.data).includes("删掉的"), r);
 r = await call("GET", `/v1/listings/${sOn.id}/poster`);
-ok("从帖子找到卖家主页", r.status === 200 && r.data.seller.id === s1.me.id && r.data.items.length === 1, r);
+ok("从帖子找到卖家主页", r.status === 200 && r.data.seller.id === s1.me.id && r.data.items.length === 2, r);
 await call("POST", `/v1/blocks/${s1.me.id}`, { token: s2.token });
 r = await call("GET", `/v1/users/${s1.me.id}/listings`, { token: s2.token });
 ok("屏蔽了打不开", r.status === 404, r);
@@ -656,5 +656,25 @@ await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...gp, poster: "�
 r = await call("GET", `/v1/listings/${g1.id}/poster`);
 ok("群帖主页按群昵称加群找", r.status === 200 && r.data.seller.group === true && r.data.seller.name === "群友甲" && r.data.seller.groupName === "主页群" && r.data.items.length === 2 && r.data.items.some(x => x.id === g2.id), r);
 ok("群帖主页不露 sender_hash", !JSON.stringify(r.data).includes("sender"), r);
+
+// 卖完了：列表照样显示 7 天，排在后面，别人看不到微信号；卖家主页也有，放最后
+const sv = await login("sv");
+await call("POST", "/v1/me/agree", { token: sv.token });
+const svPhoto = async () => [(await call("POST", "/v1/photos", { token: sv.token, raw: jpeg })).data.key];
+const svOn = (await call("POST", "/v1/listings", { token: sv.token, body: { ...goods, photos: await svPhoto(), title: "还在卖" + stamp } })).data;
+const svOff = (await call("POST", "/v1/listings", { token: sv.token, body: { ...goods, photos: await svPhoto(), title: "卖完了" + stamp } })).data;
+r = await call("POST", `/v1/listings/${svOff.id}/status`, { token: sv.token, body: { status: "off", soldPrice: 30 } });
+ok("标卖完了带卖出时间", r.status === 200 && r.data.status === "off" && r.data.soldAt > 0, r);
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent(stamp));
+const svIds = r.data.items.map(x => x.id);
+ok("卖完的还在列表里，排在在卖的后面", svIds.includes(svOff.id) && svIds.indexOf(svOff.id) > svIds.indexOf(svOn.id), svIds);
+ok("卖完的别人看不到微信号", r.data.items.find(x => x.id === svOff.id).contact === null, r);
+r = await call("GET", `/v1/users/${sv.me.id}/listings`);
+ok("卖家主页有卖完的，放最后", r.data.items.length === 2 && r.data.items[1].id === svOff.id, r);
+execSync(`npx wrangler d1 execute fengji --local --command "UPDATE listings SET sold_at = 1000 WHERE id = '${svOff.id}'"`, { stdio: "ignore" });
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent(stamp));
+ok("卖出 7 天后列表里没了", !r.data.items.some(x => x.id === svOff.id), r);
+r = await call("POST", `/v1/listings/${svOff.id}/status`, { token: sv.token, body: { status: "on" } });
+ok("重新上架清掉卖出时间", r.data.status === "on" && r.data.soldAt === null, r);
 
 console.log(`全部通过：${n} 项`);
