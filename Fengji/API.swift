@@ -29,6 +29,7 @@ struct APIError: LocalizedError {
         case "hidden": return "这条被举报了，审核中不能改。"
         case "not_found": return "这条已经没有了。"
         case "bad_identity": return "苹果登录没通过，再试一次。"
+        case "bad_wechat": return "微信号格式不对：字母开头，6～20 位。"
         default: return "没连上，再试一次。"
         }
     }
@@ -87,7 +88,9 @@ final class API: @unchecked Sendable {
     }
     func reportName(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/report-name") }
     func adminResetName(_ uid: String) async throws { try await act("POST", "/v1/admin/users/\(uid)/reset-name") }
-    func logout() async throws { try await act("POST", "/v1/auth/logout") }
+    func logout() async throws {
+        let _: OK = try await post("POST", "/v1/auth/logout", ["deviceToken": UserDefaults.standard.string(forKey: "deviceToken") ?? ""])
+    }
     func deleteAccount() async throws { try await act("DELETE", "/v1/me") }
 
     // 条目
@@ -191,6 +194,7 @@ final class API: @unchecked Sendable {
     func adminStats() async throws -> Stats { try await get("/v1/admin/stats") }
     /// 管理员下架：彻底删除，举报一起关掉
     func adminRemove(_ listingId: String) async throws { try await act("POST", "/v1/admin/listings/\(listingId)/remove") }
+    func adminClose(_ reportId: String) async throws { try await act("POST", "/v1/admin/reports/\(reportId)/close") }
     func adminRestore(_ listingId: String) async throws { try await act("POST", "/v1/admin/listings/\(listingId)/restore") }
     func adminBan(_ uid: String) async throws { try await act("POST", "/v1/admin/users/\(uid)/ban") }
 }

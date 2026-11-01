@@ -300,6 +300,8 @@ struct Me: Codable {
     var named: Bool?
     /// "/p/…" 相对路径
     var avatar: String?
+    /// 同意过把东西的信息发给 AI
+    var aiConsent: Bool?
 }
 
 struct LoginResult: Codable {
@@ -328,6 +330,10 @@ struct AdminReport: Codable, Identifiable {
     let reporter: String
     let listing: Listing
     var reportedUser: String?
+    /// listing / want / name / avatar
+    var type: String?
+    /// 帖子类的举报按条目合并后有几条
+    var count: Int?
 }
 
 struct AdminReportList: Codable {

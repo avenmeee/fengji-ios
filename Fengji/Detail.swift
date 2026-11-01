@@ -300,16 +300,24 @@ struct DetailView: View {
                 PanelRow(symbol: "person.crop.circle", title: "昵称") {
                     panel = false
                     Task {
-                        try? await API.shared.reportName(item.id)
-                        state.toast("收到了，会尽快处理")
+                        do {
+                            try await API.shared.reportName(item.id)
+                            state.toast("收到了，会尽快处理")
+                        } catch {
+                            state.toast(error.localizedDescription)
+                        }
                     }
                 }
                 if item.sellerAvatar != nil {
                     PanelRow(symbol: "photo", title: "头像") {
                         panel = false
                         Task {
-                            try? await API.shared.reportAvatar(item.id)
-                            state.toast("收到了，会尽快处理")
+                            do {
+                                try await API.shared.reportAvatar(item.id)
+                                state.toast("收到了，会尽快处理")
+                            } catch {
+                                state.toast(error.localizedDescription)
+                            }
                         }
                     }
                 }

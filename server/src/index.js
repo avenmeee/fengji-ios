@@ -10,6 +10,8 @@ const BUMP_EVERY = 24 * 3600 * 1000;
 const REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"];
 const MAX_PHOTOS = 3, MAX_RENT_PHOTOS = 9, MAX_RENT_DESC = 5000, MAX_PHOTO_BYTES = 1_500_000;
 const AUTO_HIDE_REPORTS = 3;
+const MAX_ANON_REPORTS = 3;  // 同一条目没登录的举报最多留几条，免得刷屏挤掉真举报
+const TAKEDOWNS_PER_DAY = 5;  // 群帖“这是我的，下架”每个网络每天几次
 const LIMITS = { post: 10, photo: 30 }, SITE_PHOTO_LIMIT = 2000;
 const MAX_LIVE_LISTINGS = 50;
 const PAGE = 40;
@@ -81,7 +83,7 @@ async function startSession(env, userId) {
 // 昵称和头像颜色：没改过就由账号 id 算，同一个人始终一样
 const defaultName = id => "同学 " + String(id).slice(-3).toUpperCase();
 const defaultColor = id => (parseInt(String(id).slice(0, 6), 16) || 0) % 6;
-const meOf = u => ({ id: u.id, isAdmin: !!u.is_admin, agreed: !!u.agreed_at, name: u.nickname || defaultName(u.id), color: u.avatar_color ?? defaultColor(u.id), named: !!u.nickname, avatar: u.avatar_key ? "/p/" + u.avatar_key : null });
+const meOf = u => ({ id: u.id, isAdmin: !!u.is_admin, agreed: !!u.agreed_at, name: u.nickname || defaultName(u.id), color: u.avatar_color ?? defaultColor(u.id), named: !!u.nickname, avatar: u.avatar_key ? "/p/" + u.avatar_key : null, aiConsent: !!u.ai_consent_at });
 const NAME_NOT_ALLOWED = /官方|管理员|客服|蜂集|admin|apple|微信|weixin|\bvx\b|\bwx\b|\d{6,}/i;
 const SELLER_COLUMNS = "(SELECT nickname FROM users u WHERE u.id = l.user_id) AS seller_nick, (SELECT avatar_color FROM users u WHERE u.id = l.user_id) AS seller_color, (SELECT avatar_key FROM users u WHERE u.id = l.user_id) AS seller_avatar";
 const MAX_AVATAR_BYTES = 400 * 1024, MAX_THUMB_BYTES = 80 * 1024;
@@ -107,7 +109,8 @@ async function login(req, env) {
   } catch (e) {
     throw new Fail(401, "bad_identity");
   }
-  const refresh = await exchangeCode(env, b.authorizationCode).catch(() => null);
+  const refresh = await exchangeCode(env, b.authorizationCode).catch(e => { console.error("apple exchangeCode", e?.message || e); return null; });
+  if (!refresh && b.authorizationCode) console.error("apple exchangeCode: no refresh token");
   return json(await loginWithSub(env, claims.sub, refresh));
 }
 
@@ -131,6 +134,13 @@ function dayOf(v) {
   return v;
 }
 
+// 微信号：字母开头，6～20 位，字母、数字、下划线、减号；也过违禁词
+const WECHAT_ID = /^[a-zA-Z][a-zA-Z0-9_-]{5,19}$/;
+function checkWechat(contact) {
+  if (!WECHAT_ID.test(contact)) throw new Fail(422, "bad_wechat");
+  if (BANNED.some(r => r.test(contact))) throw new Fail(422, "not_allowed");
+}
+
 function checkListing(b, userId, existing = []) {
   const kind = b.kind;
   if (kind !== "goods" && kind !== "rent") throw new Fail(400, "bad_kind");
@@ -142,6 +152,7 @@ function checkListing(b, userId, existing = []) {
   if (kind === "rent" && !place) throw new Fail(400, "need_place");
   const text = [title, place, descr].join(" ");
   if (BANNED.some(r => r.test(text))) throw new Fail(422, "not_allowed");
+  if (contact) checkWechat(contact);
 
   const photos = Array.isArray(b.photos) ? b.photos : [];
   if (photos.length > (kind === "rent" ? MAX_RENT_PHOTOS : MAX_PHOTOS)) throw new Fail(400, "too_many_photos");
@@ -261,7 +272,7 @@ async function sellerPage(req, env, url, uid) {
 // 的其他群帖。用帖子 id 当入口，不对外露 sender_hash。
 async function posterPage(req, env, url, id) {
   const row = await env.DB.prepare("SELECT user_id, source_type, source_group, source_poster, sender_hash, status FROM listings WHERE id = ?").bind(id).first();
-  if (!row || row.status === "deleted" || row.status === "hidden") throw new Fail(404, "not_found");
+  if (!row || row.status === "deleted" || row.status === "hidden" || row.status === "removed") throw new Fail(404, "not_found");
   if (row.source_type !== "group") return sellerPage(req, env, url, row.user_id);
   const viewer = await currentUser(req, env);
   const same = row.sender_hash ? ["l.sender_hash = ?", [row.sender_hash]] : ["l.sender_hash IS NULL AND l.source_poster = ? AND l.source_group = ?", [row.source_poster, row.source_group]];
@@ -279,6 +290,8 @@ async function oneListing(req, env, url, id) {
   const canSeeHidden = viewer && row && (viewer.id === row.user_id || viewer.is_admin);
   if (!row || (row.status === "hidden" && !canSeeHidden) || groupExpired(row)) throw new Fail(404, "not_found");
   if (row.status === "deleted" && !(viewer && viewer.id === row.user_id)) throw new Fail(404, "not_found");
+  // 被举报后作者删掉的：只有管理员还看得到
+  if (row.status === "removed" && !(viewer && viewer.is_admin)) throw new Fail(404, "not_found");
   return json(view(row, url.origin, viewer));
 }
 
@@ -319,7 +332,7 @@ async function updateListing(req, env, url, id) {
   const u = await needAgreed(req, env);
   const row = await ownedOrFail(env, id, u);
   if (row.status === "hidden") throw new Fail(403, "hidden");
-  if (row.status === "deleted") throw new Fail(400, "deleted");
+  if (row.status === "deleted" || row.status === "removed") throw new Fail(400, "deleted");
   const v = checkListing(await bodyOf(req), u.id, JSON.parse(row.photos));
   if (v.kind !== row.kind) throw new Fail(400, "bad_kind");
   await env.DB.prepare("UPDATE listings SET title=?, price=?, cat=?, cond=?, from_date=?, to_date=?, lease_end=?, from_prec=?, to_prec=?, utilities=?, private_bath=?, delivery=?, delivery_fee=?, pickup_before=?, pickup_after=?, long_term=?, furnished=?, room_type=?, unit_type=?, furniture=?, internet=?, deposit=?, app_fee=?, parking=?, pets=?, roommates=?, place=?, descr=?, contact=?, photos=?, updated_at=? WHERE id=?")
@@ -335,7 +348,7 @@ async function setStatus(req, env, url, id) {
   const u = await needUser(req, env);
   const row = await ownedOrFail(env, id, u);
   if (row.status === "hidden") throw new Fail(403, "hidden");
-  if (row.status === "deleted") throw new Fail(400, "deleted");
+  if (row.status === "deleted" || row.status === "removed") throw new Fail(400, "deleted");
   const { status, soldPrice } = await bodyOf(req);
   if (!["on", "reserved", "off"].includes(status)) throw new Fail(400, "bad_status");
   // 成交价选填，重新上架就作废
@@ -359,7 +372,7 @@ async function setPrice(req, env, url, id) {
   const u = await needUser(req, env);
   const row = await ownedOrFail(env, id, u);
   if (row.status === "hidden") throw new Fail(403, "hidden");
-  if (row.status === "deleted") throw new Fail(400, "deleted");
+  if (row.status === "deleted" || row.status === "removed") throw new Fail(400, "deleted");
   const price = Number((await bodyOf(req)).price);
   if (!Number.isInteger(price) || price < 0 || price > 1_000_000 || (row.kind === "rent" && price === 0)) throw new Fail(400, "bad_price");
   await env.DB.prepare("UPDATE listings SET price=?, updated_at=? WHERE id=?").bind(price, Date.now(), id).run();
@@ -402,7 +415,16 @@ async function deleteListing(req, env, id) {
     await deleteRows(env, [row]);
     return json({ ok: true });
   }
-  if (row.status === "deleted") return json({ ok: true });
+  if (row.status === "deleted" || row.status === "removed") return json({ ok: true });
+  // 被举报隐藏的：删掉就是彻底删，举报留给管理员看，不进“记录”，不能原样重发
+  if (row.status === "hidden") {
+    await removePhotos(env, JSON.parse(row.photos));
+    await env.DB.batch([
+      env.DB.prepare("UPDATE listings SET status = 'removed', deleted_at = ?, photos = '[]', score = NULL, scored_at = NULL, sold_price = NULL WHERE id = ?").bind(Date.now(), id),
+      env.DB.prepare("DELETE FROM wants WHERE listing_id = ?").bind(id)
+    ]);
+    return json({ ok: true });
+  }
   // 原图都删掉，App 顺手传一张小缩略图留给本人的记录
   let thumb = [];
   const buf = await req.arrayBuffer();
@@ -414,7 +436,7 @@ async function deleteListing(req, env, id) {
   }
   await removePhotos(env, JSON.parse(row.photos));
   await env.DB.batch([
-    env.DB.prepare("UPDATE listings SET status = 'deleted', deleted_at = ?, photos = ?, score = NULL, scored_at = NULL WHERE id = ?").bind(Date.now(), JSON.stringify(thumb), id),
+    env.DB.prepare("UPDATE listings SET status = 'deleted', deleted_at = ?, photos = ?, score = NULL, scored_at = NULL, sold_price = NULL WHERE id = ?").bind(Date.now(), JSON.stringify(thumb), id),
     env.DB.prepare("DELETE FROM wants WHERE listing_id = ?").bind(id),
     env.DB.prepare("DELETE FROM reports WHERE listing_id = ?").bind(id)
   ]);
@@ -423,7 +445,7 @@ async function deleteListing(req, env, id) {
 
 async function mine(req, env, url) {
   const u = await needUser(req, env);
-  const rows = (await env.DB.prepare("SELECT * FROM listings WHERE user_id = ? ORDER BY created_at DESC LIMIT 200").bind(u.id).all()).results;
+  const rows = (await env.DB.prepare("SELECT * FROM listings WHERE user_id = ? AND status != 'removed' ORDER BY created_at DESC LIMIT 200").bind(u.id).all()).results;
   // 成交价和删除时间只给本人看
   return json({ items: rows.map(r => ({ ...view(r, url.origin, u), soldPrice: r.sold_price ?? null, deletedAt: r.deleted_at ?? null, updatedAt: r.updated_at ?? null })) });
 }
@@ -457,10 +479,14 @@ async function report(req, env, id) {
   if (!REASONS.includes(b.reason)) throw new Fail(400, "bad_reason");
   const row = await env.DB.prepare("SELECT id, user_id FROM listings WHERE id = ?").bind(id).first();
   if (!row) throw new Fail(404, "not_found");
+  if (!u) {
+    const anon = await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE listing_id = ? AND status = 'open' AND reporter_id LIKE 'anon:%'").bind(id).first();
+    if (anon.n >= MAX_ANON_REPORTS) return json({ ok: true });
+  }
   await env.DB.prepare("INSERT OR IGNORE INTO reports (id, listing_id, reporter_id, reason, note, created_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(newId(), id, u ? u.id : "anon:" + newId(), b.reason, clean(b.note, 300), Date.now()).run();
   const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE listing_id = ? AND status = 'open' AND reporter_id NOT LIKE 'anon:%' AND reporter_id NOT LIKE 'want:%' AND reporter_id NOT LIKE 'name:%' AND reporter_id NOT LIKE 'avatar:%'").bind(id).first();
-  if (c.n >= AUTO_HIDE_REPORTS) await env.DB.prepare("UPDATE listings SET status = 'hidden' WHERE id = ? AND status = 'on'").bind(id).run();
+  if (c.n >= AUTO_HIDE_REPORTS) await env.DB.prepare("UPDATE listings SET status = 'hidden' WHERE id = ? AND status IN ('on', 'reserved')").bind(id).run();
   return json({ ok: true });
 }
 
@@ -501,15 +527,19 @@ async function wipeUser(env, u) {
     env.DB.prepare("DELETE FROM devices WHERE user_id = ?").bind(u.id),
     // 删过号的人，之后群里的帖子也不再搬
     ...(u.sender_hash ? [env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind("sender:" + u.sender_hash, Date.now())] : []),
-    env.DB.prepare("DELETE FROM reports WHERE reporter_id = ?").bind(u.id),
+    env.DB.prepare("DELETE FROM reports WHERE reporter_id = ? OR reported_user = ? OR reporter_id IN (?, ?)").bind(u.id, u.id, "name:" + u.id, "avatar:" + u.id),
     env.DB.prepare("DELETE FROM daily_counts WHERE user_id = ?").bind(u.id),
     env.DB.prepare("DELETE FROM users WHERE id = ?").bind(u.id)
   ]);
 }
 
+// 14. 被封的账号也能自己删号：这里不挡 banned
 async function deleteAccount(req, env) {
-  const u = await needUser(req, env);
-  await revokeToken(env, u.apple_refresh).catch(() => false);
+  const m = /^Bearer (\S+)$/.exec(req.headers.get("authorization") || "");
+  const u = m && await env.DB.prepare("SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?").bind(await sha256(m[1])).first();
+  if (!u) throw new Fail(401, "login_required");
+  const revoked = await revokeToken(env, u.apple_refresh).catch(e => { console.error("apple revokeToken", e?.message || e); return false; });
+  if (!revoked) console.error("apple revokeToken failed", u.apple_refresh ? "had refresh token" : "no refresh token");
   await wipeUser(env, u);
   return json({ ok: true });
 }
@@ -518,7 +548,9 @@ async function logout(req, env) {
   const m = /^Bearer (\S+)$/.exec(req.headers.get("authorization") || "");
   if (m) {
     const u = await currentUser(req, env);
-    if (u) await env.DB.prepare("DELETE FROM devices WHERE user_id = ?").bind(u.id).run();
+    let token = "";
+    try { token = String((await req.json()).deviceToken || ""); } catch (e) { token = ""; }
+    if (u && token) await env.DB.prepare("DELETE FROM devices WHERE user_id = ? AND token = ?").bind(u.id, token).run();
     await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await sha256(m[1])).run();
   }
   return json({ ok: true });
@@ -536,13 +568,22 @@ async function adminReports(req, env, url) {
       (SELECT nickname FROM users u WHERE u.id = l.user_id) AS seller_nick, l.id AS lid, l.user_id, l.kind, l.title, l.price, l.cat, l.cond, l.from_date, l.to_date, l.lease_end, l.utilities, l.private_bath, l.delivery, l.delivery_fee, l.pickup_before, l.pickup_after, l.long_term, l.furnished, l.room_type, l.unit_type, l.furniture, l.internet, l.deposit, l.app_fee, l.parking, l.pets, l.roommates, l.score, l.source_type, l.source_group, l.source_poster, l.source_posted_at, l.bumped_at, l.place, l.descr, l.contact, l.photos, l.status, l.created_at
     FROM reports r LEFT JOIN listings l ON l.id = r.listing_id WHERE r.status = 'open' ORDER BY r.created_at DESC LIMIT 200`).all()).results;
   const photo = key => key ? url.origin + "/p/" + key : null;
-  return json({ items: rows.map(r => {
+  const merged = [], seen = new Map();
+  for (const r of rows) {
+    if (reportType(r.reporter) !== "listing") { merged.push({ ...r, count: 1, reasons: [r.reason] }); continue; }
+    const hit = seen.get(r.rlid);
+    if (hit) { hit.count++; if (!hit.reasons.includes(r.reason)) hit.reasons.push(r.reason); continue; }
+    const one = { ...r, count: 1, reasons: [r.reason] };
+    seen.set(r.rlid, one);
+    merged.push(one);
+  }
+  return json({ items: merged.map(r => {
     const type = reportType(r.reporter);
     // 被举报的内容：留言原文、举报时的昵称、举报时的头像；帖子就是帖子本身（看 listing）
     const content = type === "want" ? r.note.replace(/^想要留言：/, "") : type === "name" ? r.note : type === "avatar" ? photo(r.note.replace(/^\/p\//, "")) : null;
     const current = type === "name" ? (r.target_nick || null) : type === "avatar" ? photo(r.target_avatar) : null;
     return {
-      id: r.id, type, reason: r.reason, note: r.note, at: r.at, reporter: r.reporter,
+      id: r.id, type, reason: r.reason, reasons: r.reasons, count: r.count, note: r.note, at: r.at, reporter: r.reporter,
       anonymous: r.reporter.startsWith("anon:"),
       reportedUser: r.reported_user || r.user_id || null,
       content, current, listingId: r.rlid,
@@ -944,7 +985,7 @@ async function unscored(req, env) {
   const origin = new URL(req.url).origin;
   const comps = {};
   for (const cat of new Set(rows.map(r => r.cat))) {
-    comps[cat] = (await env.DB.prepare("SELECT id, title, price, sold_price FROM listings WHERE kind = 'goods' AND cat = ? AND bumped_at >= ? ORDER BY sold_price IS NOT NULL DESC, bumped_at DESC LIMIT 30").bind(cat, now - 90 * 86400000).all()).results;
+    comps[cat] = (await env.DB.prepare("SELECT id, title, price, sold_price FROM listings WHERE kind = 'goods' AND cat = ? AND status IN ('on', 'reserved', 'off') AND bumped_at >= ? ORDER BY sold_price IS NOT NULL DESC, bumped_at DESC LIMIT 30").bind(cat, now - 90 * 86400000).all()).results;
   }
   return json({
     items: rows.map(r => {
@@ -972,13 +1013,14 @@ async function setScores(req, env) {
 }
 
 // 要求下架：不用登录，立刻生效，照片一起删，留编号防再导入
-async function takedown(env, id) {
+async function takedown(req, env, id) {
   const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ? AND source_type = 'group'").bind(id).first();
   if (!row) throw new Fail(404, "not_found");
-  await env.DB.batch([
-    env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind(row.source_id, Date.now()),
-    env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind("key:" + row.merge_key, Date.now())
-  ]);
+  // 不用登录，所以按网络限次。只存当天加盐的哈希，不存 IP
+  const ip = req.headers.get("cf-connecting-ip") || "unknown";
+  const who = "ip:" + (await sha256(today() + ip + (env.SENDER_HASH_KEY || ""))).slice(0, 24);
+  if (await bump(env, who, "takedown") > TAKEDOWNS_PER_DAY) throw new Fail(429, "daily_limit");
+  await env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind(row.source_id, Date.now()).run();
   await deleteRows(env, [row]);
   return json({ ok: true });
 }
@@ -1054,6 +1096,7 @@ async function setPublicContact(req, env) {
   const u = await needUser(req, env);
   if (!u.sender_hash) throw new Fail(403, "not_claimed");
   const contact = clean((await bodyOf(req)).contact, 40);
+  if (contact) checkWechat(contact);
   await env.DB.batch([
     env.DB.prepare("UPDATE users SET contact = ? WHERE id = ?").bind(contact || null, u.id),
     env.DB.prepare("UPDATE listings SET contact = ?, updated_at = ? WHERE user_id = ? AND source_type = 'claimed'").bind(contact, Date.now(), u.id)
@@ -1106,7 +1149,7 @@ async function route(req, env) {
   if (method === "POST" && (m = /^\/v1\/wants\/([0-9a-f]+)\/report$/.exec(path))) return reportWant(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/wants\/([0-9a-f]+)\/block$/.exec(path))) return blockWant(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/price$/.exec(path))) return setPrice(req, env, url, m[1]);
-  if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/takedown$/.exec(path))) return takedown(env, m[1]);
+  if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/takedown$/.exec(path))) return takedown(req, env, m[1]);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/bump$/.exec(path))) return bumpListing(req, env, url, m[1]);
   if (method === "POST" && /^\/v1\/listings\/[0-9a-f]+\/click$/.test(path)) return countClick(req, env);
   if (method === "POST" && (m = /^\/v1\/listings\/([0-9a-f]+)\/view$/.exec(path))) return countView(env, m[1]);

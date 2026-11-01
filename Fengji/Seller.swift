@@ -128,15 +128,23 @@ struct SellerView: View {
             if avatar != nil {
                 Button("举报头像", systemImage: "photo.badge.exclamationmark") {
                     Task {
-                        try? await API.shared.reportAvatar(item.id)
-                        state.toast("收到了，会尽快处理")
+                        do {
+                            try await API.shared.reportAvatar(item.id)
+                            state.toast("收到了，会尽快处理")
+                        } catch {
+                            state.toast(error.localizedDescription)
+                        }
                     }
                 }
             }
             Button("举报昵称", systemImage: "person.crop.circle.badge.exclamationmark") {
                 Task {
-                    try? await API.shared.reportName(item.id)
-                    state.toast("收到了，会尽快处理")
+                    do {
+                        try await API.shared.reportName(item.id)
+                        state.toast("收到了，会尽快处理")
+                    } catch {
+                        state.toast(error.localizedDescription)
+                    }
                 }
             }
             Button("屏蔽这个人", systemImage: "hand.raised") {

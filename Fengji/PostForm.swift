@@ -217,7 +217,7 @@ struct PostForm: View {
         _roommateNote = State(initialValue: mate.1)
         _leaseEnd = State(initialValue: Self.date(source?.leaseEnd))
 
-        _aiConsent = State(initialValue: UserDefaults.standard.bool(forKey: "aiConsent") || Demo.isOn)
+        _aiConsent = State(initialValue: Demo.isOn)
         _aiGuessed = State(initialValue: filled && !isRent)
     }
 
@@ -273,6 +273,7 @@ struct PostForm: View {
             Task { await addPicked(items) }
         }
         .onAppear {
+            if state.me?.aiConsent == true { aiConsent = true }
             if !isRent, editing == nil, !aiConsent { showConsent = true }
             if let f = Self.demoFocus {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { focus = f }
@@ -967,7 +968,7 @@ struct PostForm: View {
                 saved = try await API.shared.create(input)
             }
             if !c.isEmpty { UserDefaults.standard.set(c, forKey: "contact") }
-            if !isRent, editing == nil { UserDefaults.standard.set(true, forKey: "aiConsent") }
+            if !isRent, editing == nil, state.me?.aiConsent != true { Task { await state.refreshMe() } }
             onSaved?(saved)
             state.changed()
             if editing == nil {

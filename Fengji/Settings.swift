@@ -245,11 +245,16 @@ struct AdminReportsView: View {
                         } label: {
                             Text(r.listing.title).font(.body.weight(.semibold)).foregroundStyle(Theme.ink)
                         }
-                        Text(r.reason + (r.note.isEmpty ? "" : "：\(r.note)")).font(.subheadline).foregroundStyle(Theme.sub)
+                        Text(r.reason + ((r.count ?? 1) > 1 ? " 等 \(r.count ?? 1) 条" : "") + (r.note.isEmpty ? "" : "：\(r.note)")).font(.subheadline).foregroundStyle(Theme.sub)
                         Text(r.listing.statusText).font(.footnote).foregroundStyle(Theme.sub)
                         HStack(spacing: 6) {
-                            ActionChip(text: "没问题") { run { try await API.shared.adminRestore(r.listing.id) } }
-                            ActionChip(text: "删除", danger: true) { run { try await API.shared.delete(r.listing.id) } }
+                            let isPost = (r.type ?? "listing") == "listing"
+                            ActionChip(text: "没问题") {
+                                run { if isPost { try await API.shared.adminRestore(r.listing.id) } else { try await API.shared.adminClose(r.id) } }
+                            }
+                            if isPost {
+                                ActionChip(text: "删除", danger: true) { run { try await API.shared.adminRemove(r.listing.id) } }
+                            }
                             if r.reason == "头像不当", let uid = r.reportedUser {
                                 ActionChip(text: "撤头像") { run { try await API.shared.adminRemoveAvatar(uid) } }
                             }

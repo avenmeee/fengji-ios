@@ -119,8 +119,8 @@ struct ClaimView: View {
         let d = UserDefaults.standard
         guard let c = d.string(forKey: "claimCode") else { return nil }
         let exp = Int64(d.integer(forKey: "claimCodeExpires"))
-        // 留一小时余量
-        guard exp > Int64(Date().timeIntervalSince1970 * 1000) + 3_600_000 else { return nil }
+        // 有效期内一直用这个；服务器那边新码也不会让旧码作废
+        guard exp > Int64(Date().timeIntervalSince1970 * 1000) + 60_000 else { return nil }
         return ClaimCode(code: c, expiresAt: exp)
     }
 

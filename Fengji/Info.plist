@@ -41,6 +41,8 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>保存分享图片到相册。</string>
 	<key>NSCameraUsageDescription</key>
 	<string>拍要卖的东西。</string>
 	<key>UIApplicationSceneManifest</key>

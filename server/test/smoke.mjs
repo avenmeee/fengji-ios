@@ -304,7 +304,7 @@ r = await call("GET", "/v1/listings/" + chair);
 ok("价没变", r.data.price === 3, r);
 r = await call("POST", `/v1/listings/${chair}/takedown`);
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "repost-" + stamp, kind: "goods", title: "小椅子", price: 2, cat: "furn", place: "monty", group: "二手群 2", poster, postedAt: Date.now() } });
-ok("下架后同物换编号也不再导入", r.data.skipped === "taken_down", r);
+ok("下架只记这条的编号，同物换编号还能导入", r.status < 300 && r.data.skipped !== "taken_down", r);
 
 // 过期隐藏和清理
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "exp-" + stamp, kind: "goods", title: "快过期", price: 7, cat: "furn", place: "monty", group: "二手群 1", poster, postedAt: Date.now() - 86400000, photos: [b64], photosChecked: true } });
@@ -678,5 +678,38 @@ r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent(stamp));
 ok("卖出 7 天后列表里没了", !r.data.items.some(x => x.id === svOff.id), r);
 r = await call("POST", `/v1/listings/${svOff.id}/status`, { token: sv.token, body: { status: "on" } });
 ok("重新上架清掉卖出时间", r.data.status === "on" && r.data.soldAt === null, r);
+
+// 检查员那一批
+const q1 = await login("q1"), q2 = await login("q2"), q3 = await login("q3"), q4 = await login("q4");
+for (const u of [q1, q2, q3, q4]) await call("POST", "/v1/me/agree", { token: u.token });
+const qPhoto = async () => [(await call("POST", "/v1/photos", { token: q1.token, raw: jpeg })).data.key];
+r = await call("POST", "/v1/listings", { token: q1.token, body: { ...goods, photos: await qPhoto(), contact: "示例，无联系方式" } });
+ok("微信号要像微信号", r.status === 422 && r.data.error === "bad_wechat", r);
+r = await call("POST", "/v1/listings", { token: q1.token, body: { ...goods, photos: await qPhoto(), contact: "" } });
+ok("微信号可以不填", r.status === 201, r);
+const qp = (await call("POST", "/v1/listings", { token: q1.token, body: { ...goods, photos: await qPhoto(), title: "会被举报的" } })).data;
+await call("POST", `/v1/listings/${qp.id}/status`, { token: q1.token, body: { status: "reserved" } });
+for (const u of [q2, q3, q4]) await call("POST", `/v1/listings/${qp.id}/report`, { token: u.token, body: { reason: "虚假信息" } });
+r = await call("GET", "/v1/listings/" + qp.id, { token: q1.token });
+ok("已预订的也会被自动隐藏", r.data.status === "hidden", r);
+for (let i = 0; i < 6; i++) await call("POST", `/v1/listings/${qp.id}/report`, { body: { reason: "其他" } });
+r = await call("GET", "/v1/admin/reports", { token: ADMIN });
+const qr = r.data.items.filter(x => x.listingId === qp.id);
+ok("管理列表按条目合并，匿名最多 3 条", qr.length === 1 && qr[0].count === 6, qr);
+await call("DELETE", `/v1/listings/${qp.id}`, { token: q1.token });
+r = await call("GET", "/v1/me/listings", { token: q1.token });
+ok("被隐藏的删掉后不进记录", !r.data.items.some(x => x.id === qp.id), r);
+r = await call("GET", "/v1/admin/reports", { token: ADMIN });
+ok("被隐藏的删掉后举报还在", r.data.items.some(x => x.listingId === qp.id), r);
+r = await call("GET", "/v1/me", { token: q1.token });
+ok("同意过 AI 跟着账号", r.data.aiConsent === true, r);
+await call("POST", "/v1/me/device", { token: q1.token, body: { token: "cd".repeat(32) } });
+await call("POST", "/v1/me/device", { token: q1.token, body: { token: "ef".repeat(32) } });
+r = await call("POST", "/v1/auth/logout", { token: q1.token, body: { deviceToken: "cd".repeat(32) } });
+const qdev = execSync(`npx wrangler d1 execute fengji --local --json --command "SELECT COUNT(*) AS n FROM devices WHERE user_id = '${q1.me.id}'"`).toString();
+ok("退出登录只删本机的令牌", /"n":\s*1/.test(qdev), qdev);
+execSync(`npx wrangler d1 execute fengji --local --command "UPDATE users SET banned = 1 WHERE id = '${q2.me.id}'"`, { stdio: "ignore" });
+r = await call("DELETE", "/v1/me", { token: q2.token });
+ok("被封的也能自己删号", r.status === 200, r);
 
 console.log(`全部通过：${n} 项`);
