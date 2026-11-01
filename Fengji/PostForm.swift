@@ -554,6 +554,13 @@ struct PostForm: View {
             .focused($focus, equals: .name)
             .id(Field.name)
             Theme.line.frame(height: 0.5)
+            // 卡片上名字只有一行：太长就提醒一句，不硬拦
+            if title.count > 14 {
+                Text("名字写短一点，细节放备注")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.sub)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
