@@ -1,5 +1,5 @@
 // 蜂集后端：买、卖、租房的条目，登录，照片，举报、屏蔽、删号、管理。
-import { describePhoto } from "./ai.js";
+import { describePhoto, groupPhotos } from "./ai.js";
 import { exchangeCode, fetchAppleKeys, revokeToken, verifyIdentityToken } from "./apple.js";
 import { listingPage, privacyPage, rulesPage, supportPage } from "./pages.js";
 import { pushToUser } from "./push.js";
@@ -13,7 +13,9 @@ const OWNER_ASK = "原帖人申请删除";
 const MAX_PHOTOS = 3, MAX_RENT_PHOTOS = 9, MAX_RENT_DESC = 5000, MAX_PHOTO_BYTES = 1_500_000;
 const AUTO_HIDE_REPORTS = 3;
 const MAX_ANON_REPORTS = 3;  // 同一条目没登录的举报最多留几条，免得刷屏挤掉真举报
-const LIMITS = { post: 10, photo: 30 }, SITE_PHOTO_LIMIT = 2000;
+// 发布每人每天 30 条：一次批量最多 30 张照片，分出来最多 30 件，得放得下（11-01 用户定，从 10 放宽）
+const LIMITS = { post: 30, photo: 60 }, SITE_PHOTO_LIMIT = 2000;
+const MAX_GROUP_PHOTOS = 30, MAX_GROUP_PHOTO_BYTES = 400_000;
 const MAX_LIVE_LISTINGS = 50;
 const PAGE = 40;
 const GROUP_MAX_AGE = 10 * 86400 * 1000;  // 群里发了超过 10 天的不导入：旧帖多半卖掉了。导进来的不再过期，靠排序自然沉下去
@@ -892,6 +894,104 @@ async function monthSum(env, what) {
   return r.n;
 }
 
+async function dailyCount(env, userId, what) {
+  const r = await env.DB.prepare("SELECT n FROM daily_counts WHERE day = ? AND user_id = ? AND what = ?").bind(today(), userId, what).first();
+  return r ? r.n : 0;
+}
+
+// 一次传多张：AI 分成一件一件。按张数算进每人每天的 AI 次数；超了返回 ai_limit，App 退回“每张一件”
+async function aiGroup(req, env, url) {
+  if (!aiEnabled(env)) throw new Fail(503, "ai_off");
+  const u = await needAgreed(req, env);
+  if (!u.ai_consent_at) {
+    if (url.searchParams.get("consent") !== "1") throw new Fail(400, "need_ai_consent");
+    await env.DB.prepare("UPDATE users SET ai_consent_at = ? WHERE id = ?").bind(Date.now(), u.id).run();
+  }
+  const b = await bodyOf(req);
+  const list = Array.isArray(b.photos) ? b.photos : [];
+  if (list.length < 2 || list.length > MAX_GROUP_PHOTOS) throw new Fail(400, "bad_count");
+  const images = list.map(x => {
+    let bytes;
+    try { bytes = Uint8Array.from(atob(String(x)), c => c.charCodeAt(0)); } catch (e) { throw new Fail(400, "bad_photo"); }
+    if (bytes.length > MAX_GROUP_PHOTO_BYTES) throw new Fail(413, "photo_too_big");
+    if (!(bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)) throw new Fail(415, "not_jpeg");
+    return bytes;
+  });
+  if (await dailyCount(env, u.id, "ai_describe") + images.length > AI_PER_DAY) throw new Fail(429, "ai_limit");
+  if (await monthSum(env, "ai_microusd") >= Number(env.AI_MONTHLY_USD || 5) * 1e6) throw new Fail(503, "ai_budget");
+  let r;
+  try {
+    if (!priceRefs) priceRefs = (await env.DB.prepare("SELECT item, cat, n, median, low, high FROM price_refs ORDER BY n DESC, item").all()).results;
+    const recent = (await env.DB.prepare("SELECT title, price FROM listings WHERE kind = 'goods' AND title NOT LIKE '示例%' ORDER BY bumped_at DESC LIMIT 40").all()).results;
+    r = await groupPhotos(env, images, CATS, CONDS, priceRefs, recent);
+  } catch (e) {
+    console.error("ai group failed", e && e.message);
+    throw new Fail(503, "ai_failed");
+  }
+  await bumpBy(env, "*", "ai_microusd", r.microUsd);
+  await bumpBy(env, u.id, "ai_describe", images.length);
+  await bump(env, "*", "ai_describe");
+  // 收拾 AI 的结果：编号要在范围内、每张只用一次；漏掉的每张自成一件，名字空着让卖家填
+  const used = new Set(), items = [];
+  for (const it of r.items || []) {
+    const photos = (it.photos || []).filter(i => Number.isInteger(i) && i >= 0 && i < images.length && !used.has(i));
+    if (!photos.length) continue;
+    photos.forEach(i => used.add(i));
+    const price = Number.isInteger(it.price) && it.price >= 0 && it.price <= 100000 ? it.price : null;
+    items.push({ photos: photos.sort((a, b2) => a - b2), title: clean(it.name, 40), price, cat: CATS.includes(it.cat) ? it.cat : null, cond: CONDS.includes(it.cond) ? it.cond : null });
+  }
+  for (let i = 0; i < images.length; i++) {
+    if (!used.has(i)) items.push({ photos: [i], title: "", price: null, cat: null, cond: null });
+  }
+  items.sort((a, b2) => a.photos[0] - b2.photos[0]);
+  return json({ items });
+}
+
+// 一次发好几件：先逐件检查，全过了才一起写进去。任何一件不行，返回是第几件
+async function createBatch(req, env, url) {
+  const u = await needAgreed(req, env);
+  const body = await bodyOf(req);
+  const list = Array.isArray(body.items) ? body.items : [];
+  if (!list.length || list.length > MAX_GROUP_PHOTOS) throw new Fail(400, "bad_count");
+  const checked = [], seen = new Set();
+  for (let i = 0; i < list.length; i++) {
+    try {
+      const v = checkListing(list[i], u.id);
+      if (v.kind !== "goods") throw new Fail(400, "bad_kind");
+      for (const k of JSON.parse(v.photos)) {
+        if (seen.has(k)) throw new Fail(400, "bad_photo");
+        seen.add(k);
+      }
+      checked.push(v);
+    } catch (e) {
+      if (e instanceof Fail) return json({ error: e.code, index: i }, e.status);
+      throw e;
+    }
+  }
+  if (!u.ai_consent_at) {
+    if (body.aiConsent !== true) throw new Fail(400, "need_ai_consent");
+    await env.DB.prepare("UPDATE users SET ai_consent_at = ? WHERE id = ?").bind(Date.now(), u.id).run();
+  }
+  const live = await env.DB.prepare("SELECT COUNT(*) AS n FROM listings WHERE user_id = ? AND status = 'on'").bind(u.id).first();
+  if (live.n + checked.length > MAX_LIVE_LISTINGS) throw new Fail(429, "too_many_listings");
+  if (await dailyCount(env, u.id, "post") + checked.length > LIMITS.post) throw new Fail(429, "daily_limit");
+  const now = Date.now(), ids = [];
+  const stmts = checked.map((v, i) => {
+    const id = newId();
+    ids.push(id);
+    // 同一批里按顺序排，第一件在最前
+    const t = now - i;
+    return env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, cond, from_date, to_date, lease_end, from_prec, to_prec, utilities, private_bath, delivery, delivery_fee, pickup_before, pickup_after, long_term, furnished, room_type, unit_type, furniture, internet, deposit, app_fee, parking, pets, roommates, place, descr, contact, avail_time, photos, status, created_at, updated_at, bumped_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?)")
+      .bind(id, u.id, v.kind, v.title, v.price, v.cat, v.cond, v.from_date, v.to_date, v.lease_end, v.from_prec, v.to_prec, v.utilities, v.private_bath, v.delivery, v.delivery_fee, v.pickup_before, v.pickup_after, v.long_term, v.furnished, v.room_type, v.unit_type, v.furniture, v.internet, v.deposit, v.app_fee, v.parking, v.pets, v.roommates, v.place, v.descr, v.contact, v.avail_time, v.photos, t, t, t);
+  });
+  await env.DB.batch(stmts);
+  await bumpBy(env, u.id, "post", checked.length);
+  await bumpBy(env, "*", "post", checked.length);
+  const rows = (await env.DB.prepare(`SELECT * FROM listings WHERE id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all()).results;
+  const byId = new Map(rows.map(r => [r.id, r]));
+  return json({ items: ids.map(id => view(byId.get(id), url.origin, u)) }, 201);
+}
+
 async function aiDescribe(req, env, url) {
   if (!aiEnabled(env)) throw new Fail(503, "ai_off");
   const u = await needAgreed(req, env);
@@ -1229,6 +1329,8 @@ async function route(req, env) {
 
   if (method === "POST" && path === "/v1/photos") return uploadPhoto(req, env);
   if (method === "POST" && path === "/v1/ai/describe") return aiDescribe(req, env, url);
+  if (method === "POST" && path === "/v1/ai/group") return aiGroup(req, env, url);
+  if (method === "POST" && path === "/v1/listings/batch") return createBatch(req, env, url);
   if (method === "GET" && path === "/v1/admin/ai-cost") return aiCost(req, env);
 
   if ((m = /^\/v1\/blocks\/([0-9a-f]+)$/.exec(path))) {

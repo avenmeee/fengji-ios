@@ -413,6 +413,48 @@ ok("费用有记录", r.data.calls >= 2 && r.data.usd > 0 && r.data.perCallUsd >
 for (let i = 0; i < 28; i++) await describe(aiUser.token);
 r = await describe(aiUser.token);
 ok("每人每天有上限", r.status === 429 && r.data.error === "ai_limit", r);
+// 多张照片 AI 分组
+const ai3 = await login("ai3");
+await call("POST", "/v1/me/agree", { token: ai3.token });
+const b64jpeg = Buffer.from(jpeg).toString("base64");
+const group = (token, n, q = "?consent=1") => call("POST", "/v1/ai/group" + q, { token, body: { photos: Array(n).fill(b64jpeg) } });
+r = await group(ai3.token, 5, "");
+ok("分组要先同意", r.status === 400 && r.data.error === "need_ai_consent", r);
+r = await group(ai3.token, 1);
+ok("分组至少两张", r.status === 400 && r.data.error === "bad_count", r);
+r = await group(ai3.token, 31);
+ok("分组最多 30 张", r.status === 400 && r.data.error === "bad_count", r);
+r = await group(ai3.token, 5);
+ok("分组返回格式", r.status === 200 && Array.isArray(r.data.items) && r.data.items.length === 3 && r.data.items[0].photos.join() === "0,1" && r.data.items[2].photos.join() === "4" && typeof r.data.items[0].title === "string" && r.data.items[0].cat === "furn", r);
+ok("每张只出现一次", r.data.items.flatMap(x => x.photos).sort().join() === "0,1,2,3,4", r);
+r = await group(ai3.token, 26);
+ok("分组按张数算额度，超了返回 ai_limit", r.status === 429 && r.data.error === "ai_limit", r);
+r = await group(ai3.token, 26);
+ok("超了一直是 ai_limit", r.status === 429, r);
+
+// 批量发布
+const bt = await login("bt");
+await call("POST", "/v1/me/agree", { token: bt.token });
+const btPhoto = async () => [(await call("POST", "/v1/photos", { token: bt.token, raw: jpeg })).data.key];
+const btItems = [];
+for (let i = 0; i < 3; i++) btItems.push({ ...goods, title: "批量" + i + stamp, price: 10 + i, photos: await btPhoto() });
+r = await call("POST", "/v1/listings/batch", { token: bt.token, body: { items: [btItems[0], { ...btItems[1], title: "代考" }, btItems[2]], aiConsent: true } });
+ok("违禁词逐件检查，告诉是第几件", r.status === 422 && r.data.error === "not_allowed" && r.data.index === 1, r);
+r = await call("GET", "/v1/me/listings", { token: bt.token });
+ok("有一件不行就一件都不发", r.data.items.length === 0, r);
+r = await call("POST", "/v1/listings/batch", { token: bt.token, body: { items: [btItems[0], { ...btItems[1], photos: btItems[0].photos }], aiConsent: true } });
+ok("同一张照片不能用在两件里", r.status === 400 && r.data.index === 1, r);
+r = await call("POST", "/v1/listings/batch", { token: bt.token, body: { items: btItems, aiConsent: true } });
+ok("批量发布 3 件", r.status === 201 && r.data.items.length === 3 && r.data.items[0].title === "批量0" + stamp, r);
+r = await call("GET", "/v1/admin/unscored", { token: ADMIN });
+ok("批量发的进打分队列", btItems.every(it => JSON.stringify(r.data).includes(it.title)), r.status);
+const many = [];
+for (let i = 0; i < 28; i++) many.push({ ...goods, title: "多" + i + stamp, price: 5, photos: await btPhoto() });
+r = await call("POST", "/v1/listings/batch", { token: bt.token, body: { items: many } });
+ok("每天总数有上限（3 + 28 > 30）", r.status === 429 && r.data.error === "daily_limit", r);
+r = await call("POST", "/v1/listings/batch", { token: bt.token, body: { items: many.slice(0, 27) } });
+ok("刚好到上限能发", r.status === 201 && r.data.items.length === 27, r);
+
 const ai2 = await login("ai2");
 await call("POST", "/v1/me/agree", { token: ai2.token });
 const day = new Date().toISOString().slice(0, 10);
@@ -727,7 +769,7 @@ const ob = await oPost(o2, "排序乙");
 const oOld = await oPost(o2, "排序旧");
 execSync(`npx wrangler d1 execute fengji --local --command "UPDATE listings SET bumped_at = ${Date.now() - 3 * 86400000}, score = 4 WHERE id = '${oOld.id}'"`, { stdio: "ignore" });
 await call("POST", `/v1/listings/${oa[0].id}/status`, { token: o1.token, body: { status: "off" } });
-r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent(stamp));
+r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("排序"));
 const oIds = r.data.items.map(x => x.id), oUids = r.data.items.map(x => x.uid);
 ok("新帖在旧帖前面", oIds.indexOf(ob.id) < oIds.indexOf(oOld.id) && oIds.indexOf(oa[3].id) < oIds.indexOf(oOld.id), oIds);
 ok("同一卖家不超过 2 件连着", !oUids.some((u, i) => i >= 2 && u === oUids[i - 1] && u === oUids[i - 2] && r.data.items[i].status !== "off"), oUids);
