@@ -401,7 +401,10 @@ struct PostForm: View {
                                 Chip(text: "自取", on: pickup, act: formAct) { pickup.toggle() }
                                 Chip(text: "可配送", on: deliver, act: formAct) { deliver.toggle() }
                                 if deliver {
-                                    inputLine("配送费 $", text: $deliveryFee, field: .fee, number: true)
+                                    HStack(spacing: 2) {
+                                        Text("配送费 $").font(.system(size: 17)).foregroundStyle(Theme.sub)
+                                        inputLine("0", text: $deliveryFee, field: .fee, number: true)
+                                    }
                                 }
                             }
                         }

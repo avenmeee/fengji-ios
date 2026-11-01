@@ -131,7 +131,7 @@ struct RootView: View {
         }
         .overlay(alignment: .bottom) {
             ZStack {
-                if !state.pushed.contains(state.tab) || state.onMe, !keyboardUp {
+                if !state.pushed.contains(state.tab) || state.onMe, !keyboardUp, !state.panelOpen {
                     FloatingBar()
                         .ignoresSafeArea(.keyboard)
                         .transition(.opacity)

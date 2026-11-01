@@ -36,7 +36,8 @@ struct MeView: View {
         .background(Theme.bg)
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { state.onMe = true }
-        .onDisappear { state.onMe = false }
+        .onDisappear { state.onMe = false; state.panelOpen = false }
+        .onChange(of: acting?.id) { _, id in state.panelOpen = id != nil }
         .task(id: LoadKey(version: state.version, loggedIn: state.isLoggedIn)) {
             // 从设置滑回来时内容没变，不重新查
             let key = LoadKey(version: state.version, loggedIn: state.isLoggedIn)

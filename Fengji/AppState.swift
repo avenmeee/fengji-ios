@@ -24,6 +24,8 @@ final class AppState: ObservableObject {
     private var deleteTask: Task<Void, Never>?
     /// 加号弹层开着
     @Published var plusOpen = Demo.scene == "plus-open"
+    /// 页面上开着底部弹层：底栏先收起来，免得挡住
+    @Published var panelOpen = false
     /// 按住加号拖动时，手指在哪一项上
     @Published var plusHover: PlusAction?
     /// 加号中心在屏幕上的位置，拖动时判断手指落在哪一项
