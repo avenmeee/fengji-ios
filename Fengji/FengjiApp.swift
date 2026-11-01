@@ -46,6 +46,7 @@ struct FengjiApp: App {
             .tint(Theme.tint)
             .preferredColorScheme(colorScheme)
             .scrollIndicators(.hidden)   // 全 App 不显示滚动条
+            .onOpenURL { url in Task { await state.openLink(url) } }
         }
     }
 }

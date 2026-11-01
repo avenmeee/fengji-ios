@@ -8,12 +8,9 @@ struct DetailView: View {
     @State var item: Listing
     @State private var gone = false
     @State private var editing = false
-    @State private var confirmAdminDelete = false
-    @State private var confirmBlock = false
-    @State private var choosingReason = false
     @State private var shareImage: ShareImage?
-    @State private var confirmTakedown = false
-    @State private var claiming = false
+    @State private var panel = Demo.scene == "detail-panel" || Demo.scene == "detail-report"
+    @State private var stage: PanelStage = Demo.scene == "detail-report" ? .reportWhat : .main
     @State private var page = 0
     @State private var wanting = false
     @State private var popCheck = ""
@@ -69,29 +66,8 @@ struct DetailView: View {
         .sheet(isPresented: $editing) {
             PostForm(kind: item.kind, editing: item) { item = $0 }
         }
-        .sheet(isPresented: $claiming) { ClaimView() }
         .sheet(isPresented: $wanting) { WantSheet(item: item) }
-        .confirmationDialog("举报这条", isPresented: $choosingReason, titleVisibility: .visible) {
-            ForEach(REASONS, id: \.self) { reason in
-                Button(reason) { Task { await report(reason) } }
-            }
-        }
-        .alert("删除这条？", isPresented: $confirmAdminDelete) {
-            Button("删除", role: .destructive) { Task { await adminRemove() } }
-            Button("取消", role: .cancel) {}
-        }
-        .alert("要求下架？", isPresented: $confirmTakedown) {
-            Button("下架", role: .destructive) { Task { await takedown() } }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("立刻下架，照片一起删除。")
-        }
-        .alert("屏蔽这个人？", isPresented: $confirmBlock) {
-            Button("屏蔽", role: .destructive) { Task { await block() } }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("你不会再看到他发的东西。")
-        }
+        .overlay { BottomPanel(shown: $panel) { panelContent } }
     }
 
     private var photo: some View {
@@ -205,75 +181,102 @@ struct DetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// 所有次要动作都收在这里
+    /// 所有次要动作都收在右上角，点开是自己的底部弹层
+    @ViewBuilder
     private var moreMenu: some View {
-        Menu {
-            if !gone {
-                Button("分享图片", systemImage: "photo") {
+        if !gone {
+            Button {
+                stage = .main
+                panel = true
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("更多")
+        }
+    }
+
+    /// 弹层里的几步：主菜单、举报什么、举报理由、各种确认
+    @ViewBuilder
+    private var panelContent: some View {
+        switch stage {
+        case .main:
+            VStack(spacing: 0) {
+                PanelRow(symbol: "photo", title: "分享图片") {
+                    panel = false
                     Task { shareImage = await ShareImage.make(item) }
                 }
-                Button("复制链接", systemImage: "link") {
+                PanelRow(symbol: "link", title: "复制链接") {
                     UIPasteboard.general.string = item.shareURL
-                    state.toast("链接已复制")
+                    panel = false
+                    state.toast("已复制")
                 }
-                if item.contact?.isEmpty == false {
-                    Button("打开微信", systemImage: "message") { openWeChat(copying: item.contact ?? "", click: "copy") }
-                }
-            }
-            if item.mine, !gone {
-                Button("改", systemImage: "pencil") { editing = true }
-                Button("删除", systemImage: "trash", role: .destructive) {
-                    state.softDelete(item)
-                    dismiss()
-                }
-            }
-            if item.isGroup, !gone {
-                if state.opsWechat != nil {
-                    Button("是我的，认领", systemImage: "person.badge.plus") {
-                        if state.needLogin() { claiming = true }
+                if !item.mine {
+                    PanelRow(symbol: "flag", title: "举报") { stage = item.isGroup ? .reasons : .reportWhat }
+                    if !item.isGroup {
+                        PanelRow(symbol: "hand.raised", title: "屏蔽这个人") {
+                            if state.isLoggedIn { stage = .block } else { panel = false; state.showLogin = true }
+                        }
                     }
-                    Button("没进群？复制运营微信", systemImage: "person.2") {
-                        UIPasteboard.general.string = state.opsWechat
-                        state.toast("已复制")
+                    if item.isGroup {
+                        PanelRow(symbol: "trash", title: "这是我的，下架") { stage = .takedown }
+                    }
+                    if state.isAdmin {
+                        PanelRow(symbol: "trash", title: "删除", color: Theme.warn) { stage = .adminDelete }
                     }
                 }
-                Button("要求下架", systemImage: "trash", role: .destructive) { confirmTakedown = true }
             }
-            if !item.mine, !gone {
-                Button("举报", systemImage: "flag") { choosingReason = true }
-                if !item.isGroup, item.sellerAvatar != nil {
-                    Button("举报头像", systemImage: "photo.badge.exclamationmark") {
+        case .reportWhat:
+            VStack(alignment: .leading, spacing: 0) {
+                GroupLabel(text: "举报什么").padding(.bottom, 4)
+                PanelRow(symbol: "doc.text", title: "这条帖子") { stage = .reasons }
+                PanelRow(symbol: "person.crop.circle", title: "昵称") {
+                    panel = false
+                    Task {
+                        try? await API.shared.reportName(item.id)
+                        state.toast("收到了，会尽快处理")
+                    }
+                }
+                if item.sellerAvatar != nil {
+                    PanelRow(symbol: "photo", title: "头像") {
+                        panel = false
                         Task {
                             try? await API.shared.reportAvatar(item.id)
                             state.toast("收到了，会尽快处理")
                         }
                     }
                 }
-                if !item.isGroup {
-                    Button("举报昵称", systemImage: "person.crop.circle.badge.exclamationmark") {
-                        Task {
-                            try? await API.shared.reportName(item.id)
-                            state.toast("收到了，会尽快处理")
-                        }
-                    }
-                }
-                if !item.isGroup {
-                    Button("屏蔽这个人", systemImage: "hand.raised") {
-                        if state.needLogin() { confirmBlock = true }
+            }
+        case .reasons:
+            VStack(alignment: .leading, spacing: 0) {
+                GroupLabel(text: "举报这条").padding(.bottom, 4)
+                ForEach(REASONS, id: \.self) { reason in
+                    PanelRow(symbol: "flag", title: reason) {
+                        panel = false
+                        Task { await report(reason) }
                     }
                 }
             }
-            if state.isAdmin, !item.mine, !gone {
-                Button("管理员删除", systemImage: "trash", role: .destructive) { confirmAdminDelete = true }
-            }
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.ink)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+        case .block:
+            PanelConfirm(title: "屏蔽这个人？", message: "你不会再看到他发的东西。", confirm: "屏蔽") {
+                panel = false
+                Task { await block() }
+            } onCancel: { panel = false }
+        case .takedown:
+            PanelConfirm(title: "要求下架？", message: "立刻下架，照片一起删除。", confirm: "下架") {
+                panel = false
+                Task { await takedown() }
+            } onCancel: { panel = false }
+        case .adminDelete:
+            PanelConfirm(title: "删除这条帖子？", message: "彻底删除，这条的举报一起关掉。", confirm: "删除") {
+                panel = false
+                Task { await adminRemove() }
+            } onCancel: { panel = false }
         }
-        .accessibilityLabel("更多")
     }
 
     @ViewBuilder
@@ -371,7 +374,7 @@ struct DetailView: View {
 
     private func adminRemove() async {
         do {
-            try await API.shared.delete(item.id)
+            try await API.shared.adminRemove(item.id)
             state.changed()
             state.toast("删掉了")
             dismiss()
@@ -379,6 +382,10 @@ struct DetailView: View {
             state.toast(error.localizedDescription)
         }
     }
+}
+
+private enum PanelStage {
+    case main, reportWhat, reasons, block, takedown, adminDelete
 }
 
 /// 翻照片那个横向滚动不抢点状态栏回顶部

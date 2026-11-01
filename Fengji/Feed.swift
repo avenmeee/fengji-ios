@@ -329,7 +329,7 @@ struct BuyView: View {
             }
             .reloads(model, version: state.version)
             .onChange(of: model.items) { _, items in
-                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "want-detail" || Demo.scene == "pop-check" || Demo.scene == "live-detail", !demoOpened, let first = items.first {
+                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "want-detail" || Demo.scene == "pop-check" || Demo.scene == "live-detail" || Demo.scene == "detail-panel" || Demo.scene == "detail-report", !demoOpened, let first = items.first {
                     demoOpened = true
                     path.append(first)
                 }
@@ -340,6 +340,13 @@ struct BuyView: View {
                 }
             }
             .onChange(of: path) { _, p in state.setPushed(.buy, !p.isEmpty) }
+            .onChange(of: state.linked) { _, l in
+                if let l, !l.isRent { path.append(l); state.linked = nil }
+            }
+            .onAppear {
+                // 这一页第一次出现前就点了链接
+                if let l = state.linked, !l.isRent { path.append(l); state.linked = nil }
+            }
             .onChange(of: state.meRequests) { _, _ in
                 if state.tab == .buy { path.append("me") }
             }
@@ -456,6 +463,13 @@ struct RentView: View {
                 }
             }
             .onChange(of: path) { _, p in state.setPushed(.rent, !p.isEmpty) }
+            .onChange(of: state.linked) { _, l in
+                if let l, l.isRent { path.append(l); state.linked = nil }
+            }
+            .onAppear {
+                // 这一页第一次出现前就点了链接
+                if let l = state.linked, l.isRent { path.append(l); state.linked = nil }
+            }
             .onChange(of: state.meRequests) { _, _ in
                 if state.tab == .rent { path.append("me") }
             }

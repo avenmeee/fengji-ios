@@ -189,6 +189,8 @@ final class API: @unchecked Sendable {
         return r.items
     }
     func adminStats() async throws -> Stats { try await get("/v1/admin/stats") }
+    /// 管理员下架：彻底删除，举报一起关掉
+    func adminRemove(_ listingId: String) async throws { try await act("POST", "/v1/admin/listings/\(listingId)/remove") }
     func adminRestore(_ listingId: String) async throws { try await act("POST", "/v1/admin/listings/\(listingId)/restore") }
     func adminBan(_ uid: String) async throws { try await act("POST", "/v1/admin/users/\(uid)/ban") }
 }

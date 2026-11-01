@@ -74,6 +74,7 @@ r = await call("POST", `/v1/listings/${id}/report`, { body: { reason: "其他" }
 ok("匿名能举报", r.status === 200, r);
 r = await call("GET", "/l/" + id);
 ok("分享页", r.status === 200 && Buffer.from(r.data).toString().includes("宜家书桌"), r.status);
+ok("分享页能在蜂集里打开", Buffer.from(r.data).toString().includes("fengji://l/" + id));
 r = await call("GET", "/privacy");
 ok("隐私政策页", r.status === 200 && Buffer.from(r.data).toString().includes("隐私"), r.status);
 r = await call("GET", "/support");
@@ -316,6 +317,7 @@ r = await call("GET", "/v1/listings/" + exp);
 ok("过 10 天详情也没有", r.status === 404, r);
 r = await call("GET", "/l/" + exp);
 ok("过 10 天分享页也没有", r.status === 404, r.status);
+ok("没了的分享页写已下架", Buffer.from(r.data).toString().includes("已下架"));
 await call("GET", "/__scheduled");
 await call("GET", "/cdn-cgi/handler/scheduled");
 r = await call("GET", "/p/" + expPhoto);

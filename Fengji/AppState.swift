@@ -36,6 +36,8 @@ final class AppState: ObservableObject {
     @Published private(set) var meRequests = 0
     /// 登录之后接着做的事
     private var afterLogin: (() -> Void)?
+    /// 网页上点“在蜂集里打开”：要打开的这条，买或租页看到就推进去
+    @Published var linked: Listing?
     /// 哪几页进了下一层（这时藏底栏）
     @Published private(set) var pushed: Set<AppTab> = []
 
@@ -80,6 +82,20 @@ final class AppState: ObservableObject {
     }
 
     func popToRoot() { popRequests += 1 }
+
+    /// fengji://l/<id>
+    func openLink(_ url: URL) async {
+        guard url.scheme == "fengji", url.host == "l", let id = url.pathComponents.last, id != "/" else { return }
+        do {
+            let item = try await API.shared.listing(id)
+            plusOpen = false
+            posting = nil
+            tab = item.isRent ? .rent : .buy
+            linked = item
+        } catch {
+            toast("这条已经没有了")
+        }
+    }
 
     func scrollToTop(_ tab: AppTab) {
         topTicks[tab, default: 0] += 1

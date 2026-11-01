@@ -1,10 +1,16 @@
+import CoreImage.CIFilterBuiltins
 import SwiftUI
 import UIKit
 
-/// 发到微信群的图：照片、标题、价格、地点、微信号
+/// 分享卡片：第一张照片、标题、价格，底下蜂集标志、帖子链接和二维码。不放联系方式。浅色。
 struct ShareCard: View {
     let item: Listing
     let photo: UIImage?
+
+    /// 链接去掉 https:// 好看一点
+    private var shortLink: String {
+        item.shareURL.replacingOccurrences(of: "https://", with: "")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -22,32 +28,54 @@ struct ShareCard: View {
                 Text(item.title)
                     .font(.title3.weight(.semibold))
                     .lineLimit(2)
-                Text(item.priceText + (item.isRent ? " /月" : ""))
-                    .font(.largeTitle.weight(.bold))
-                    .monospacedDigit()
-                    .foregroundStyle(item.price == 0 ? Theme.sell : Theme.ink)
-                Text(item.isRent ? [item.place, item.period].filter { !$0.isEmpty }.joined(separator: " · ") : [item.place, item.pickupText].filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.sub)
-                if item.findInGroup {
-                    Text("去 \(item.sourceGroup ?? "") 群找 \(item.sourcePoster ?? "")").font(.subheadline.weight(.semibold))
-                    Text("\(item.groupAge)发在群里").font(.footnote).foregroundStyle(Theme.sub)
-                } else if let contact = item.contact {
-                    Text("微信 " + contact).font(.subheadline.weight(.semibold))
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(item.priceText)
+                        .font(.largeTitle.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(item.price == 0 ? Theme.sell : Theme.ink)
+                    if item.isRent { Text("/月").font(.title3).foregroundStyle(Theme.sub) }
                 }
-                HStack(spacing: 6) {
-                    Hexagon().fill(Theme.accent).frame(width: 16, height: 16)
-                    Text("蜂集").font(.footnote.weight(.semibold))
+                Theme.line.frame(height: 0.5).padding(.top, 10).padding(.bottom, 8)
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            BeeIcon(level: 3, size: 24)
+                            Text("蜂集").font(.system(size: 17, weight: .bold))
+                        }
+                        Text(shortLink)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.sub)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Text("扫码看详情").font(.system(size: 12)).foregroundStyle(Theme.sub)
+                    }
+                    Spacer(minLength: 0)
+                    if let qr = QRCode.image(item.shareURL) {
+                        Image(uiImage: qr)
+                            .interpolation(.none)
+                            .resizable()
+                            .frame(width: 76, height: 76)
+                    }
                 }
-                .padding(.top, 6)
             }
             .foregroundStyle(Theme.ink)
-            .padding(16)
+            .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.bg)
         .frame(width: 390)
         .environment(\.colorScheme, .light)
+    }
+}
+
+enum QRCode {
+    static func image(_ text: String) -> UIImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(text.utf8)
+        filter.correctionLevel = "M"
+        guard let out = filter.outputImage,
+              let cg = CIContext().createCGImage(out, from: out.extent) else { return nil }
+        return UIImage(cgImage: cg)
     }
 }
 

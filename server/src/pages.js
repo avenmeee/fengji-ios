@@ -26,11 +26,12 @@ function facts(row) {
 export async function listingPage(env, url, id) {
   let row = await env.DB.prepare("SELECT * FROM listings WHERE id = ? AND status IN ('on', 'reserved')").bind(id).first();
   if (row && row.source_type === "group" && !(row.source_posted_at >= Date.now() - 10 * 86400000)) row = null;
-  if (!row) return new Response(page("蜂集", "<h1>这条已经没有了</h1>").body, { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
+  if (!row) return new Response(page("蜂集", "<h1>已下架</h1><p class=\"sub\">这条已经没有了。</p>").body, { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
   const photos = JSON.parse(row.photos).map(k => `${url.origin}/p/${k}`);
   const price = row.price === 0 ? "免费" : "$" + row.price.toLocaleString("en-US") + (row.kind === "rent" ? " /月" : "");
   const head = `<meta property="og:title" content="${esc(row.title)} ${esc(price)}"><meta property="og:description" content="${esc(row.place)}">${photos[0] ? `<meta property="og:image" content="${esc(photos[0])}">` : ""}`;
-  const app = env.APPSTORE_URL ? `<a class="btn" href="${esc(env.APPSTORE_URL)}">下载蜂集</a>` : "";
+  // 装了 App 的点“在蜂集里打开”直接进这条；没装的有商店链接时再给下载
+  const app = `<a class="btn" href="fengji://l/${esc(row.id)}">在蜂集里打开</a>` + (env.APPSTORE_URL ? ` <a class="btn" href="${esc(env.APPSTORE_URL)}">下载蜂集</a>` : "");
   return page(`${row.title} - 蜂集`, `${photos.map(p => `<img src="${esc(p)}" alt="">`).join("")}
     <h1>${esc(row.title)}</h1><div class="price">${esc(price)}</div>
     <p class="sub">${esc(facts(row))}</p>
