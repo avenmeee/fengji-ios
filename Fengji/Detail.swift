@@ -17,6 +17,7 @@ struct DetailView: View {
     @State private var popCheck = ""
     @State private var goSeller = false
     @State private var showHint = false
+    @State private var tipOpen = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 文字信息：一行一项。东西是地点和怎么拿，房子是地段、可住日期、房子情况
@@ -214,11 +215,42 @@ struct DetailView: View {
                 }
                 .padding(.top, 10)
             }
+            scamTip
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
         .padding(.bottom, 18)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 防骗：一行灰字，点开再说两三句
+    private var scamTip: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.2)) { tipOpen.toggle() }
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "exclamationmark.shield").font(.footnote)
+                    Text(item.isRent ? "先看房再交钱，到 leasing office 核实房东，看房前别交押金或申请费。" : "当面验货再付款，别提前转账。")
+                        .font(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 4)
+                    Image(systemName: tipOpen ? "chevron.up" : "chevron.down").font(.system(size: 10, weight: .semibold))
+                }
+                if tipOpen {
+                    Text("别信“先转定金才给你留着”。到账截图可以作假，以账户里实际到账为准。对方多付了让你退差价，多半是骗局。遇到可疑的，点右上角“…”举报。")
+                        .font(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 20)
+                }
+            }
+            .foregroundStyle(Theme.sub)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 14)
+        .accessibilityHint(tipOpen ? "收起" : "展开看怎么防骗")
     }
 
     /// 像抖音左滑进作者主页：手指从右往左，横着滑够远才算。自己的帖子没反应。

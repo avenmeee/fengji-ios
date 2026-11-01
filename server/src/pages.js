@@ -25,7 +25,6 @@ function facts(row) {
 
 export async function listingPage(env, url, id) {
   let row = await env.DB.prepare("SELECT * FROM listings WHERE id = ? AND status IN ('on', 'reserved')").bind(id).first();
-  if (row && row.source_type === "group" && !(row.source_posted_at >= Date.now() - 10 * 86400000)) row = null;
   if (!row) return new Response(page("蜂集", "<h1>已下架</h1><p class=\"sub\">这条已经没有了。</p>").body, { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
   const photos = JSON.parse(row.photos).map(k => `${url.origin}/p/${k}`);
   const price = row.price === 0 ? "免费" : "$" + row.price.toLocaleString("en-US") + (row.kind === "rent" ? " /月" : "");

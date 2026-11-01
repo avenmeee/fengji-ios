@@ -883,7 +883,12 @@ struct PostForm: View {
         // AI 还在认就等它一下（最多十来秒），它失败了才要手填
         if !isRent, title.trimmingCharacters(in: .whitespaces).isEmpty, let task = describeTask {
             busy = true
+            let cap = Task {
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
+                task.cancel()
+            }
             await task.value
+            cap.cancel()
             busy = false
         }
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)

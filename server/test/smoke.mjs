@@ -310,22 +310,23 @@ r = await call("POST", `/v1/listings/${chair}/takedown`, { token: ADMIN });
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "repost-" + stamp, kind: "goods", title: "小椅子", price: 2, cat: "furn", place: "monty", group: "二手群 2", poster, postedAt: Date.now() } });
 ok("下架只记这条的编号，同物换编号还能导入", r.status < 300 && r.data.skipped !== "taken_down", r);
 
-// 过期隐藏和清理
+// 群帖不再过期：过了 10 天照样在
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "exp-" + stamp, kind: "goods", title: "快过期", price: 7, cat: "furn", place: "monty", group: "二手群 1", poster, postedAt: Date.now() - 86400000, photos: [b64], photosChecked: true } });
 const exp = r.data.id;
 const expPhoto = (await call("GET", "/v1/listings/" + exp)).data.photos[0].key;
 execSync(`npx wrangler d1 execute fengji --local --command "UPDATE listings SET source_posted_at = ${Date.now() - 11 * 86400000} WHERE id = '${exp}'"`, { stdio: "ignore" });
 r = await call("GET", "/v1/listings?kind=goods&cat=furn");
-ok("过 10 天不在列表", !r.data.items.some(x => x.id === exp));
+ok("过 10 天还在列表", r.data.items.some(x => x.id === exp));
 r = await call("GET", "/v1/listings/" + exp);
-ok("过 10 天详情也没有", r.status === 404, r);
+ok("过 10 天详情还在", r.status === 200, r);
 r = await call("GET", "/l/" + exp);
-ok("过 10 天分享页也没有", r.status === 404, r.status);
-ok("没了的分享页写已下架", Buffer.from(r.data).toString().includes("已下架"));
+ok("过 10 天分享页还在", r.status === 200, r.status);
+r = await call("GET", "/l/" + "0".repeat(31) + "1");
+ok("没了的分享页写已下架", r.status === 404 && Buffer.from(r.data).toString().includes("已下架"));
 await call("GET", "/__scheduled");
 await call("GET", "/cdn-cgi/handler/scheduled");
 r = await call("GET", "/p/" + expPhoto);
-ok("定时清理删掉照片", r.status === 404, r.status);
+ok("定时任务不再删群帖照片", r.status === 200, r.status);
 
 // 认领：验证码
 const owner = await login("owner");
@@ -757,5 +758,13 @@ r = await call("GET", "/v1/listings/" + ownerAsk.id);
 ok("原帖人申请删除不自动隐藏", r.status === 200 && r.data.status === "on", r);
 r = await call("GET", "/v1/admin/reports", { token: ADMIN });
 ok("原帖人申请删除进举报列表", r.data.items.some(x => x.listingId === ownerAsk.id && x.reasons.includes("原帖人申请删除")), r);
+
+// 违禁词补的：电子烟拦，烟雾报警器不拦
+r = await call("POST", "/v1/listings", { token: o2.token, body: { ...goods, photos: [(await call("POST", "/v1/photos", { token: o2.token, raw: jpeg })).data.key], title: "电子烟" } });
+ok("电子烟拦下", r.status === 422 && r.data.error === "not_allowed", r);
+r = await call("POST", "/v1/listings", { token: o2.token, body: { ...goods, photos: [(await call("POST", "/v1/photos", { token: o2.token, raw: jpeg })).data.key], title: "烟雾报警器" } });
+ok("烟雾报警器不误伤", r.status === 201, r);
+r = await call("POST", "/v1/listings", { token: o2.token, body: { ...goods, photos: [(await call("POST", "/v1/photos", { token: o2.token, raw: jpeg })).data.key], title: "Juul pods" } });
+ok("英文 juul 拦下", r.status === 422, r);
 
 console.log(`全部通过：${n} 项`);

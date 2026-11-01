@@ -16,7 +16,7 @@ const MAX_ANON_REPORTS = 3;  // 同一条目没登录的举报最多留几条，
 const LIMITS = { post: 10, photo: 30 }, SITE_PHOTO_LIMIT = 2000;
 const MAX_LIVE_LISTINGS = 50;
 const PAGE = 40;
-const GROUP_MAX_AGE = 10 * 86400 * 1000;  // 群里搬来的超过 10 天隐藏：旧帖多半卖掉了
+const GROUP_MAX_AGE = 10 * 86400 * 1000;  // 群里发了超过 10 天的不导入：旧帖多半卖掉了。导进来的不再过期，靠排序自然沉下去
 const SOLD_SHOWN = 7 * 86400000;  // 卖完的在买、租列表里再留 7 天
 const GROUP_UID = "0".repeat(32);  // 群里搬来的条目挂在这个编号下，不对应真人
 // 导入时拦下联系方式和门牌：这类信息不能存
@@ -24,7 +24,9 @@ const CONTACT_PATTERNS = [/微信号?\s*[:：]?\s*[A-Za-z][-_A-Za-z0-9]{5,}/, /\
 const ADDRESS_PATTERN = /\b\d{1,5}\s+[A-Za-z][A-Za-z. ]*\b(st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|ct|court|way|pl|place|hwy)\b/i;
 
 // 发布前过滤。命中就不让发（规则 1.2：要有过滤）。
-const BANNED = [/约炮/, /裸聊/, /援交/, /代孕/, /枪支/, /冰毒/, /大麻/, /代写/, /代考/, /假证/, /办证/, /毕业证/, /学位证/, /学历认证/, /学位认证/, /留服认证/, /代办/, /成绩单/, /换汇/, /代换/, /换美元/, /换美金/, /换人民币/, /美元换/, /美金换/, /人民币换/, /\bdiploma\b/i, /赌博/, /博彩/, /\bescort\b/i, /\bcocaine\b/i, /\bfentanyl\b/i];
+const BANNED = [/约炮/, /裸聊/, /援交/, /代孕/, /枪支/, /冰毒/, /大麻/, /代写/, /代考/, /假证/, /办证/, /毕业证/, /学位证/, /学历认证/, /学位认证/, /留服认证/, /代办/, /成绩单/, /换汇/, /代换/, /换美元/, /换美金/, /换人民币/, /美元换/, /美金换/, /人民币换/, /\bdiploma\b/i, /赌博/, /博彩/, /\bescort\b/i, /\bcocaine\b/i, /\bfentanyl\b/i,
+  // 10-31 竞品调研补的。不单拦“烟”字，免得误伤烟雾报警器、烟灰缸
+  /电子烟/, /烟弹/, /\bvapes?\b/i, /\bjuul\b/i, /香烟/, /雪茄/, /处方药/, /代付/, /代缴/, /垫付/, /学费折扣/, /日结/];
 
 class Fail extends Error {
   constructor(status, code) { super(code); this.status = status; this.code = code; }
@@ -278,7 +280,7 @@ async function feed(req, env, url) {
   // 每页几条：默认 40；测试可以传小一点的
   const size = Math.min(PAGE, Math.max(5, Math.floor(Number(p.get("n")) || PAGE)));
   // 卖完的照样显示 7 天
-  const where = ["l.kind = ?", "(l.status IN ('on', 'reserved') OR (l.status = 'off' AND l.sold_at >= ?))", "(l.source_type != 'group' OR l.source_posted_at >= ?)"], args = [kind, now - SOLD_SHOWN, now - GROUP_MAX_AGE];
+  const where = ["l.kind = ?", "(l.status IN ('on', 'reserved') OR (l.status = 'off' AND l.sold_at >= ?))"], args = [kind, now - SOLD_SHOWN];
   if (kind === "goods" && CATS.includes(p.get("cat"))) { where.push("l.cat = ?"); args.push(p.get("cat")); }
   const unit = p.get("unit");
   if (kind === "rent" && (unit === "whole" || unit === "room")) { where.push("l.unit_type IN (?, 'both')"); args.push(unit); }
@@ -297,7 +299,6 @@ async function feed(req, env, url) {
   return json({ items: pageRows.map(r => view(r, url.origin, viewer)), next: more ? encodeNext(now, offset + size) : null });
 }
 
-const groupExpired = row => row.source_type === "group" && !(row.source_posted_at >= Date.now() - GROUP_MAX_AGE);
 
 // ---- 卖家主页：只给在架上的（在售、已预订），不带记录 ----
 // 被封的、不存在的、被我屏蔽的，打不开
@@ -321,8 +322,8 @@ async function posterPage(req, env, url, id) {
   if (row.source_type !== "group") return sellerPage(req, env, url, row.user_id);
   const viewer = await currentUser(req, env);
   const same = row.sender_hash ? ["l.sender_hash = ?", [row.sender_hash]] : ["l.sender_hash IS NULL AND l.source_poster = ? AND l.source_group = ?", [row.source_poster, row.source_group]];
-  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.source_type = 'group' AND l.status IN ('on', 'reserved', 'off') AND l.source_posted_at >= ? AND ${same[0]} ORDER BY l.status = 'off', l.bumped_at DESC, l.id DESC LIMIT 100`)
-    .bind(Date.now() - GROUP_MAX_AGE, ...same[1]).all()).results;
+  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.source_type = 'group' AND l.status IN ('on', 'reserved', 'off') AND ${same[0]} ORDER BY l.status = 'off', l.bumped_at DESC, l.id DESC LIMIT 100`)
+    .bind(...same[1]).all()).results;
   return json({
     seller: { id: null, name: row.source_poster || "群友", color: null, named: true, avatar: null, group: true, groupName: row.source_group || null },
     items: rows.map(r => view(r, url.origin, viewer))
@@ -333,7 +334,7 @@ async function oneListing(req, env, url, id) {
   const viewer = await currentUser(req, env);
   const row = await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.id = ?`).bind(id).first();
   const canSeeHidden = viewer && row && (viewer.id === row.user_id || viewer.is_admin);
-  if (!row || (row.status === "hidden" && !canSeeHidden) || groupExpired(row)) throw new Fail(404, "not_found");
+  if (!row || (row.status === "hidden" && !canSeeHidden)) throw new Fail(404, "not_found");
   if (row.status === "deleted" && !(viewer && viewer.id === row.user_id)) throw new Fail(404, "not_found");
   // 被举报后作者删掉的：只有管理员还看得到
   if (row.status === "removed" && !(viewer && viewer.is_admin)) throw new Fail(404, "not_found");
@@ -1009,8 +1010,7 @@ async function importListing(req, env) {
 
 // 每天清掉过期的群里搬来的条目和照片，不留着
 async function purgeExpired(env) {
-  const rows = (await env.DB.prepare("SELECT id, photos FROM listings WHERE source_type = 'group' AND (source_posted_at IS NULL OR source_posted_at < ?) LIMIT 200").bind(Date.now() - GROUP_MAX_AGE).all()).results;
-  await deleteRows(env, rows);
+  // 群帖不再到期删除（10-31 用户定），这里只清过期的认领码
   await env.DB.prepare("DELETE FROM claim_codes WHERE expires_at < ?").bind(Date.now()).run();
 }
 
@@ -1026,7 +1026,7 @@ async function countClick(req, env) {
 async function unscored(req, env) {
   needOperator(req, env);
   const now = Date.now();
-  const rows = (await env.DB.prepare("SELECT * FROM listings WHERE kind = 'goods' AND status IN ('on','reserved') AND score IS NULL AND (source_type != 'group' OR source_posted_at >= ?) ORDER BY bumped_at DESC LIMIT 100").bind(now - GROUP_MAX_AGE).all()).results;
+  const rows = (await env.DB.prepare("SELECT * FROM listings WHERE kind = 'goods' AND status IN ('on','reserved') AND score IS NULL ORDER BY bumped_at DESC LIMIT 100").all()).results;
   const origin = new URL(req.url).origin;
   const comps = {};
   for (const cat of new Set(rows.map(r => r.cat))) {
@@ -1122,7 +1122,7 @@ async function verifyClaim(req, env) {
   const done = await env.DB.batch([
     env.DB.prepare("UPDATE users SET sender_hash = ? WHERE id = ?").bind(senderHash, u.id),
     // 过期的不转，等定时清理
-    env.DB.prepare("UPDATE listings SET user_id = ?, contact = ?, source_type = 'claimed', updated_at = ? WHERE sender_hash = ? AND source_type = 'group' AND source_posted_at >= ?").bind(u.id, u.contact || "", now, senderHash, now - GROUP_MAX_AGE),
+    env.DB.prepare("UPDATE listings SET user_id = ?, contact = ?, source_type = 'claimed', updated_at = ? WHERE sender_hash = ? AND source_type = 'group'").bind(u.id, u.contact || "", now, senderHash),
     // 认领好了，他手里别的码都没用了
     env.DB.prepare("DELETE FROM claim_codes WHERE user_id = ?").bind(u.id)
   ]);
