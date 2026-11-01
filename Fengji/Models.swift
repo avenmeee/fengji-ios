@@ -17,6 +17,8 @@ let PLACES = ["Monty", "TP", "Mark", "大中超"]
 /// 房子地段：群里出现最多的三个
 let RENT_PLACES = ["Monty", "大中超", "四大"]
 let REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"]
+/// 群帖原帖人想删：记一条举报给管理员，不让帖子自动隐藏
+let OWNER_ASK = "原帖人申请删除"
 
 struct Photo: Codable, Hashable {
     let key: String
@@ -213,6 +215,8 @@ struct ListingPage: Codable {
 
 struct AppConfig: Codable {
     let opsWechat: String?
+    /// 原帖人想删除时加的微信
+    var contactWechat: String?
     let aiDescribe: Bool?
 }
 

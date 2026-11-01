@@ -286,7 +286,10 @@ struct DetailView: View {
                         }
                     }
                     if item.isGroup {
-                        PanelRow(symbol: "trash", title: "这是我的，下架") { stage = .takedown }
+                        PanelRow(symbol: "person.badge.minus", title: "我是原帖人，想删除") {
+                            stage = .ownerAsk
+                            Task { try? await API.shared.report(item.id, reason: OWNER_ASK) }
+                        }
                     }
                     if state.isAdmin {
                         PanelRow(symbol: "trash", title: "删除", color: Theme.warn) { stage = .adminDelete }
@@ -337,11 +340,21 @@ struct DetailView: View {
                 panel = false
                 Task { await block() }
             } onCancel: { panel = false }
-        case .takedown:
-            PanelConfirm(title: "要求下架？", message: "立刻下架，照片一起删除。", confirm: "下架") {
-                panel = false
-                Task { await takedown() }
-            } onCancel: { panel = false }
+        case .ownerAsk:
+            VStack(alignment: .leading, spacing: 12) {
+                Text("我是原帖人，想删除").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink)
+                Text(ownerAskText).font(.subheadline).foregroundStyle(Theme.sub).fixedSize(horizontal: false, vertical: true)
+                if let wx = state.contactWechat {
+                    PanelRow(symbol: "message", title: "复制微信号 " + wx) {
+                        UIPasteboard.general.string = wx
+                        state.toast("已复制")
+                    }
+                }
+                PanelRow(symbol: "envelope", title: "复制邮箱 " + Config.contactEmail) {
+                    UIPasteboard.general.string = Config.contactEmail
+                    state.toast("已复制")
+                }
+            }
         case .adminDelete:
             PanelConfirm(title: "删除这条帖子？", message: "彻底删除，这条的举报一起关掉。", confirm: "删除") {
                 panel = false
@@ -415,15 +428,9 @@ struct DetailView: View {
         }
     }
 
-    private func takedown() async {
-        do {
-            try await API.shared.takedown(item.id)
-            state.changed()
-            state.toast("已下架")
-            dismiss()
-        } catch {
-            state.toast(error.localizedDescription)
-        }
+    private var ownerAskText: String {
+        let wx = state.contactWechat.map { "加微信 \($0)，或者" } ?? ""
+        return "\(wx)发邮件到 \(Config.contactEmail)，说一下是哪条，我们 24 小时内删除。"
     }
 
     private func report(_ reason: String) async {
@@ -459,7 +466,7 @@ struct DetailView: View {
 }
 
 private enum PanelStage {
-    case main, reportWhat, reasons, block, takedown, adminDelete
+    case main, reportWhat, reasons, block, ownerAsk, adminDelete
 }
 
 /// 翻照片那个横向滚动不抢点状态栏回顶部

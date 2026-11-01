@@ -7,11 +7,12 @@ import { pushToUser } from "./push.js";
 const CATS = ["furn", "elec", "kitchen", "art", "other"];
 const CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"];
 const BUMP_EVERY = 24 * 3600 * 1000;
-const REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他"];
+const REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他", "原帖人申请删除"];
+// 原帖人申请删除：进管理员的举报列表，但不算进自动隐藏
+const OWNER_ASK = "原帖人申请删除";
 const MAX_PHOTOS = 3, MAX_RENT_PHOTOS = 9, MAX_RENT_DESC = 5000, MAX_PHOTO_BYTES = 1_500_000;
 const AUTO_HIDE_REPORTS = 3;
 const MAX_ANON_REPORTS = 3;  // 同一条目没登录的举报最多留几条，免得刷屏挤掉真举报
-const TAKEDOWNS_PER_DAY = 5;  // 群帖“这是我的，下架”每个网络每天几次
 const LIMITS = { post: 10, photo: 30 }, SITE_PHOTO_LIMIT = 2000;
 const MAX_LIVE_LISTINGS = 50;
 const PAGE = 40;
@@ -529,7 +530,7 @@ async function report(req, env, id) {
   }
   await env.DB.prepare("INSERT OR IGNORE INTO reports (id, listing_id, reporter_id, reason, note, created_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(newId(), id, u ? u.id : "anon:" + newId(), b.reason, clean(b.note, 300), Date.now()).run();
-  const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE listing_id = ? AND status = 'open' AND reporter_id NOT LIKE 'anon:%' AND reporter_id NOT LIKE 'want:%' AND reporter_id NOT LIKE 'name:%' AND reporter_id NOT LIKE 'avatar:%'").bind(id).first();
+  const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE listing_id = ? AND status = 'open' AND reporter_id NOT LIKE 'anon:%' AND reporter_id NOT LIKE 'want:%' AND reporter_id NOT LIKE 'name:%' AND reporter_id NOT LIKE 'avatar:%' AND reason != ?").bind(id, OWNER_ASK).first();
   if (c.n >= AUTO_HIDE_REPORTS) await env.DB.prepare("UPDATE listings SET status = 'hidden' WHERE id = ? AND status IN ('on', 'reserved')").bind(id).run();
   return json({ ok: true });
 }
@@ -1056,14 +1057,11 @@ async function setScores(req, env) {
   return json({ updated: done.reduce((n, r) => n + r.meta.changes, 0) });
 }
 
-// 要求下架：不用登录，立刻生效，照片一起删，留编号防再导入
+// 群帖下架：只有管理员能做（10-31 用户定：原帖人来找我们，由管理员删）。照片一起删，留编号防再导入
 async function takedown(req, env, id) {
+  await needStaff(req, env);
   const row = await env.DB.prepare("SELECT * FROM listings WHERE id = ? AND source_type = 'group'").bind(id).first();
   if (!row) throw new Fail(404, "not_found");
-  // 不用登录，所以按网络限次。只存当天加盐的哈希，不存 IP
-  const ip = req.headers.get("cf-connecting-ip") || "unknown";
-  const who = "ip:" + (await sha256(today() + ip + (env.SENDER_HASH_KEY || ""))).slice(0, 24);
-  if (await bump(env, who, "takedown") > TAKEDOWNS_PER_DAY) throw new Fail(429, "daily_limit");
   await env.DB.prepare("INSERT OR IGNORE INTO import_tombstones (source_id, created_at) VALUES (?, ?)").bind(row.source_id, Date.now()).run();
   await deleteRows(env, [row]);
   return json({ ok: true });
@@ -1153,7 +1151,7 @@ async function route(req, env) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
   let m;
   if (method === "GET" && path === "/health") return json({ ok: true });
-  if (method === "GET" && path === "/v1/config") return json({ opsWechat: env.OPS_WECHAT || null, aiDescribe: aiEnabled(env) });
+  if (method === "GET" && path === "/v1/config") return json({ opsWechat: env.OPS_WECHAT || null, contactWechat: env.CONTACT_WECHAT || null, aiDescribe: aiEnabled(env) });
   if (method === "GET" && path === "/privacy") return privacyPage(env);
   if (method === "GET" && path === "/support") return supportPage(env);
   if (method === "GET" && path === "/rules") return rulesPage(env);

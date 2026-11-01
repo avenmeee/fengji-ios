@@ -265,20 +265,24 @@ ok("详情给群和人，不给微信", r.data.sourceType === "group" && r.data.
 const gPhoto = r.data.photos[0].key;
 r = await call("GET", "/l/" + gid);
 ok("分享页写明未确认", Buffer.from(r.data).toString().includes("未经发布者确认"), r.status);
-await call("POST", `/v1/listings/${gid}/takedown`);
+await call("POST", `/v1/listings/${gid}/takedown`, { token: ADMIN });
 const imp2 = { ...imp, sourceId: "test2-" + stamp, title: "搬来的台灯二" + stamp };
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp2, photos: [b64], photosChecked: true } });
 const gid2 = r.data.id;
 const gp2 = (await call("GET", "/v1/listings/" + gid2)).data.photos[0].key;
 r = await call("POST", `/v1/listings/${gid2}/takedown`);
-ok("要求下架不用登录", r.status === 200, r);
+ok("不登录不能下架群帖", r.status === 401, r);
+r = await call("POST", `/v1/listings/${gid2}/takedown`, { token: b.token });
+ok("普通人不能下架群帖", r.status === 403, r);
+r = await call("POST", `/v1/listings/${gid2}/takedown`, { token: ADMIN });
+ok("管理员能下架群帖", r.status === 200, r);
 r = await call("GET", "/v1/listings/" + gid2);
 ok("下架立刻生效", r.status === 404, r);
 r = await call("GET", "/p/" + gp2);
 ok("下架删照片", r.status === 404, r.status);
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: imp2 });
 ok("下架的不能再导入", r.data.skipped === "taken_down", r);
-r = await call("POST", `/v1/listings/${scored.id}/takedown`);
+r = await call("POST", `/v1/listings/${scored.id}/takedown`, { token: ADMIN });
 ok("自己发的不能被要求下架", r.status === 404, r);
 
 // 超过 10 天
@@ -302,7 +306,7 @@ r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "ol
 ok("更旧的不覆盖", r.data.stale === true, r);
 r = await call("GET", "/v1/listings/" + chair);
 ok("价没变", r.data.price === 3, r);
-r = await call("POST", `/v1/listings/${chair}/takedown`);
+r = await call("POST", `/v1/listings/${chair}/takedown`, { token: ADMIN });
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "repost-" + stamp, kind: "goods", title: "小椅子", price: 2, cat: "furn", place: "monty", group: "二手群 2", poster, postedAt: Date.now() } });
 ok("下架只记这条的编号，同物换编号还能导入", r.status < 300 && r.data.skipped !== "taken_down", r);
 
@@ -363,8 +367,8 @@ r = await call("POST", `/v1/listings/${own2}/status`, { token: owner.token, body
 ok("认领后能标已售", r.data.status === "off", r);
 r = await call("GET", "/v1/listings/" + own1);
 const ownPhotos = r.data.photos.map(p => p.key);
-r = await call("POST", `/v1/listings/${own1}/takedown`);
-ok("认领后不能被别人一键下架", r.status === 404, r);
+r = await call("POST", `/v1/listings/${own1}/takedown`, { token: ADMIN });
+ok("认领后的不算群帖，不能这样下架", r.status === 404, r);
 r = await call("POST", "/v1/me/contact", { token: b.token, body: { contact: "x" } });
 ok("没认领不能设公开微信", r.status === 403, r);
 r = await call("POST", "/v1/me/contact", { token: owner.token, body: { contact: "wx_public" } });
@@ -745,5 +749,13 @@ for (let i = 0; i < 50; i++) {
   if (off === null) break;
 }
 ok("翻页不重复不漏", pages.length === new Set(pages).size && pages.length === all.length && pages.every(id => all.includes(id)), { pages: pages.length, all: all.length });
+
+// 原帖人申请删除：进举报列表，不自动隐藏
+const ownerAsk = (await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, sourceId: "ask-" + stamp, title: "原帖人要删的" + stamp } })).data;
+for (const u of [o1, o2, s1]) await call("POST", `/v1/listings/${ownerAsk.id}/report`, { token: u.token, body: { reason: "原帖人申请删除" } });
+r = await call("GET", "/v1/listings/" + ownerAsk.id);
+ok("原帖人申请删除不自动隐藏", r.status === 200 && r.data.status === "on", r);
+r = await call("GET", "/v1/admin/reports", { token: ADMIN });
+ok("原帖人申请删除进举报列表", r.data.items.some(x => x.listingId === ownerAsk.id && x.reasons.includes("原帖人申请删除")), r);
 
 console.log(`全部通过：${n} 项`);

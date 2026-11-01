@@ -13,6 +13,8 @@ final class AppState: ObservableObject {
     @Published private(set) var version = 0
     /// 运营微信，后端配置；没配是空
     @Published private(set) var opsWechat: String?
+    /// 联系我们用的微信，后端配置
+    @Published private(set) var contactWechat: String?
     /// 后端开着 AI 生成才走；关了发布页就是手填名字
     @Published private(set) var aiDescribe = false
     /// 再点底栏当前图标：各页看到加一就回顶部
@@ -167,6 +169,7 @@ final class AppState: ObservableObject {
     func loadConfig() async {
         if let c = try? await API.shared.config() {
             opsWechat = c.opsWechat
+            contactWechat = c.contactWechat
             aiDescribe = c.aiDescribe == true
         }
     }

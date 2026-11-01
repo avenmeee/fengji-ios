@@ -122,7 +122,6 @@ final class API: @unchecked Sendable {
     func setPrice(_ id: String, _ price: Int) async throws {
         let _: Listing = try await post("POST", "/v1/listings/\(id)/price", ["price": price])
     }
-    func takedown(_ id: String) async throws { try await act("POST", "/v1/listings/\(id)/takedown") }
     func want(_ id: String, message: String, contact: String) async throws {
         let _: OK = try await post("POST", "/v1/listings/\(id)/want", ["message": message, "contact": contact])
     }
