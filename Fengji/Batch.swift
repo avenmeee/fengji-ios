@@ -32,6 +32,8 @@ final class BatchModel: ObservableObject {
     @Published private(set) var publishing = false
     /// AI 用不了时的一句说明，界面显示在顶上
     @Published var notice: String?
+    /// 分组后本月 AI 还剩几条，界面交给 AppState.setAILeft
+    @Published private(set) var aiLeft: Int?
     @Published var error: String?
     /// 出错的是第几件，界面滚过去标红
     @Published var badIndex: Int?
@@ -72,7 +74,10 @@ final class BatchModel: ObservableObject {
             defer { grouping = false }
             let small = shots.compactMap { ImagePrep.forAI($0.preview) }
             do {
-                let groups = try await API.shared.group(jpegs: small, consent: consent)
+                let result = try await API.shared.group(jpegs: small, consent: consent)
+                aiLeft = result.aiLeft
+                let groups = result.items
+
                 items = groups.map { g in
                     Item(shots: g.photos.compactMap { shots.indices.contains($0) ? shots[$0].id : nil },
                          title: g.title, price: g.price.map(String.init) ?? "", cat: g.cat, cond: g.cond, priceSuggested: g.price != nil)
@@ -81,7 +86,7 @@ final class BatchModel: ObservableObject {
             } catch {
                 // AI 用不了：退回每张一件，让卖家自己填
                 eachOne()
-                notice = (error as? APIError)?.code == "ai_limit" ? "AI 今天用完了，先每张一件，自己填名字和价格。" : "AI 这会儿用不了，先每张一件，自己填名字和价格。"
+                notice = (error as? APIError)?.code == "ai_limit" ? "这个月的 AI 不够分这些照片了，下个月 1 号恢复。先每张一件，名字和价格自己填一下。" : "AI 这会儿用不了，先每张一件，名字和价格自己填一下。"
             }
         }
     }

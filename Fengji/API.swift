@@ -32,7 +32,7 @@ struct APIError: LocalizedError {
         case "not_found": return "这条已经没有了。"
         case "bad_identity": return "苹果登录没通过，再试一次。"
         case "bad_wechat": return "微信号格式不对：字母开头，6～20 位。"
-        case "ai_limit": return "AI 今天用完了，先自己填。"
+        case "ai_limit": return "这个月的 AI 用完了，下个月 1 号恢复，名字和价格自己填一下。"
         case "ai_budget", "ai_off", "ai_failed": return "AI 这会儿用不了，先自己填。"
         case "bad_count": return "照片张数不对。"
         default: return "没连上，再试一次。"
@@ -124,10 +124,10 @@ final class API: @unchecked Sendable {
     func create(_ input: ListingInput) async throws -> Listing { try await post("POST", "/v1/listings", input) }
 
     /// 多张照片让 AI 分成一件一件；照片先缩到长边 768
-    func group(jpegs: [Data], consent: Bool) async throws -> [GroupItem] {
+    func group(jpegs: [Data], consent: Bool) async throws -> GroupResult {
         let body = try JSONEncoder().encode(["photos": jpegs.map { $0.base64EncodedString() }])
         let data = try await send("POST", "/v1/ai/group" + (consent ? "?consent=1" : ""), body: body, timeout: 70)
-        return try JSONDecoder().decode(GroupResult.self, from: data).items
+        return try JSONDecoder().decode(GroupResult.self, from: data)
     }
 
     /// 一次发好几件：全过了才一起发；有一件不行，错误里带是第几件

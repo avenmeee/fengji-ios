@@ -252,6 +252,7 @@ struct GroupItem: Codable {
 
 struct GroupResult: Codable {
     let items: [GroupItem]
+    var aiLeft: Int?
 }
 
 struct ListingPage: Codable {
@@ -273,6 +274,8 @@ struct AIGuess: Codable {
     let cond: String
     /// 建议价；AI 没把握就是空
     let price: Int?
+    /// 本月 AI 还剩几条
+    var aiLeft: Int?
 }
 
 /// 收到的“想要”留言，只有卖家看得到
@@ -355,6 +358,8 @@ struct Me: Codable {
     var avatar: String?
     /// 同意过把东西的信息发给 AI
     var aiConsent: Bool?
+    /// 本月 AI 还剩几条（每人每月 50 条）
+    var aiLeft: Int?
 }
 
 struct LoginResult: Codable {

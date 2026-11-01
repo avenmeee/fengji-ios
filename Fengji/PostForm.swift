@@ -392,6 +392,7 @@ struct PostForm: View {
                                 aiHint
                             }
                             lackHint("照片", "放一张照片才能发")
+                            aiQuota
                         }
                         .padding(.vertical, 12)
                         FormDivider()
@@ -597,6 +598,17 @@ struct PostForm: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
             .accessibilityElement(children: .combine)
+        }
+    }
+
+    /// 本月 AI：剩 10 条及以下才提一句；用完了说清楚下个月 1 号恢复
+    @ViewBuilder
+    private var aiQuota: some View {
+        if state.aiDescribe || Demo.isOn, editing == nil, !isRent, let left = state.me?.aiLeft ?? (Demo.scene == "ai-low" ? 6 : (Demo.scene == "ai-out" ? 0 : nil)), left <= 10 {
+            Text(left == 0 ? "这个月的 AI 用完了，下个月 1 号恢复，名字和价格自己填一下。" : "本月 AI 还剩 \(left) 条")
+                .font(.system(size: 12.5))
+                .foregroundStyle(left == 0 ? Theme.warn : Theme.hint)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -910,11 +922,21 @@ struct PostForm: View {
 
     /// 后台让 AI 看第一张；失败就手填名字，不影响发布
     private func startDescribe(_ image: UIImage) {
-        guard state.aiDescribe, state.isLoggedIn, aiConsent, let jpeg = ImagePrep.forAI(image) else { return }
+        // 这个月用完了就不去问 AI，卖家自己填
+        guard state.aiDescribe, state.isLoggedIn, aiConsent, state.me?.aiLeft != 0, let jpeg = ImagePrep.forAI(image) else { return }
         aiLoading = true
         describeTask = Task {
             defer { aiLoading = false }
-            guard let guess = try? await API.shared.describe(jpeg: jpeg, consent: true), !Task.isCancelled else { return }
+            let result: AIGuess
+            do {
+                result = try await API.shared.describe(jpeg: jpeg, consent: true)
+            } catch {
+                if (error as? APIError)?.code == "ai_limit" { state.setAILeft(0) }
+                return
+            }
+            guard !Task.isCancelled else { return }
+            let guess = result
+            state.setAILeft(guess.aiLeft)
             if !nameTouched, title.isEmpty {
                 title = guess.name
                 aiGuessed = true

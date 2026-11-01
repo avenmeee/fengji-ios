@@ -410,9 +410,15 @@ r = await describe(aiUser.token);
 ok("同意过不用再带", r.status === 200, r);
 r = await call("GET", "/v1/admin/ai-cost", { token: ADMIN });
 ok("费用有记录", r.data.calls >= 2 && r.data.usd > 0 && r.data.perCallUsd > 0, r);
-for (let i = 0; i < 28; i++) await describe(aiUser.token);
+r = await call("GET", "/v1/me", { token: aiUser.token });
+ok("我的信息带本月 AI 还剩几条", r.data.aiLeft === 48, r);
+for (let i = 0; i < 48; i++) await describe(aiUser.token);
 r = await describe(aiUser.token);
-ok("每人每天有上限", r.status === 429 && r.data.error === "ai_limit", r);
+ok("每人每月 50 条，用完 ai_limit", r.status === 429 && r.data.error === "ai_limit", r);
+r = await call("GET", "/v1/me", { token: aiUser.token });
+ok("用完了剩 0", r.data.aiLeft === 0, r);
+r = await call("POST", "/v1/listings", { token: aiUser.token, body: { ...goods, photos: [(await call("POST", "/v1/photos", { token: aiUser.token, raw: jpeg })).data.key], title: "AI 用完照样能发" } });
+ok("AI 用完照样能发", r.status === 201, r);
 // 多张照片 AI 分组
 const ai3 = await login("ai3");
 await call("POST", "/v1/me/agree", { token: ai3.token });
@@ -427,10 +433,10 @@ ok("分组最多 30 张", r.status === 400 && r.data.error === "bad_count", r);
 r = await group(ai3.token, 5);
 ok("分组返回格式", r.status === 200 && Array.isArray(r.data.items) && r.data.items.length === 3 && r.data.items[0].photos.join() === "0,1" && r.data.items[2].photos.join() === "4" && typeof r.data.items[0].title === "string" && r.data.items[0].cat === "furn", r);
 ok("每张只出现一次", r.data.items.flatMap(x => x.photos).sort().join() === "0,1,2,3,4", r);
-r = await group(ai3.token, 26);
-ok("分组按张数算额度，超了返回 ai_limit", r.status === 429 && r.data.error === "ai_limit", r);
-r = await group(ai3.token, 26);
-ok("超了一直是 ai_limit", r.status === 429, r);
+r = await group(ai3.token, 30);
+ok("分组按张数算额度，返回还剩几条", r.status === 200 && r.data.aiLeft === 15, r);
+r = await group(ai3.token, 16);
+ok("这个月不够了返回 ai_limit", r.status === 429 && r.data.error === "ai_limit", r);
 
 // 批量发布
 const bt = await login("bt");

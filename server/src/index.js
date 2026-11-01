@@ -881,7 +881,13 @@ async function saveDevice(req, env) {
 }
 
 // ---- 发布时 AI 看照片。Worker 变量 AI_DESCRIBE 关掉，App 自动变手填 ----
-const AI_PER_DAY = 30;
+// 每人每月 50 条，按自然月；一张照片算一条（11-01 用户定）。用完照样能发，只是 AI 不帮忙填
+const AI_PER_MONTH = 50;
+async function userMonthCount(env, userId, what) {
+  const r = await env.DB.prepare("SELECT COALESCE(SUM(n), 0) AS n FROM daily_counts WHERE user_id = ? AND what = ? AND day LIKE ?").bind(userId, what, today().slice(0, 7) + "%").first();
+  return r.n;
+}
+const aiLeftOf = async (env, userId) => Math.max(0, AI_PER_MONTH - await userMonthCount(env, userId, "ai_describe"));
 let priceRefs = null;  // 参考表不常变，存在实例里
 const aiEnabled = env => env.AI_DESCRIBE === "on" && (!!env.ANTHROPIC_API_KEY || env.AI_MOCK === "1");
 
@@ -917,8 +923,8 @@ async function aiGroup(req, env, url) {
     if (!(bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)) throw new Fail(415, "not_jpeg");
     return bytes;
   });
-  if (await dailyCount(env, u.id, "ai_describe") + images.length > AI_PER_DAY) throw new Fail(429, "ai_limit");
-  if (await monthSum(env, "ai_microusd") >= Number(env.AI_MONTHLY_USD || 5) * 1e6) throw new Fail(503, "ai_budget");
+  if (await userMonthCount(env, u.id, "ai_describe") + images.length > AI_PER_MONTH) throw new Fail(429, "ai_limit");
+  if (await monthSum(env, "ai_microusd") >= Number(env.AI_MONTHLY_USD || 40) * 1e6) throw new Fail(503, "ai_budget");
   let r;
   try {
     if (!priceRefs) priceRefs = (await env.DB.prepare("SELECT item, cat, n, median, low, high FROM price_refs ORDER BY n DESC, item").all()).results;
@@ -944,7 +950,7 @@ async function aiGroup(req, env, url) {
     if (!used.has(i)) items.push({ photos: [i], title: "", price: null, cat: null, cond: null });
   }
   items.sort((a, b2) => a.photos[0] - b2.photos[0]);
-  return json({ items });
+  return json({ items, aiLeft: await aiLeftOf(env, u.id) });
 }
 
 // 一次发好几件：先逐件检查，全过了才一起写进去。任何一件不行，返回是第几件
@@ -1003,8 +1009,9 @@ async function aiDescribe(req, env, url) {
   const bytes = new Uint8Array(await req.arrayBuffer());
   if (bytes.length > 500_000) throw new Fail(413, "photo_too_big");
   if (!(bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)) throw new Fail(415, "not_jpeg");
-  if (await bump(env, u.id, "ai_describe") > AI_PER_DAY) throw new Fail(429, "ai_limit");
-  if (await monthSum(env, "ai_microusd") >= Number(env.AI_MONTHLY_USD || 5) * 1e6) throw new Fail(503, "ai_budget");
+  if (await userMonthCount(env, u.id, "ai_describe") >= AI_PER_MONTH) throw new Fail(429, "ai_limit");
+  await bump(env, u.id, "ai_describe");
+  if (await monthSum(env, "ai_microusd") >= Number(env.AI_MONTHLY_USD || 40) * 1e6) throw new Fail(503, "ai_budget");
   let r;
   try {
     if (!priceRefs) priceRefs = (await env.DB.prepare("SELECT item, cat, n, median, low, high FROM price_refs ORDER BY n DESC, item").all()).results;
@@ -1018,13 +1025,13 @@ async function aiDescribe(req, env, url) {
   await bumpBy(env, "*", "ai_microusd", r.microUsd);
   await bump(env, "*", "ai_describe");
   const price = Number.isInteger(r.price) && r.price >= 0 && r.price <= 100000 ? r.price : null;
-  return json({ name: clean(r.name, 40), cat: r.cat, cond: r.cond, price });
+  return json({ name: clean(r.name, 40), cat: r.cat, cond: r.cond, price, aiLeft: await aiLeftOf(env, u.id) });
 }
 
 async function aiCost(req, env) {
   needOperator(req, env);
   const calls = await monthSum(env, "ai_describe"), micro = await monthSum(env, "ai_microusd");
-  return json({ month: today().slice(0, 7), calls, usd: micro / 1e6, perCallUsd: calls ? micro / 1e6 / calls : null, budgetUsd: Number(env.AI_MONTHLY_USD || 5) });
+  return json({ month: today().slice(0, 7), calls, usd: micro / 1e6, perCallUsd: calls ? micro / 1e6 / calls : null, budgetUsd: Number(env.AI_MONTHLY_USD || 40) });
 }
 
 // ---- 后台接口：导入、打分。用 ADMIN_TOKEN，不走用户登录 ----
@@ -1292,7 +1299,10 @@ async function route(req, env) {
   if (method === "POST" && path === "/v1/auth/dev") return devLogin(req, env);
   if (method === "POST" && path === "/v1/auth/logout") return logout(req, env);
   if (method === "POST" && path === "/v1/me/agree") return agree(req, env);
-  if (method === "GET" && path === "/v1/me") return json(meOf(await needUser(req, env)));
+  if (method === "GET" && path === "/v1/me") {
+    const u = await needUser(req, env);
+    return json({ ...meOf(u), aiLeft: await aiLeftOf(env, u.id) });
+  }
   if (method === "PATCH" && path === "/v1/me") return updateProfile(req, env);
   if (method === "POST" && path === "/v1/me/avatar") return uploadAvatar(req, env);
   if (method === "DELETE" && path === "/v1/me/avatar") return removeAvatar(req, env);

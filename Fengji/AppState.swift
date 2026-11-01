@@ -198,6 +198,13 @@ final class AppState: ObservableObject {
         Notifier.refresh()
     }
 
+    /// AI 用了几条后，把剩的数记下来，发布页好提示
+    func setAILeft(_ n: Int?) {
+        guard let n, var m = me else { return }
+        m.aiLeft = n
+        me = m
+    }
+
     func setProfile(_ value: Me) {
         me = value
         changed()
