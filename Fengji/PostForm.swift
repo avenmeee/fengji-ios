@@ -187,6 +187,14 @@ struct PostForm: View {
         _price = State(initialValue: source.map { String($0.price) } ?? (filled ? (isRent ? "950" : "25") : ""))
         var startPhotos = (editing?.photos ?? []).map { FormPhoto.existing($0) }
         if filled { startPhotos = (Demo.sampleListing?.photos ?? []).map { FormPhoto.existing($0) } }
+        #if DEBUG
+        if Demo.scene == "form-many" {
+            startPhotos = ["a1", "a2", "b1", "c1", "d1", "e1", "a3"].compactMap { n in
+                let data = DemoServer.jpeg(n)
+                return UIImage(data: data).map { .fresh(id: UUID(), jpeg: data, preview: $0) }
+            }
+        }
+        #endif
         _photos = State(initialValue: startPhotos)
         let savedContact = source?.contact ?? UserDefaults.standard.string(forKey: "contact") ?? (filled ? "wx_demo1" : "")
         _contact = State(initialValue: savedContact)
@@ -267,7 +275,7 @@ struct PostForm: View {
     private var isRent: Bool { kind == "rent" }
     /// 只留蜂蜜一个强调色（11-01 统一重做）
     private var formAct: Act { .buy }
-    private var maxPhotos: Int { isRent ? 9 : 3 }
+    private var maxPhotos: Int { BatchModel.maxPhotos }
     private var tile: CGFloat { 68 }
 
     var body: some View {
@@ -405,7 +413,7 @@ struct PostForm: View {
         if how == .allOne {
             // 都是同一件：回原来的发布页
             let first = batch.shots.first
-            photos = batch.shots.prefix(maxPhotos).map { .fresh(id: UUID(), jpeg: $0.jpeg, preview: $0.preview) }
+            photos = batch.shots.map { .fresh(id: UUID(), jpeg: $0.jpeg, preview: $0.preview) }
             batch.reset()
             if let first { startDescribe(first.preview) }
             return
@@ -489,10 +497,15 @@ struct PostForm: View {
                     GroupHeader(title: "必填", note: "照片、名字、价格")
                     FormCard {
                         VStack(alignment: .leading, spacing: 8) {
-                            HStack(alignment: .center, spacing: 8) {
-                                goodsPhotos
-                                Spacer(minLength: 0)
-                                aiHint
+                            if photos.count < 3 {
+                                HStack(alignment: .center, spacing: 8) {
+                                    goodsPhotos
+                                    Spacer(minLength: 0)
+                                    aiHint
+                                }
+                            } else {
+                                // 照片多了折行，和房子一样
+                                FlowLayout(spacing: 8) { goodsPhotos }
                             }
                             lackHint("照片", "放一张照片才能发")
                             aiQuota
@@ -625,7 +638,7 @@ struct PostForm: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("拍照")
             }
-            PhotosPicker(selection: $picked, maxSelectionCount: canBatch ? BatchModel.maxPhotos : maxPhotos, matching: .images) {
+            PhotosPicker(selection: $picked, maxSelectionCount: maxPhotos, matching: .images) {
                 photoTile("photo.on.rectangle")
             }
             .accessibilityLabel("相册")
@@ -1113,12 +1126,24 @@ struct PostForm: View {
         busy = true
         defer { busy = false }
         do {
-            var keys: [String] = []
-            for photo in photos {
-                switch photo {
-                case .existing(let e): keys.append(e.key)
-                case .fresh(_, let jpeg, _): keys.append(try await API.shared.upload(jpeg: jpeg))
+            // 照片多：一次传四张，顺序不变
+            let list = photos
+            var keys = list.map { photo -> String in
+                if case .existing(let e) = photo { return e.key }
+                return ""
+            }
+            let fresh = list.indices.filter { keys[$0].isEmpty }
+            var start = 0
+            while start < fresh.count {
+                try await withThrowingTaskGroup(of: (Int, String).self) { g in
+                    for i in fresh[start..<min(start + 4, fresh.count)] {
+                        if case .fresh(_, let jpeg, _) = list[i] {
+                            g.addTask { (i, try await API.shared.upload(jpeg: jpeg)) }
+                        }
+                    }
+                    for try await (i, key) in g { keys[i] = key }
                 }
+                start += 4
             }
             var input = ListingInput(kind: kind, title: t, price: money, place: isRent || pickup ? p : "", desc: desc.trimmingCharacters(in: .whitespacesAndNewlines), contact: c, photos: keys)
             let day: (Date?) -> String? = { $0.map { Self.dayFormat.string(from: $0) } }

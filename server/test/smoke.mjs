@@ -144,8 +144,14 @@ r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, unitTy
 ok("整套或单间必选", r.status === 400 && r.data.error === "need_unit", r);
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, photos: [] } });
 ok("房源要有照片", r.status === 400 && r.data.error === "need_photo", r);
-r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, photos: Array(10).fill(rent.photos[0]) } });
-ok("房源最多 9 张", r.status === 400 && r.data.error === "too_many_photos", r);
+r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, photos: Array(31).fill(rent.photos[0]) } });
+ok("房源最多 30 张", r.status === 400 && r.data.error === "too_many_photos", r);
+r = await call("POST", "/v1/listings", { token: b.token, body: { ...goods, photos: Array(31).fill(rent.photos[0]) } });
+ok("东西最多 30 张", r.status === 400 && r.data.error === "too_many_photos", r);
+r = await call("POST", "/v1/listings", { token: b.token, body: { ...goods, photos: Array(30).fill(rent.photos[0]) } });
+ok("同一件能放 30 张", r.status === 201 && r.data.photos.length === 30, r);
+r = await call("PUT", "/v1/listings/" + r.data.id, { token: b.token, body: { ...goods, title: "改过的 30 张", photos: Array(30).fill(rent.photos[0]) } });
+ok("30 张也能改", r.status === 200 && r.data.title === "改过的 30 张", r);
 r = await call("POST", "/v1/listings", { token: b.token, body: { ...rent, photos: await rentPhoto(), to: "", longTerm: true, furnished: true } });
 ok("长租", r.status === 201 && r.data.longTerm === true && r.data.furnished === true && r.data.to === null, r);
 await call("DELETE", "/v1/listings/" + r.data.id, { token: b.token });

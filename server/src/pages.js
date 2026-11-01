@@ -31,7 +31,7 @@ export async function listingPage(env, url, id) {
   const head = `<meta property="og:title" content="${esc(row.title)} ${esc(price)}"><meta property="og:description" content="${esc(row.place)}">${photos[0] ? `<meta property="og:image" content="${esc(photos[0])}">` : ""}`;
   // 装了 App 的点“在蜂集里打开”直接进这条；没装的有商店链接时再给下载
   const app = `<a class="btn" href="fengji://l/${esc(row.id)}">在蜂集里打开</a>` + (env.APPSTORE_URL ? ` <a class="btn" href="${esc(env.APPSTORE_URL)}">下载蜂集</a>` : "");
-  return page(`${row.title} - 蜂集`, `${photos.map(p => `<img src="${esc(p)}" alt="">`).join("")}
+  return page(`${row.title} - 蜂集`, `${photos.map(p => `<img src="${esc(p)}" alt="" loading="lazy">`).join("")}
     <h1>${esc(row.title)}</h1><div class="price">${esc(price)}</div>
     <p class="sub">${esc(facts(row))}</p>
     ${row.descr ? `<p>${esc(row.descr)}</p>` : ""}

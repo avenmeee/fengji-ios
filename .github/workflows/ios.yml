@@ -150,6 +150,7 @@ jobs:
           shot "65-认领" claim light
           shot "66-认领好了" claim-done light
           shot "67-发布成功" posted-3 light
+          shot "89-照片多" form-many light
           shot "90-这些照片是" batch-choose light
           shot "91-这些照片是-深" batch-choose dark
           shot "92-正在认" batch-recognize light

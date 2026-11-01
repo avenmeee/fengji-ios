@@ -32,8 +32,6 @@ final class BatchModel: ObservableObject {
     }
 
     static let maxPhotos = 30
-    /// 和普通发布一样，一件最多 3 张
-    static let maxPerItem = 3
     static let aiFailed = "AI 没认出来，自己填一下名字和价格"
     static let aiOut = "这个月的 AI 用完了，下个月 1 号恢复，名字和价格自己填一下"
 
@@ -89,8 +87,8 @@ final class BatchModel: ObservableObject {
 
     /// 再加几张照片到这一件
     func attach(_ datas: [Data], to id: UUID) async {
-        guard let it = item(id) else { return }
-        let ids = await add(Array(datas.prefix(Self.maxPerItem - it.shots.count)))
+        guard item(id) != nil else { return }
+        let ids = await add(datas)
         if let i = items.firstIndex(where: { $0.id == id }) { items[i].shots += ids }
     }
 
@@ -231,10 +229,9 @@ final class BatchModel: ObservableObject {
 
     // MARK: - 确认页上的改动
 
-    /// 照片挪到另一件；原来那件空了就去掉。一件满 3 张就挪不进去
+    /// 照片挪到另一件；原来那件空了就去掉
     func move(_ shot: UUID, to target: UUID) {
-        guard let from = items.firstIndex(where: { $0.shots.contains(shot) }), let to = items.firstIndex(where: { $0.id == target }), from != to,
-              items[to].shots.count < Self.maxPerItem else { return }
+        guard let from = items.firstIndex(where: { $0.shots.contains(shot) }), let to = items.firstIndex(where: { $0.id == target }), from != to else { return }
         items[from].shots.removeAll { $0 == shot }
         items[to].shots.append(shot)
         if items[from].shots.isEmpty { items.remove(at: from) }

@@ -40,7 +40,7 @@ struct BatchChoosePanel: View {
                 FormDivider()
                 row(.eachOne, icon: "square.grid.2x2", title: "每张一件", note: "一张照片发一件")
                 FormDivider()
-                row(.allOne, icon: "photo", title: "都是同一件", note: batch.shots.count > BatchModel.maxPerItem ? "一件最多 \(BatchModel.maxPerItem) 张，只放前 \(BatchModel.maxPerItem) 张" : "同一件东西，拍了几个角度")
+                row(.allOne, icon: "photo", title: "都是同一件", note: "同一件东西，拍了几个角度")
             }
             .background(Theme.bg, in: RoundedRectangle(cornerRadius: 10))
             .padding(7)
@@ -193,7 +193,7 @@ struct BatchFlow: View {
             // AI 没认出来：光标停在第一件的名字上
             if !on, batch.notice != nil, let first = batch.items.first { focus = .name(first.id) }
         }
-        .photosPicker(isPresented: $showAdd, selection: $addPicked, maxSelectionCount: max(1, BatchModel.maxPerItem - (addTo.flatMap { batch.item($0)?.shots.count } ?? 0)), matching: .images)
+        .photosPicker(isPresented: $showAdd, selection: $addPicked, maxSelectionCount: max(1, BatchModel.maxPhotos - batch.shots.count), matching: .images)
         .onChange(of: addPicked) { _, picked in
             guard !picked.isEmpty, let addTo else { return }
             Task {
@@ -285,7 +285,7 @@ struct BatchFlow: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(item.shots, id: \.self) { photoTile($0) }
-                    if item.shots.count < BatchModel.maxPerItem {
+                    if batch.shots.count < BatchModel.maxPhotos {
                         Button {
                             addTo = item.id
                             showAdd = true
@@ -597,8 +597,6 @@ struct BatchFlow: View {
     }
 
     private func moveRow(_ it: BatchModel.Item, shot: UUID, current: Bool) -> some View {
-        let full = !current && it.shots.count >= BatchModel.maxPerItem
-        let off = current || full
         return Button {
             batch.move(shot, to: it.id)
             moving = nil
@@ -615,19 +613,19 @@ struct BatchFlow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(it.title.isEmpty ? "还没名字" : it.title).font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
-                    Text(current ? "现在在这一件" : (full ? "满了，一件最多 \(BatchModel.maxPerItem) 张" : "\(it.shots.count) 张照片")).font(.system(size: 13)).foregroundStyle(Theme.hint)
+                    Text(current ? "现在在这一件" : "\(it.shots.count) 张照片").font(.system(size: 13)).foregroundStyle(Theme.hint)
                 }
                 Spacer(minLength: 4)
-                if !off {
+                if !current {
                     Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.hint)
                 }
             }
             .padding(.horizontal, 12)
             .frame(height: 66)
-            .opacity(off ? 0.45 : 1)
+            .opacity(current ? 0.45 : 1)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(off)
+        .disabled(current)
     }
 }

@@ -110,7 +110,8 @@ struct DetailView: View {
 
     /// 照片：一律 4:5 居中裁切，每张装进一样的卡纸；点开看原图比例
     private var photos: some View {
-        VStack(spacing: 12) {
+        // 照片多：滑到才下载
+        LazyVStack(spacing: 12) {
             ForEach(Array((item.photos.isEmpty ? [0] : Array(item.photos.indices)).enumerated()), id: \.offset) { _, i in
                 Button { if !item.photos.isEmpty { viewing = PhotoIndex(index: i) } } label: {
                     Color.clear
@@ -786,7 +787,11 @@ struct PhotoViewer: View {
             Color.black.ignoresSafeArea()
             TabView(selection: $page) {
                 ForEach(item.photos.indices, id: \.self) { i in
-                    ZoomablePhoto(item: item, index: i).tag(i)
+                    // 只留当前和左右各一张，别一次全下
+                    Group {
+                        if abs(i - page) <= 1 { ZoomablePhoto(item: item, index: i) } else { Color.black }
+                    }
+                    .tag(i)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: item.photos.count > 1 ? .always : .never))

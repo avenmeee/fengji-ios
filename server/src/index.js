@@ -10,7 +10,7 @@ const BUMP_EVERY = 24 * 3600 * 1000;
 const REASONS = ["违规内容", "虚假信息", "骚扰或诈骗", "其他", "原帖人申请删除"];
 // 原帖人申请删除：进管理员的举报列表，但不算进自动隐藏
 const OWNER_ASK = "原帖人申请删除";
-const MAX_PHOTOS = 3, MAX_RENT_PHOTOS = 9, MAX_RENT_DESC = 5000, MAX_PHOTO_BYTES = 1_500_000;
+const MAX_PHOTOS = 30, MAX_RENT_PHOTOS = 30, MAX_RENT_DESC = 5000, MAX_PHOTO_BYTES = 1_500_000;
 const AUTO_HIDE_REPORTS = 3;
 const MAX_ANON_REPORTS = 3;  // 同一条目没登录的举报最多留几条，免得刷屏挤掉真举报
 // 发布每人每天 30 条：一次批量最多 30 张照片，分出来最多 30 件，得放得下（11-01 用户定，从 10 放宽）
@@ -455,7 +455,8 @@ async function bumpListing(req, env, url, id) {
 }
 
 async function removePhotos(env, keys) {
-  if (keys.length) await env.PHOTOS.delete(keys);
+  // R2 一次最多删 1000 个
+  for (let i = 0; i < keys.length; i += 1000) await env.PHOTOS.delete(keys.slice(i, i + 1000));
 }
 
 async function deleteRows(env, rows) {
@@ -940,8 +941,7 @@ async function aiGroup(req, env, url) {
   // 收拾 AI 的结果：编号要在范围内、每张只用一次；漏掉的每张自成一件，名字空着让卖家填
   const used = new Set(), items = [];
   for (const it of r.items || []) {
-    // 一件最多 3 张，多出来的下面自成一件
-    const photos = [...new Set(it.photos || [])].filter(i => Number.isInteger(i) && i >= 0 && i < images.length && !used.has(i)).slice(0, MAX_PHOTOS);
+    const photos = [...new Set(it.photos || [])].filter(i => Number.isInteger(i) && i >= 0 && i < images.length && !used.has(i));
     if (!photos.length) continue;
     photos.forEach(i => used.add(i));
     const price = Number.isInteger(it.price) && it.price >= 0 && it.price <= 100000 ? it.price : null;
