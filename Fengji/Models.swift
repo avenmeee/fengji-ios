@@ -196,7 +196,7 @@ struct Listing: Codable, Identifiable, Hashable {
             if let end = Self.day(leaseEnd) { other.append("租约到 \(end)") }
             if let deposit { other.append("押金 $\(deposit)") }
             if let appFee { other.append("申请费 $\(appFee)") }
-            rows = [("house", "类型", unit), ("mappin.and.ellipse", "地段", place), ("calendar", "可住", period),
+            rows = [("house", "类型", unit), ("mappin", "地段", place), ("calendar", "可住", period),
                     ("bed.double", "房间", roomType ?? ""), ("info.circle", "其他", other.joined(separator: " · "))]
         } else {
             var dates: [String] = []
@@ -206,7 +206,7 @@ struct Listing: Codable, Identifiable, Hashable {
             if delivery == "deliver" || delivery == "both" {
                 send = deliveryFee == nil ? "可以送" : (deliveryFee == 0 ? "可以送，免配送费" : "可以送，配送费 $\(deliveryFee ?? 0)")
             }
-            rows = [("mappin.and.ellipse", delivery == "deliver" ? "地点" : "自取", place), ("calendar", "日期", dates.joined(separator: " · ")), ("box.truck", "送货", send)]
+            rows = [("mappin", delivery == "deliver" ? "地点" : "自取", place), ("calendar", "日期", dates.joined(separator: " · ")), ("box.truck", "送货", send)]
         }
         return rows.filter { !$0.value.isEmpty }
     }
