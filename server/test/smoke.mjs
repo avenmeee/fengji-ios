@@ -163,7 +163,7 @@ r = await call("POST", `/v1/listings/${rid}/bump`, { token: b.token });
 ok("刚发不能擦亮", r.status === 429 && r.data.error === "too_soon", r);
 r = await call("POST", "/v1/listings", { token: c.token, body: { ...goods, photos: await cPhoto(), title: "厨具一套", cat: "kitchen" } });
 const older = r.data.id;
-ok("厨具家电分类", r.status === 201 && r.data.cat === "kitchen", r);
+ok("厨具分类", r.status === 201 && r.data.cat === "kitchen", r);
 r = await call("POST", `/v1/listings/${older}/bump`, { token: a.token });
 ok("别人不能擦亮", r.status === 401 || r.status === 403, r);
 r = await call("DELETE", "/v1/listings/" + rid, { token: c.token });

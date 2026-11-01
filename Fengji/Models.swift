@@ -2,7 +2,7 @@ import Foundation
 
 typealias Option = (key: String, label: String)
 
-let CATS: [Option] = [("furn", "家具"), ("elec", "电子"), ("kitchen", "厨具家电"), ("art", "画材")]  // 后端还有 other，界面不显示
+let CATS: [Option] = [("furn", "家具"), ("elec", "电子"), ("kitchen", "厨具"), ("art", "画材")]  // 后端还有 other，界面不显示
 let ALL_OPTION: Option = ("all", "全部")
 
 func plainOptions(_ list: [String]) -> [Option] {
