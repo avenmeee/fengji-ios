@@ -36,11 +36,11 @@ struct BatchChoosePanel: View {
                 }
             }
             VStack(spacing: 0) {
-                row(.ai, icon: "sparkle", title: "AI 帮我分", note: aiEnough ? "认出是几件，照片分好，名字价格填好" : "这个月的 AI 不够分这些照片了", rec: aiEnough, enabled: aiEnough)
+                row(.ai, icon: "sparkle", title: String(localized: "AI 帮我分"), note: aiEnough ? String(localized: "认出是几件，照片分好，名字价格填好") : String(localized: "这个月的 AI 不够分这些照片了"), rec: aiEnough, enabled: aiEnough)
                 FormDivider()
-                row(.eachOne, icon: "square.grid.2x2", title: "每张一件", note: "一张照片发一件")
+                row(.eachOne, icon: "square.grid.2x2", title: String(localized: "每张一件"), note: String(localized: "一张照片发一件"))
                 FormDivider()
-                row(.allOne, icon: "photo", title: "都是同一件", note: "同一件东西，拍了几个角度")
+                row(.allOne, icon: "photo", title: String(localized: "都是同一件"), note: String(localized: "同一件东西，拍了几个角度"))
             }
             .background(Theme.bg, in: RoundedRectangle(cornerRadius: 10))
             .padding(7)
@@ -128,7 +128,7 @@ private struct BatchRecognizing: View {
             .frame(height: 340)
             .padding(.top, 60)
             Text("正在认东西…").font(.system(size: 24, weight: .bold)).foregroundStyle(Theme.ink)
-            Text("\(batch.shots.count) 张照片，" + (batch.shots.count > 15 ? "可能要半分钟" : "一般十几秒"))
+            Text(String(localized: "\(batch.shots.count) 张照片，") + (batch.shots.count > 15 ? String(localized: "可能要半分钟") : String(localized: "一般十几秒")))
                 .font(.system(size: 15)).foregroundStyle(Theme.sub)
             Spacer()
             Button("取消", action: cancel)
@@ -234,7 +234,7 @@ struct BatchFlow: View {
                         card(item).id(item.id)
                     }
                     if !batch.items.isEmpty {
-                        GroupHeader(title: "这几件都一样的", note: "改一处 \(batch.items.count) 件一起改").padding(.top, 14)
+                        GroupHeader(title: String(localized: "这几件都一样的"), note: String(localized: "改一处 \(batch.items.count) 件一起改")).padding(.top, 14)
                         sharedCard
                     }
                     if let error = batch.error {
@@ -262,7 +262,7 @@ struct BatchFlow: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text(batch.aiGrouped ? "认出 \(batch.items.count) 件" : "\(batch.items.count) 件")
+                Text(batch.aiGrouped ? String(localized: "认出 \(batch.items.count) 件") : String(localized: "\(batch.items.count) 件"))
                     .font(.system(size: 28, weight: .bold)).foregroundStyle(Theme.ink)
                 Spacer()
                 Button("不发了") { askExit = true }
@@ -270,7 +270,7 @@ struct BatchFlow: View {
                     .foregroundStyle(Theme.sub)
                     .frame(minHeight: 44)
             }
-            Text(batch.notice != nil ? "点照片可以挪到别的件" : "名字、价格是 AI 填的，都能直接改。点照片可以挪到别的件")
+            Text(batch.notice != nil ? String(localized: "点照片可以挪到别的件") : String(localized: "名字、价格是 AI 填的，都能直接改。点照片可以挪到别的件"))
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.sub)
                 .lineLimit(2)
@@ -379,7 +379,7 @@ struct BatchFlow: View {
         let lack = tried && BatchModel.noTitle(item)
         let loading = batch.describing.contains(item.id) && item.title.isEmpty
         HStack(spacing: 6) {
-            TextField(loading ? "AI 正在认" : "名字", text: titleBinding(item.id))
+            TextField(loading ? String(localized: "AI 正在认") : String(localized: "名字"), text: titleBinding(item.id))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Theme.ink)
                 .lineLimit(1)
@@ -414,30 +414,30 @@ struct BatchFlow: View {
 
     private var sharedCard: some View {
         FormCard {
-            FieldBlock(label: "取货方式") {
+            FieldBlock(label: String(localized: "取货方式")) {
                 HStack(spacing: 8) {
-                    Chip(text: "自取", on: batch.pickup, act: .buy) { batch.pickup.toggle() }
-                    Chip(text: "可配送", on: batch.deliver, act: .buy) { batch.deliver.toggle() }
+                    Chip(text: String(localized: "自取"), on: batch.pickup, act: .buy) { batch.pickup.toggle() }
+                    Chip(text: String(localized: "可配送"), on: batch.deliver, act: .buy) { batch.deliver.toggle() }
                 }
             }
             if batch.deliver {
                 FormDivider()
-                FieldBlock(label: "配送费") {
+                FieldBlock(label: String(localized: "配送费")) {
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text("$").font(.system(size: 17)).foregroundStyle(batch.deliveryFee.isEmpty ? Theme.hint : Theme.ink)
-                        line("0，不收就空着", $batch.deliveryFee, .fee).keyboardType(.numberPad)
+                        line(String(localized: "0，不收就空着"), $batch.deliveryFee, .fee).keyboardType(.numberPad)
                     }
                 }
             }
             if batch.pickup {
                 FormDivider()
-                FieldBlock(label: "自取地点") { line("比如 Monty 楼下", $batch.place, .place) }
+                FieldBlock(label: String(localized: "自取地点")) { line(String(localized: "比如 Monty 楼下"), $batch.place, .place) }
             }
             FormDivider()
-            FieldBlock(label: "方便的时间") { line("比如 工作日晚上、周末", $batch.availTime, .time) }
+            FieldBlock(label: String(localized: "方便的时间")) { line(String(localized: "比如 工作日晚上、周末"), $batch.availTime, .time) }
             FormDivider()
-            FieldBlock(label: "微信号", hint: "填了别人能看到") {
-                line("微信号", $batch.contact, .contact)
+            FieldBlock(label: String(localized: "微信号"), hint: String(localized: "填了别人能看到")) {
+                line(String(localized: "微信号"), $batch.contact, .contact)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
@@ -461,7 +461,7 @@ struct BatchFlow: View {
             } label: {
                 HStack(spacing: 8) {
                     if batch.publishing { HoneyLoader(size: 22) }
-                    Text(batch.publishing ? "正在发" : "发布 \(batch.items.count) 件").lineLimit(1)
+                    Text(batch.publishing ? String(localized: "正在发") : String(localized: "发布 \(batch.items.count) 件")).lineLimit(1)
                 }
             }
             .buttonStyle(PrimaryButtonStyle(act: .ink, dimmed: !batch.missing.isEmpty))
@@ -485,7 +485,7 @@ struct BatchFlow: View {
         tried = true
         let lack = batch.missing
         if let first = lack.first {
-            show("还差 \(lack.count) 件没填好")
+            show(String(localized: "还差 \(lack.count) 件没填好"))
             withAnimation(.snappy) { proxy.scrollTo(batch.items[first].id, anchor: .center) }
             return
         }
@@ -500,7 +500,7 @@ struct BatchFlow: View {
     private var blackBar: some View {
         if let r = batch.removed {
             HStack(spacing: 14) {
-                Text(r.item.title.isEmpty ? "删掉了一件" : "删掉了“\(r.item.title)”").lineLimit(1)
+                Text(r.item.title.isEmpty ? String(localized: "删掉了一件") : String(localized: "删掉了“\(r.item.title)”")).lineLimit(1)
                 Button("撤销") {
                     batch.undoRemove()
                     bannerTask?.cancel()
@@ -576,7 +576,7 @@ struct BatchFlow: View {
                                 .frame(width: 40)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("单独成一件").font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.ink)
-                                    Text(aiOn ? "AI 再认一下名字和价格" : "名字和价格自己填").font(.system(size: 13)).foregroundStyle(Theme.hint)
+                                    Text(aiOn ? String(localized: "AI 再认一下名字和价格") : String(localized: "名字和价格自己填")).font(.system(size: 13)).foregroundStyle(Theme.hint)
                                 }
                                 Spacer(minLength: 0)
                             }
@@ -612,8 +612,8 @@ struct BatchFlow: View {
                 .frame(width: 40, height: 50)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(it.title.isEmpty ? "还没名字" : it.title).font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
-                    Text(current ? "现在在这一件" : "\(it.shots.count) 张照片").font(.system(size: 13)).foregroundStyle(Theme.hint)
+                    Text(it.title.isEmpty ? String(localized: "还没名字") : it.title).font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
+                    Text(current ? String(localized: "现在在这一件") : String(localized: "\(it.shots.count) 张照片")).font(.system(size: 13)).foregroundStyle(Theme.hint)
                 }
                 Spacer(minLength: 4)
                 if !current {

@@ -24,7 +24,7 @@ struct SellerView: View {
     /// “在卖 N 件 · 出租 N 套”，只算在卖的，是 0 的不写
     private var counts: String {
         let g = goods.filter { !$0.isSold }.count, r = rents.filter { !$0.isSold }.count
-        return [g == 0 ? "" : "在卖 \(g) 件", r == 0 ? "" : "出租 \(r) 套"]
+        return [g == 0 ? "" : String(localized: "在卖 \(g) 件"), r == 0 ? "" : String(localized: "出租 \(r) 套")]
             .filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
@@ -38,16 +38,16 @@ struct SellerView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     header
                     if failed {
-                        EmptyBlock(text: "看不到这个人的主页")
+                        EmptyBlock(text: String(localized: "看不到这个人的主页"))
                     } else if let page {
                         if page.items.isEmpty {
-                            EmptyBlock(text: "现在没有在架上的")
+                            EmptyBlock(text: String(localized: "现在没有在架上的"))
                         } else {
                             if !goods.isEmpty {
-                                section("在卖", count: "\(goods.count) 件") { goodsGrid }
+                                section(String(localized: "在卖"), count: String(localized: "\(goods.count) 件")) { goodsGrid }
                             }
                             if !rents.isEmpty {
-                                section("出租", count: "\(rents.count) 套") {
+                                section(String(localized: "出租"), count: String(localized: "\(rents.count) 套")) {
                                     ForEach(rents) { r in
                                         NavigationLink(value: r) { RentRow(item: r, showSeller: false) }.buttonStyle(.plain)
                                     }
@@ -83,7 +83,7 @@ struct SellerView: View {
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
                 if isGroup {
-                    Text(["来自群", page?.seller.groupName ?? item.sourceGroup ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                    Text([String(localized: "来自群"), page?.seller.groupName ?? item.sourceGroup ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.system(size: 13))
                         .foregroundStyle(Theme.sub)
                         .lineLimit(1)
@@ -140,7 +140,7 @@ struct SellerView: View {
                     Task {
                         do {
                             try await API.shared.reportAvatar(item.id)
-                            state.toast("收到了，会尽快处理")
+                            state.toast(String(localized: "收到了，会尽快处理"))
                         } catch {
                             state.toast(error.localizedDescription)
                         }
@@ -151,7 +151,7 @@ struct SellerView: View {
                 Task {
                     do {
                         try await API.shared.reportName(item.id)
-                        state.toast("收到了，会尽快处理")
+                        state.toast(String(localized: "收到了，会尽快处理"))
                     } catch {
                         state.toast(error.localizedDescription)
                     }
@@ -183,7 +183,7 @@ struct SellerView: View {
         do {
             try await API.shared.block(page?.seller.id ?? item.uid)
             state.changed()
-            state.toast("已屏蔽")
+            state.toast(String(localized: "已屏蔽"))
             dismiss()
         } catch {
             state.toast(error.localizedDescription)

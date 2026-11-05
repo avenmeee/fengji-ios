@@ -80,7 +80,7 @@ struct EmailReveal: View {
                     .foregroundStyle(Theme.ink)
                 Button {
                     UIPasteboard.general.string = Config.contactEmail
-                    state.toast("已复制")
+                    state.toast(String(localized: "已复制"))
                 } label: {
                     Image(systemName: "doc.on.doc").font(.system(size: 13)).foregroundStyle(Theme.sub)
                         .frame(width: 32, height: 32)
@@ -123,26 +123,26 @@ struct MyInfoView: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .name: return "昵称"
-            case .delivery: return "取货方式"
-            case .place: return "自取地点"
-            case .time: return "方便的时间"
-            case .wechat: return "微信号"
+            case .name: return String(localized: "昵称")
+            case .delivery: return String(localized: "取货方式")
+            case .place: return String(localized: "自取地点")
+            case .time: return String(localized: "方便的时间")
+            case .wechat: return String(localized: "微信号")
             }
         }
         var note: String {
             switch self {
-            case .name: return "别人看到的你"
-            case .wechat: return "填了别人能看到；不填，别人点“想要”联系你"
-            default: return "发东西时自动带上，发之前还能改"
+            case .name: return String(localized: "别人看到的你")
+            case .wechat: return String(localized: "填了别人能看到；不填，别人点“想要”联系你")
+            default: return String(localized: "发东西时自动带上，发之前还能改")
             }
         }
         var placeholder: String {
             switch self {
-            case .place: return "比如 Monty 楼下"
-            case .time: return "比如 工作日晚上、周末"
-            case .wechat: return "微信号"
-            default: return "昵称"
+            case .place: return String(localized: "比如 Monty 楼下")
+            case .time: return String(localized: "比如 工作日晚上、周末")
+            case .wechat: return String(localized: "微信号")
+            default: return String(localized: "昵称")
             }
         }
     }
@@ -150,30 +150,30 @@ struct MyInfoView: View {
     private var pickup: Bool { defaultDelivery == "pickup" || defaultDelivery == "both" }
     private var deliveryText: String {
         switch defaultDelivery {
-        case "pickup": return "自取"
-        case "deliver": return "可配送"
-        case "both": return "自取、可配送"
+        case "pickup": return String(localized: "自取")
+        case "deliver": return String(localized: "可配送")
+        case "both": return String(localized: "自取、可配送")
         default: return ""
         }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            PageTop(title: "我的信息")
+            PageTop(title: String(localized: "我的信息"))
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     card
-                    GroupHeader(title: "发布时自动带上", note: "发东西时自动填好").padding(.top, 14)
+                    GroupHeader(title: String(localized: "发布时自动带上"), note: String(localized: "发东西时自动填好")).padding(.top, 14)
                     FormCard {
-                        infoRow("shippingbox", "取货方式", deliveryText, .delivery)
+                        infoRow("shippingbox", String(localized: "取货方式"), deliveryText, .delivery)
                         if pickup {
                             FormDivider()
-                            infoRow("mappin", "自取地点", defaultPlace, .place)
+                            infoRow("mappin", String(localized: "自取地点"), defaultPlace, .place)
                         }
                         FormDivider()
-                        infoRow("clock", "方便的时间", defaultTime, .time)
+                        infoRow("clock", String(localized: "方便的时间"), defaultTime, .time)
                         FormDivider()
-                        infoRow("message", "微信号", savedContact, .wechat)
+                        infoRow("message", String(localized: "微信号"), savedContact, .wechat)
                     }
                     Text("微信号别人能看到。不填微信号，别人点“想要”联系你。")
                         .font(.system(size: 12.5))
@@ -185,7 +185,7 @@ struct MyInfoView: View {
                     // 认领入口：送审时 OPS_WECHAT 删掉就不显示
                     if state.opsWechat != nil {
                         Button { claiming = true } label: {
-                            SettingRow(symbol: "hand.raised", title: "认领我在群里发的") {
+                            SettingRow(symbol: "hand.raised", title: String(localized: "认领我在群里发的")) {
                                 Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.hint)
                             }
                             .frame(minHeight: 54)
@@ -258,7 +258,7 @@ struct MyInfoView: View {
                 }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("改昵称，现在是 " + (me?.name ?? ""))
+            .accessibilityLabel(String(localized: "改昵称，现在是 ") + (me?.name ?? ""))
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 18)
@@ -270,7 +270,7 @@ struct MyInfoView: View {
         Button { open(field) } label: {
             SettingRow(symbol: symbol, title: title) {
                 HStack(spacing: 6) {
-                    Text(value.isEmpty ? (field == .delivery ? "没选" : "选填") : value)
+                    Text(value.isEmpty ? (field == .delivery ? String(localized: "没选") : String(localized: "选填")) : value)
                         .font(.system(size: 15))
                         .foregroundStyle(value.isEmpty ? Theme.hint : Theme.sub)
                         .lineLimit(1)
@@ -306,8 +306,8 @@ struct MyInfoView: View {
             }
             if field == .delivery {
                 HStack(spacing: 8) {
-                    Chip(text: "自取", on: draftPickup) { draftPickup.toggle() }
-                    Chip(text: "可配送", on: draftDeliver) { draftDeliver.toggle() }
+                    Chip(text: String(localized: "自取"), on: draftPickup) { draftPickup.toggle() }
+                    Chip(text: String(localized: "可配送"), on: draftDeliver) { draftDeliver.toggle() }
                 }
                 .environment(\.formLarge, true)
             } else {
@@ -346,7 +346,7 @@ struct MyInfoView: View {
         case .wechat: savedContact = t
         }
         editing = nil
-        state.toast("存好了")
+        state.toast(String(localized: "存好了"))
     }
 
     /// 裁成正方形、缩到 512，去掉定位
@@ -410,7 +410,7 @@ struct RecordsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageTop(title: "记录")
+            PageTop(title: String(localized: "记录"))
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     Text("只有你看得到。照片保留 30 天，之后只留文字。")
@@ -418,7 +418,7 @@ struct RecordsView: View {
                         .foregroundStyle(Theme.sub)
                         .padding(.horizontal, 4)
                     if items.isEmpty {
-                        if phase == .ok { EmptyBlock(text: "删掉的会在这里") } else { PhaseBlock(phase: phase) }
+                        if phase == .ok { EmptyBlock(text: String(localized: "删掉的会在这里")) } else { PhaseBlock(phase: phase) }
                     }
                     ForEach(items) { item in
                         RecordRow(item: item, relist: { relist(item) }, purge: { purging = item })
@@ -443,7 +443,7 @@ struct RecordsView: View {
         .overlay {
             BottomPanel(shown: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } })) {
                 if let item = purging {
-                    PanelConfirm(title: "永久删除？", message: "记录和照片都会删掉，不能恢复。", confirm: "永久删除") {
+                    PanelConfirm(title: String(localized: "永久删除？"), message: String(localized: "记录和照片都会删掉，不能恢复。"), confirm: String(localized: "永久删除")) {
                         purging = nil
                         Task {
                             do {
@@ -487,14 +487,14 @@ struct RecordRow: View {
 
     private var line: String {
         let c = Calendar.current.dateComponents([.month, .day], from: deletedDate)
-        return item.priceText + (item.isRent ? " /月" : "") + " · \(c.month ?? 0)月\(c.day ?? 0)日删掉"
+        return item.priceText + (item.isRent ? String(localized: " /月") : "") + String(localized: " · \(c.month ?? 0)月\(c.day ?? 0)日删掉")
     }
 
     /// 照片还留几天：30 天减去删了几天
     private var keepText: String {
-        if item.photos.isEmpty { return "照片过了 30 天，已删掉" }
+        if item.photos.isEmpty { return String(localized: "照片过了 30 天，已删掉") }
         let days = Int(Date().timeIntervalSince(deletedDate) / 86400)
-        return "照片还留 \(max(1, 30 - days)) 天"
+        return String(localized: "照片还留 \(max(1, 30 - days)) 天")
     }
 
     var body: some View {
@@ -556,14 +556,14 @@ struct RulesView: View {
     @EnvironmentObject var state: AppState
 
     private let steps: [(String, String)] = [
-        ("可以举报什么", "违规内容、虚假信息、骚扰或诈骗，比如违禁物品、假学历、代写代考、私下换汇、冒用别人的照片，以及不当的昵称和头像。"),
-        ("怎么举报", "在东西或房子的详情页，点右上角“…”→ 举报，再选举报这条帖子、昵称还是头像。不想再看到这个人，可以同时屏蔽。"),
-        ("多久处理", "24 小时内处理。违规的内容会下架，不当的昵称会重置、头像会撤掉，情节严重的停用账号。")
+        (String(localized: "可以举报什么"), String(localized: "违规内容、虚假信息、骚扰或诈骗，比如违禁物品、假学历、代写代考、私下换汇、冒用别人的照片，以及不当的昵称和头像。")),
+        (String(localized: "怎么举报"), String(localized: "在东西或房子的详情页，点右上角“…”→ 举报，再选举报这条帖子、昵称还是头像。不想再看到这个人，可以同时屏蔽。")),
+        (String(localized: "多久处理"), String(localized: "24 小时内处理。违规的内容会下架，不当的昵称会重置、头像会撤掉，情节严重的停用账号。"))
     ]
 
     var body: some View {
         VStack(spacing: 0) {
-            PageTop(title: "举报规则")
+            PageTop(title: String(localized: "举报规则"))
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     FormCard {
@@ -581,9 +581,9 @@ struct RulesView: View {
                         }
                     }
                     if !Config.contactEmail.isEmpty {
-                        GroupHeader(title: "觉得处理错了").padding(.top, 12)
+                        GroupHeader(title: String(localized: "觉得处理错了")).padding(.top, 12)
                         FormCard {
-                            SettingRow(symbol: "envelope", title: "写邮件申诉").frame(minHeight: 54)
+                            SettingRow(symbol: "envelope", title: String(localized: "写邮件申诉")).frame(minHeight: 54)
                             HStack {
                                 if let url = URL(string: "mailto:\(Config.contactEmail)") {
                                     Link(Config.contactEmail, destination: url).font(.system(size: 16)).foregroundStyle(Theme.ink)
@@ -591,7 +591,7 @@ struct RulesView: View {
                                 Spacer()
                                 Button {
                                     UIPasteboard.general.string = Config.contactEmail
-                                    state.toast("已复制")
+                                    state.toast(String(localized: "已复制"))
                                 } label: {
                                     Image(systemName: "doc.on.doc").font(.system(size: 15)).foregroundStyle(Theme.sub).frame(width: 36, height: 36)
                                 }

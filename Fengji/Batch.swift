@@ -35,8 +35,8 @@ final class BatchModel: ObservableObject {
     }
 
     static let maxPhotos = 30
-    static let aiFailed = "AI 没认出来，自己填一下名字和价格"
-    static let aiOut = "这个月的 AI 用完了，下个月 1 号恢复，名字和价格自己填一下"
+    static let aiFailed = String(localized: "AI 没认出来，自己填一下名字和价格")
+    static let aiOut = String(localized: "这个月的 AI 用完了，下个月 1 号恢复，名字和价格自己填一下")
 
     @Published private(set) var shots: [Shot] = []
     @Published var items: [Item] = []
@@ -168,7 +168,7 @@ final class BatchModel: ObservableObject {
             // AI 用不了：退回每张一件，让卖家自己填
             eachOne()
             if (error as? APIError)?.code == "ai_limit" {
-                notice = "这个月的 AI 不够分这些照片了，下个月 1 号恢复。先每张一件，名字和价格自己填一下"
+                notice = String(localized: "这个月的 AI 不够分这些照片了，下个月 1 号恢复。先每张一件，名字和价格自己填一下")
             } else {
                 notice = Self.aiFailed
             }
@@ -227,7 +227,7 @@ final class BatchModel: ObservableObject {
                 aiLeft = 0
                 notice = Self.aiOut
             } else if notice == nil {
-                notice = "有几件 AI 没认出来，自己填一下名字和价格"
+                notice = String(localized: "有几件 AI 没认出来，自己填一下名字和价格")
             }
         }
     }
@@ -301,7 +301,7 @@ final class BatchModel: ObservableObject {
         }
         let fee = deliveryFee.trimmingCharacters(in: .whitespaces)
         if deliver, !fee.isEmpty, Int(fee) == nil {
-            error = "配送费要填整数。"
+            error = String(localized: "配送费要填整数。")
             return nil
         }
         publishing = true
@@ -342,7 +342,7 @@ final class BatchModel: ObservableObject {
             // 微信号是几件共用的，不用说第几件
             let index = e?.code == "bad_wechat" ? nil : e?.index
             badIndex = index
-            self.error = (index.map { "第 \($0 + 1) 件：" } ?? "") + error.localizedDescription
+            self.error = (index.map { String(localized: "第 \($0 + 1) 件：") } ?? "") + error.localizedDescription
             return nil
         }
     }

@@ -76,7 +76,7 @@ struct HivePostedView: View {
         VStack(spacing: 12) {
             VStack(spacing: 6) {
                 Text("发好了").font(.system(size: 28, weight: .bold)).foregroundStyle(Theme.ink)
-                Text(items.count == 1 ? "首页已经能看到" : "这次发了 \(items.count) 件，首页已经能看到")
+                Text(items.count == 1 ? String(localized: "首页已经能看到") : String(localized: "这次发了 \(items.count) 件，首页已经能看到"))
                     .font(.system(size: 15))
                     .foregroundStyle(Theme.sub)
             }
@@ -345,10 +345,10 @@ enum BeeSeen {
 
 func scoreLabel(_ score: Int) -> String {
     switch score {
-    case ...1: return "偏贵"
-    case 2: return "价格合理"
-    case 3: return "有性价比"
-    default: return "捡漏"
+    case ...1: return String(localized: "偏贵")
+    case 2: return String(localized: "价格合理")
+    case 3: return String(localized: "有性价比")
+    default: return String(localized: "捡漏")
     }
 }
 

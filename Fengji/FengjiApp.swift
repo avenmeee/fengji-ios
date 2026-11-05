@@ -226,9 +226,9 @@ struct FloatingBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            tab(.buy, "bag", "买东西")
+            tab(.buy, "bag", String(localized: "买东西"))
             plusButton
-            tab(.rent, "house", "租房子")
+            tab(.rent, "house", String(localized: "租房子"))
         }
         .padding(.horizontal, 8)
         .frame(height: 60)
@@ -286,7 +286,7 @@ struct FloatingBar: View {
         )
         .accessibilityElement()
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(state.plusOpen ? "收起" : "发布和我")
+        .accessibilityLabel(state.plusOpen ? String(localized: "收起") : String(localized: "发布和我"))
         .accessibilityAction { state.plusOpen.toggle() }
     }
 
@@ -364,11 +364,11 @@ struct PlusSheet: View {
                 .ignoresSafeArea()
                 .onTapGesture { state.plusOpen = false }
             ZStack {
-                cell("发布东西", "bag", fill: Theme.accent, on: Theme.onBuy, action: .goods)
+                cell(String(localized: "发布东西"), "bag", fill: Theme.accent, on: Theme.onBuy, action: .goods)
                     .modifier(PopOut(shown: sides, x: -PlusLayout.side.x, y: PlusLayout.height / 2 - PlusLayout.side.y, start: PlusLayout.height / 2))
-                cell("发布房子", "house", fill: Theme.accent, on: Theme.onBuy, action: .rent)
+                cell(String(localized: "发布房子"), "house", fill: Theme.accent, on: Theme.onBuy, action: .rent)
                     .modifier(PopOut(shown: sides, x: PlusLayout.side.x, y: PlusLayout.height / 2 - PlusLayout.side.y, start: PlusLayout.height / 2))
-                cell("我", "person", fill: Theme.ink, on: Theme.bg, action: .me)
+                cell(String(localized: "我"), "person", fill: Theme.ink, on: Theme.bg, action: .me)
                     .modifier(PopOut(shown: top, x: 0, y: PlusLayout.height / 2 - PlusLayout.top, start: PlusLayout.height / 2))
             }
             .padding(.bottom, barCenter)

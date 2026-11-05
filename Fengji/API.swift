@@ -12,30 +12,30 @@ struct APIError: LocalizedError {
 
     var errorDescription: String? {
         switch code {
-        case "not_allowed": return "这类内容不能发。"
-        case "bad_name": return "这个昵称不能用。"
-        case "want_again": return "今天已经发过了。"
-        case "need_contact": return "留个联系方式，卖家才联系得上你。"
-        case "need_ai_consent": return "要同意发给 AI 打分才能发布。"
-        case "need_photo": return "要一张实拍照。"
-        case "need_utilities": return "选一下包不包水电。"
-        case "need_dates": return "写一下起止日期，或者选长租。"
-        case "too_soon": return "一天只能擦亮一次。"
-        case "daily_limit": return "今天发得太多了，明天再试。"
-        case "site_limit": return "今天传照片的人太多，明天再试。"
-        case "too_many_listings": return "在架的太多了，先下架几条。"
-        case "photo_too_big": return "照片太大了，换一张。"
-        case "login_required": return "要先登录。"
-        case "terms_required": return "要先同意用户协议。"
-        case "banned": return "这个账号已被停用。"
-        case "hidden": return "这条被举报了，审核中不能改。"
-        case "not_found": return "这条已经没有了。"
-        case "bad_identity": return "苹果登录没通过，再试一次。"
-        case "bad_wechat": return "微信号格式不对：字母开头，6～20 位。"
-        case "ai_limit": return "这个月的 AI 用完了，下个月 1 号恢复，名字和价格自己填一下。"
-        case "ai_budget", "ai_off", "ai_failed": return "AI 这会儿用不了，先自己填。"
-        case "bad_count": return "照片张数不对。"
-        default: return "没连上，再试一次。"
+        case "not_allowed": return String(localized: "这类内容不能发。")
+        case "bad_name": return String(localized: "这个昵称不能用。")
+        case "want_again": return String(localized: "今天已经发过了。")
+        case "need_contact": return String(localized: "留个联系方式，卖家才联系得上你。")
+        case "need_ai_consent": return String(localized: "要同意发给 AI 打分才能发布。")
+        case "need_photo": return String(localized: "要一张实拍照。")
+        case "need_utilities": return String(localized: "选一下包不包水电。")
+        case "need_dates": return String(localized: "写一下起止日期，或者选长租。")
+        case "too_soon": return String(localized: "一天只能擦亮一次。")
+        case "daily_limit": return String(localized: "今天发得太多了，明天再试。")
+        case "site_limit": return String(localized: "今天传照片的人太多，明天再试。")
+        case "too_many_listings": return String(localized: "在架的太多了，先下架几条。")
+        case "photo_too_big": return String(localized: "照片太大了，换一张。")
+        case "login_required": return String(localized: "要先登录。")
+        case "terms_required": return String(localized: "要先同意用户协议。")
+        case "banned": return String(localized: "这个账号已被停用。")
+        case "hidden": return String(localized: "这条被举报了，审核中不能改。")
+        case "not_found": return String(localized: "这条已经没有了。")
+        case "bad_identity": return String(localized: "苹果登录没通过，再试一次。")
+        case "bad_wechat": return String(localized: "微信号格式不对：字母开头，6～20 位。")
+        case "ai_limit": return String(localized: "这个月的 AI 用完了，下个月 1 号恢复，名字和价格自己填一下。")
+        case "ai_budget", "ai_off", "ai_failed": return String(localized: "AI 这会儿用不了，先自己填。")
+        case "bad_count": return String(localized: "照片张数不对。")
+        default: return String(localized: "没连上，再试一次。")
         }
     }
 }

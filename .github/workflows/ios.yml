@@ -63,6 +63,17 @@ jobs:
           # 只支持 iPhone：UIDeviceFamily 只能有 1
           plutil -extract UIDeviceFamily json -o - build/Build/Products/Debug-iphonesimulator/Fengji.app/Info.plist | tee /dev/stderr | grep -qx '\[1\]'
 
+      - name: 同步 String Catalog（代码里的字有没有都进目录）
+        if: inputs.mode == 'sim'
+        run: |
+          mkdir -p shots
+          cp Fengji/Localizable.xcstrings shots/Localizable.xcstrings
+          find build -name '*.stringsdata' > stringsdata.txt
+          echo "stringsdata: $(wc -l < stringsdata.txt) 个"
+          xargs xcrun xcstringstool sync shots/Localizable.xcstrings --stringsdata < stringsdata.txt || { xcrun xcstringstool sync --help; exit 1; }
+          python3 -c "import json; a=json.load(open('Fengji/Localizable.xcstrings'))['strings']; b=json.load(open('shots/Localizable.xcstrings'))['strings']; print('目录里', len(a), '条；代码里', len(b), '条；没进目录', len(set(b)-set(a)), '条')"
+          ls build/Build/Products/Debug-iphonesimulator/Fengji.app | grep -i lproj || echo "没有 lproj"
+
       - name: 模拟器里截图
         if: inputs.mode == 'sim' && inputs.shots
         env:

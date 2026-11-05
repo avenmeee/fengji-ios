@@ -140,7 +140,7 @@ struct PhaseBlock: View {
 
     var body: some View {
         if phase == .failed {
-            EmptyCard(symbol: "wifi.exclamationmark", title: "没连上", note: "看看网络，下拉也能再试", action: retry.map { ("再试", $0) })
+            EmptyCard(symbol: "wifi.exclamationmark", title: String(localized: "没连上"), note: String(localized: "看看网络，下拉也能再试"), action: retry.map { (String(localized: "再试"), $0) })
         } else {
             HoneyLoader().frame(maxWidth: .infinity).padding(.vertical, 60)
         }
@@ -320,7 +320,7 @@ struct BuyView: View {
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
-                TopBar(placeholder: "搜东西", query: $model.q) {
+                TopBar(placeholder: String(localized: "搜东西"), query: $model.q) {
                     CategoryBar(selected: $model.filter)
                 }
                 ScrollViewReader { proxy in
@@ -423,11 +423,11 @@ struct BuyView: View {
     @ViewBuilder
     private var emptyCard: some View {
         if !model.q.isEmpty {
-            EmptyCard(symbol: "magnifyingglass", title: "没找到“\(model.q)”", note: "换个词，或者看看全部", action: ("清空搜索", { model.q = "" }))
+            EmptyCard(symbol: "magnifyingglass", title: String(localized: "没找到“\(model.q)”"), note: String(localized: "换个词，或者看看全部"), action: (String(localized: "清空搜索"), { model.q = "" }))
         } else if model.filter != "all" {
-            EmptyCard(symbol: "square.grid.2x2", title: "这一类还没有", note: "看看全部", action: ("看全部", { model.filter = "all" }))
+            EmptyCard(symbol: "square.grid.2x2", title: String(localized: "这一类还没有"), note: String(localized: "看看全部"), action: (String(localized: "看全部"), { model.filter = "all" }))
         } else {
-            EmptyCard(symbol: "bag", title: "还没人发", note: "你可以发第一件", action: ("发第一件", { state.plusAction(.goods) }))
+            EmptyCard(symbol: "bag", title: String(localized: "还没人发"), note: String(localized: "你可以发第一件"), action: (String(localized: "发第一件"), { state.plusAction(.goods) }))
         }
     }
 
@@ -477,7 +477,7 @@ struct PriceTag: View {
     var body: some View {
         Group {
             if item.isSold {
-                Text(item.isRent ? "已租出" : "已卖出")
+                Text(item.isRent ? String(localized: "已租出") : String(localized: "已卖出"))
                     .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
                     .fixedSize()
@@ -523,7 +523,7 @@ struct RentView: View {
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
-                TopBar(placeholder: "搜地段", query: $model.q) {
+                TopBar(placeholder: String(localized: "搜地段"), query: $model.q) {
                     TextTabs(selected: $model.filter, options: [ALL_OPTION] + UNIT_OPTIONS)
                 }
                 ScrollViewReader { proxy in
@@ -603,11 +603,11 @@ struct RentView: View {
     @ViewBuilder
     private var emptyCard: some View {
         if !model.q.isEmpty {
-            EmptyCard(symbol: "magnifyingglass", title: "没找到“\(model.q)”", note: "换个词，或者看看全部", action: ("清空搜索", { model.q = "" }))
+            EmptyCard(symbol: "magnifyingglass", title: String(localized: "没找到“\(model.q)”"), note: String(localized: "换个词，或者看看全部"), action: (String(localized: "清空搜索"), { model.q = "" }))
         } else if model.filter != "all" {
-            EmptyCard(symbol: "house", title: "这一类还没有", note: "看看全部", action: ("看全部", { model.filter = "all" }))
+            EmptyCard(symbol: "house", title: String(localized: "这一类还没有"), note: String(localized: "看看全部"), action: (String(localized: "看全部"), { model.filter = "all" }))
         } else {
-            EmptyCard(symbol: "house", title: "还没有房源", note: "你可以发第一套", action: ("发一套房子", { state.plusAction(.rent) }))
+            EmptyCard(symbol: "house", title: String(localized: "还没有房源"), note: String(localized: "你可以发第一套"), action: (String(localized: "发一套房子"), { state.plusAction(.rent) }))
         }
     }
 }

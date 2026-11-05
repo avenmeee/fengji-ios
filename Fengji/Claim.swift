@@ -63,7 +63,7 @@ struct ClaimView: View {
                 Button {
                     guard let code else { return }
                     UIPasteboard.general.string = code.code
-                    state.toast("已复制")
+                    state.toast(String(localized: "已复制"))
                 } label: {
                     Label("复制代码", systemImage: "doc.on.doc")
                 }
@@ -71,7 +71,7 @@ struct ClaimView: View {
             }
             .padding(7)
             .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16))
-            GroupHeader(title: "怎么做").padding(.top, 8)
+            GroupHeader(title: String(localized: "怎么做")).padding(.top, 8)
             FormCard {
                 HStack(spacing: 12) {
                     NumberHex(n: 1, size: 26)
@@ -81,7 +81,7 @@ struct ClaimView: View {
                     if let ops = state.opsWechat {
                         Button {
                             UIPasteboard.general.string = ops
-                            state.toast("已复制")
+                            state.toast(String(localized: "已复制"))
                         } label: {
                             Label("复制", systemImage: "doc.on.doc")
                                 .lineLimit(1)
@@ -97,9 +97,9 @@ struct ClaimView: View {
                 }
                 .padding(.vertical, 12)
                 FormDivider()
-                step(2, "通过后，私聊把代码发给他")
+                step(2, String(localized: "通过后，私聊把代码发给他"))
                 FormDivider()
-                step(3, "一般当天完成，这里会显示认领了几件")
+                step(3, String(localized: "一般当天完成，这里会显示认领了几件"))
             }
             HStack(spacing: 8) {
                 ZStack {
@@ -139,7 +139,7 @@ struct ClaimView: View {
                 Text("都在“我发的”里了").font(.system(size: 15)).foregroundStyle(Theme.sub)
             }
             FormCard {
-                FieldBlock(label: "公开的微信号 · 选填", hint: "买家能看到，直接加你。不填，买家还是去群里找你。") {
+                FieldBlock(label: String(localized: "公开的微信号 · 选填"), hint: String(localized: "买家能看到，直接加你。不填，买家还是去群里找你。")) {
                     TextField("微信号", text: $contact)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -147,7 +147,7 @@ struct ClaimView: View {
                 }
             }
             .padding(.top, 6)
-            Button(saving ? "正在存…" : "保存") { Task { await save() } }
+            Button(saving ? String(localized: "正在存…") : String(localized: "保存")) { Task { await save() } }
                 .buttonStyle(PrimaryButtonStyle(act: .ink))
                 .disabled(saving)
         }
@@ -204,7 +204,7 @@ struct ClaimView: View {
             try await API.shared.setPublicContact(c)
             if !c.isEmpty { UserDefaults.standard.set(c, forKey: "contact") }
             state.changed()
-            state.toast("存好了")
+            state.toast(String(localized: "存好了"))
             dismiss()
         } catch {
             self.error = error.localizedDescription

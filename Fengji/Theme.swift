@@ -442,7 +442,7 @@ struct SellerLine: View {
     var body: some View {
         HStack(spacing: 6) {
             SellerAvatar(name: item.sellerLabel, color: item.sellerColor, named: item.isGroup || (item.sellerNamed ?? false), size: avatarSize, url: item.sellerAvatar)
-            Text(([item.sellerLabel] + (item.isGroup ? ["来自群"] : []) + extra).filter { !$0.isEmpty }.joined(separator: " · "))
+            Text(([item.sellerLabel] + (item.isGroup ? [String(localized: "来自群")] : []) + extra).filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(fontSize.map { .system(size: $0) } ?? .footnote)
                 .foregroundStyle(Theme.sub)
                 .lineLimit(1)

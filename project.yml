@@ -2,6 +2,7 @@
 name: Fengji
 options:
   bundleIdPrefix: com.avenmeee
+  developmentLanguage: zh-Hans
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -13,6 +14,9 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: NO
+    # 界面文字走 Fengji/Localizable.xcstrings，中文是基础语言
+    SWIFT_EMIT_LOC_STRINGS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
 targets:
   Fengji:
     type: application

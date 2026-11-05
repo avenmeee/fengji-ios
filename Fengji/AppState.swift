@@ -97,7 +97,7 @@ final class AppState: ObservableObject {
             tab = item.isRent ? .rent : .buy
             linked = item
         } catch {
-            toast("这条已经没有了")
+            toast(String(localized: "这条已经没有了"))
         }
     }
 

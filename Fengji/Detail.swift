@@ -34,15 +34,15 @@ struct DetailView: View {
         let cal = Calendar.current
         if item.isGroup, let at = item.sourcePostedAt {
             let d = Date(timeIntervalSince1970: Double(at) / 1000)
-            return "群里 \(cal.component(.month, from: d))月\(cal.component(.day, from: d))日发"
+            return String(localized: "群里 \(cal.component(.month, from: d))月\(cal.component(.day, from: d))日发")
         }
         let ms = max(item.bumpedAt, item.createdAt)
         guard ms > 0 else { return "" }
         let d = Date(timeIntervalSince1970: Double(ms) / 1000)
         let days = cal.dateComponents([.day], from: cal.startOfDay(for: d), to: cal.startOfDay(for: Date())).day ?? 0
-        if days <= 0 { return "今天发布" }
-        if days < 7 { return "\(days) 天前发布" }
-        return "\(cal.component(.month, from: d))月\(cal.component(.day, from: d))日发布"
+        if days <= 0 { return String(localized: "今天发布") }
+        if days < 7 { return String(localized: "\(days) 天前发布") }
+        return String(localized: "\(cal.component(.month, from: d))月\(cal.component(.day, from: d))日发布")
     }
 
     var body: some View {
@@ -56,7 +56,7 @@ struct DetailView: View {
             .frame(height: 44)
             ScrollView {
                 if gone {
-                    EmptyCard(symbol: "tag", title: "这条已经没有了", note: "可能卖掉了，或者卖家删了", action: ("回首页", { dismiss() }))
+                    EmptyCard(symbol: "tag", title: String(localized: "这条已经没有了"), note: String(localized: "可能卖掉了，或者卖家删了"), action: (String(localized: "回首页"), { dismiss() }))
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                 } else {
@@ -148,7 +148,7 @@ struct DetailView: View {
     }
 
     private var soldTag: some View {
-        Text(item.isRent ? "已租出" : "已卖出")
+        Text(item.isRent ? String(localized: "已租出") : String(localized: "已卖出"))
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(Theme.bg)
             .padding(.horizontal, 10)
@@ -176,7 +176,7 @@ struct DetailView: View {
                 .lineLimit(1)
                 .fixedSize()
             if item.isGroup {
-                Text(["来自群", item.sourceGroup ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                Text([String(localized: "来自群"), item.sourceGroup ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.sub)
                     .lineLimit(1)
@@ -237,7 +237,7 @@ struct DetailView: View {
 
     /// 价签右边那行：发布日期；已预订、审核中、没了的也写在这里
     private var statusLine: String {
-        if gone { return "这条已经没有了" }
+        if gone { return String(localized: "这条已经没有了") }
         if item.isReserved || item.status == "hidden" { return [item.statusText, postedText].filter { !$0.isEmpty }.joined(separator: " · ") }
         return postedText
     }
@@ -306,7 +306,7 @@ struct DetailView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "exclamationmark.shield").font(.system(size: 13))
-                    Text(item.isRent ? "先看房再交钱，到 leasing office 核实房东，看房前别交押金或申请费。" : "当面验货再付款，别提前转账。")
+                    Text(item.isRent ? String(localized: "先看房再交钱，到 leasing office 核实房东，看房前别交押金或申请费。") : String(localized: "当面验货再付款，别提前转账。"))
                         .font(.system(size: 13))
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 4)
@@ -325,7 +325,7 @@ struct DetailView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 4)
-        .accessibilityHint(tipOpen ? "收起" : "展开看怎么防骗")
+        .accessibilityHint(tipOpen ? String(localized: "收起") : String(localized: "展开看怎么防骗"))
     }
 
     /// 像抖音左滑进作者主页：手指从右往左，横着滑够远才算。自己的帖子没反应。
@@ -376,55 +376,55 @@ struct DetailView: View {
         switch stage {
         case .main:
             VStack(spacing: 0) {
-                PanelRow(symbol: "photo", title: "分享图片") {
+                PanelRow(symbol: "photo", title: String(localized: "分享图片")) {
                     panel = false
                     Task { shareImage = await ShareImage.make(item) }
                 }
-                PanelRow(symbol: "link", title: "复制链接") {
+                PanelRow(symbol: "link", title: String(localized: "复制链接")) {
                     UIPasteboard.general.string = item.shareURL
                     panel = false
-                    state.toast("已复制")
+                    state.toast(String(localized: "已复制"))
                 }
                 if !item.mine {
-                    PanelRow(symbol: "flag", title: "举报") { stage = item.isGroup ? .reasons : .reportWhat }
+                    PanelRow(symbol: "flag", title: String(localized: "举报")) { stage = item.isGroup ? .reasons : .reportWhat }
                     if !item.isGroup {
-                        PanelRow(symbol: "hand.raised", title: "屏蔽这个人") {
+                        PanelRow(symbol: "hand.raised", title: String(localized: "屏蔽这个人")) {
                             if state.isLoggedIn { stage = .block } else { panel = false; state.showLogin = true }
                         }
                     }
                     if item.isGroup {
-                        PanelRow(symbol: "person.badge.minus", title: "我是原帖人，想删除") {
+                        PanelRow(symbol: "person.badge.minus", title: String(localized: "我是原帖人，想删除")) {
                             stage = .ownerAsk
                             Task { try? await API.shared.report(item.id, reason: OWNER_ASK) }
                         }
                     }
                     if state.isAdmin {
-                        PanelRow(symbol: "trash", title: "删除", color: Theme.warn) { stage = .adminDelete }
+                        PanelRow(symbol: "trash", title: String(localized: "删除"), color: Theme.warn) { stage = .adminDelete }
                     }
                 }
             }
         case .reportWhat:
             VStack(alignment: .leading, spacing: 0) {
-                GroupLabel(text: "举报什么").padding(.bottom, 4)
-                PanelRow(symbol: "doc.text", title: "这条帖子") { stage = .reasons }
-                PanelRow(symbol: "person.crop.circle", title: "昵称") {
+                GroupLabel(text: String(localized: "举报什么")).padding(.bottom, 4)
+                PanelRow(symbol: "doc.text", title: String(localized: "这条帖子")) { stage = .reasons }
+                PanelRow(symbol: "person.crop.circle", title: String(localized: "昵称")) {
                     panel = false
                     Task {
                         do {
                             try await API.shared.reportName(item.id)
-                            state.toast("收到了，会尽快处理")
+                            state.toast(String(localized: "收到了，会尽快处理"))
                         } catch {
                             state.toast(error.localizedDescription)
                         }
                     }
                 }
                 if item.sellerAvatar != nil {
-                    PanelRow(symbol: "photo", title: "头像") {
+                    PanelRow(symbol: "photo", title: String(localized: "头像")) {
                         panel = false
                         Task {
                             do {
                                 try await API.shared.reportAvatar(item.id)
-                                state.toast("收到了，会尽快处理")
+                                state.toast(String(localized: "收到了，会尽快处理"))
                             } catch {
                                 state.toast(error.localizedDescription)
                             }
@@ -434,7 +434,7 @@ struct DetailView: View {
             }
         case .reasons:
             VStack(alignment: .leading, spacing: 0) {
-                GroupLabel(text: "举报这条").padding(.bottom, 4)
+                GroupLabel(text: String(localized: "举报这条")).padding(.bottom, 4)
                 ForEach(REASONS, id: \.self) { reason in
                     PanelRow(symbol: "flag", title: reason) {
                         panel = false
@@ -443,7 +443,7 @@ struct DetailView: View {
                 }
             }
         case .block:
-            PanelConfirm(title: "屏蔽这个人？", message: "你不会再看到他发的东西。", confirm: "屏蔽") {
+            PanelConfirm(title: String(localized: "屏蔽这个人？"), message: String(localized: "你不会再看到他发的东西。"), confirm: String(localized: "屏蔽")) {
                 panel = false
                 Task { await block() }
             } onCancel: { panel = false }
@@ -455,10 +455,10 @@ struct DetailView: View {
                 }
                 FormCard {
                     if let wx = state.contactWechat {
-                        copyRow("message", "微信", wx)
+                        copyRow("message", String(localized: "微信"), wx)
                         FormDivider()
                     }
-                    copyRow("envelope", "邮箱", Config.contactEmail)
+                    copyRow("envelope", String(localized: "邮箱"), Config.contactEmail)
                 }
                 Button("好") { panel = false }
                     .font(.system(size: 17))
@@ -467,7 +467,7 @@ struct DetailView: View {
                     .buttonStyle(.plain)
             }
         case .adminDelete:
-            PanelConfirm(title: "删除这条帖子？", message: "彻底删除，这条的举报一起关掉。", confirm: "删除") {
+            PanelConfirm(title: String(localized: "删除这条帖子？"), message: String(localized: "彻底删除，这条的举报一起关掉。"), confirm: String(localized: "删除")) {
                 panel = false
                 Task { await adminRemove() }
             } onCancel: { panel = false }
@@ -482,7 +482,7 @@ struct DetailView: View {
         } else if let contact = item.contact, !contact.isEmpty {
             Button {
                 UIPasteboard.general.string = contact
-                state.toast("已复制，去微信加对方")
+                state.toast(String(localized: "已复制，去微信加对方"))
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 Task { try? await API.shared.countClick(item.id, "copy") }
                 Events.shared.contact(item, method: "copy_wechat")
@@ -493,7 +493,7 @@ struct DetailView: View {
                 }
             }
             .buttonStyle(PrimaryButtonStyle(act: .ink))
-            .accessibilityLabel("复制微信号 " + contact)
+            .accessibilityLabel(String(localized: "复制微信号 ") + contact)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(Theme.bg)
@@ -534,7 +534,7 @@ struct DetailView: View {
         Events.shared.contact(item, method: "group")
         guard let url = URL(string: "weixin://") else { return }
         UIApplication.shared.open(url) { opened in
-            if !opened { state.toast("已复制") }
+            if !opened { state.toast(String(localized: "已复制")) }
         }
     }
 
@@ -561,9 +561,9 @@ struct DetailView: View {
             Button {
                 UIPasteboard.general.string = value
                 copied = label
-                state.toast("已复制")
+                state.toast(String(localized: "已复制"))
             } label: {
-                Label(copied == label ? "已复制" : "复制", systemImage: copied == label ? "checkmark" : "doc.on.doc")
+                Label(copied == label ? String(localized: "已复制") : String(localized: "复制"), systemImage: copied == label ? "checkmark" : "doc.on.doc")
                     .lineLimit(1)
                     .fixedSize()
                     .font(.system(size: 15, weight: .semibold))
@@ -578,14 +578,14 @@ struct DetailView: View {
     }
 
     private var ownerAskText: String {
-        let wx = state.contactWechat.map { "加微信 \($0)，或者" } ?? ""
-        return "\(wx)发邮件到 \(Config.contactEmail)，说一下是哪条，我们 24 小时内删除。"
+        let wx = state.contactWechat.map { String(localized: "加微信 \($0)，或者") } ?? ""
+        return String(localized: "\(wx)发邮件到 \(Config.contactEmail)，说一下是哪条，我们 24 小时内删除。")
     }
 
     private func report(_ reason: String) async {
         do {
             try await API.shared.report(item.id, reason: reason)
-            state.toast("收到了，会尽快处理")
+            state.toast(String(localized: "收到了，会尽快处理"))
         } catch {
             state.toast(error.localizedDescription)
         }
@@ -595,7 +595,7 @@ struct DetailView: View {
         do {
             try await API.shared.block(item.uid)
             state.changed()
-            state.toast("已屏蔽")
+            state.toast(String(localized: "已屏蔽"))
             dismiss()
         } catch {
             state.toast(error.localizedDescription)
@@ -606,7 +606,7 @@ struct DetailView: View {
         do {
             try await API.shared.adminRemove(item.id)
             state.changed()
-            state.toast("删掉了")
+            state.toast(String(localized: "删掉了"))
             dismiss()
         } catch {
             state.toast(error.localizedDescription)
@@ -706,17 +706,17 @@ struct WantSheet: View {
                     .overlay { ListingImage(item: item, maxPixel: 240) }
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("想要 " + item.title).font(.system(size: 19, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1).minimumScaleFactor(0.85)
+                    Text(String(localized: "想要 ") + item.title).font(.system(size: 19, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1).minimumScaleFactor(0.85)
                     PriceTag(item: item).padding(-8)
                 }
                 Spacer(minLength: 0)
             }
             FormCard {
-                FieldBlock(label: "说一句 · 选填") {
+                FieldBlock(label: String(localized: "说一句 · 选填")) {
                     TextField("比如 今晚能去拿吗", text: $message).font(.system(size: 17))
                 }
                 FormDivider()
-                FieldBlock(label: "你的联系方式", hint: tried && missing ? "留个联系方式，卖家才联系得上你" : "只有卖家看得到", hintColor: tried && missing ? Theme.warn : Theme.hint) {
+                FieldBlock(label: String(localized: "你的联系方式"), hint: tried && missing ? String(localized: "留个联系方式，卖家才联系得上你") : String(localized: "只有卖家看得到"), hintColor: tried && missing ? Theme.warn : Theme.hint) {
                     TextField("微信号或手机号", text: $contact)
                         .font(.system(size: 17))
                         .textInputAutocapitalization(.never)
@@ -733,7 +733,7 @@ struct WantSheet: View {
             } label: {
                 HStack(spacing: 8) {
                     if busy { HoneyLoader(size: 22) }
-                    Text(busy ? "正在发" : "发给卖家")
+                    Text(busy ? String(localized: "正在发") : String(localized: "发给卖家"))
                 }
             }
             .buttonStyle(PrimaryButtonStyle(act: .ink, dimmed: missing))
@@ -760,7 +760,7 @@ struct WantSheet: View {
             UserDefaults.standard.set(c, forKey: "wantContact")
             Events.shared.contact(item, method: "want")
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            state.toast("发好了，等卖家联系你")
+            state.toast(String(localized: "发好了，等卖家联系你"))
             dismiss()
         } catch {
             self.error = error.localizedDescription
@@ -879,13 +879,13 @@ struct ScoreInfo: View {
     let score: Int?
 
     private let levels: [(Int, String)] = [
-        (4, "远低于同类二手价"), (3, "比同类便宜"), (2, "符合同类二手价"), (1, "明显高于同类二手价")
+        (4, String(localized: "远低于同类二手价")), (3, String(localized: "比同类便宜")), (2, String(localized: "符合同类二手价")), (1, String(localized: "明显高于同类二手价"))
     ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("蜜蜂价格分").font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.ink)
-            Text(score == nil ? "这件还没打分，通常半天内会有。" : "由 AI 打分，仅供参考。")
+            Text(score == nil ? String(localized: "这件还没打分，通常半天内会有。") : String(localized: "由 AI 打分，仅供参考。"))
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.sub)
             VStack(spacing: 4) {

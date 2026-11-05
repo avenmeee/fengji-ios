@@ -60,11 +60,11 @@ private enum DateField: String, Identifiable {
 
     var title: String {
         switch self {
-        case .pickupAfter: return "从几号起可取"
-        case .pickupBefore: return "几号前取走"
-        case .from: return "起"
-        case .to: return "止"
-        case .leaseEnd: return "租约到期日"
+        case .pickupAfter: return String(localized: "从几号起可取")
+        case .pickupBefore: return String(localized: "几号前取走")
+        case .from: return String(localized: "起")
+        case .to: return String(localized: "止")
+        case .leaseEnd: return String(localized: "租约到期日")
         }
     }
 
@@ -72,8 +72,8 @@ private enum DateField: String, Identifiable {
     var clearLabel: String? {
         switch self {
         case .from: return nil
-        case .to: return "长租"
-        default: return "不限"
+        case .to: return String(localized: "长租")
+        default: return String(localized: "不限")
         }
     }
 }
@@ -429,7 +429,7 @@ struct PostForm: View {
         if batch.shots.count >= 2 {
             showSplit = true
         } else {
-            if datas.count < items.count { state.toast("有张照片打不开") }
+            if datas.count < items.count { state.toast(String(localized: "有张照片打不开")) }
             if let only = datas.first { addPhoto(only) }
             batch.reset()
         }
@@ -526,7 +526,7 @@ struct PostForm: View {
                 VStack(alignment: .leading, spacing: 12) {
                     formTitle
                     statusCard
-                    GroupHeader(title: "必填", note: "照片、名字、价格")
+                    GroupHeader(title: String(localized: "必填"), note: String(localized: "照片、名字、价格"))
                     FormCard {
                         VStack(alignment: .leading, spacing: 8) {
                             if photos.count < 3 {
@@ -539,7 +539,7 @@ struct PostForm: View {
                                 // 照片多了折行，和房子一样
                                 FlowLayout(spacing: 8) { goodsPhotos }
                             }
-                            lackHint("照片", "放一张照片才能发")
+                            lackHint(String(localized: "照片"), String(localized: "放一张照片才能发"))
                             aiQuota
                         }
                         .padding(.vertical, 12)
@@ -548,40 +548,40 @@ struct PostForm: View {
                         FormDivider()
                         priceField
                     }
-                    GroupHeader(title: "选填", note: "填了买家更好决定", large: true).padding(.top, 10)
+                    GroupHeader(title: String(localized: "选填"), note: String(localized: "填了买家更好决定"), large: true).padding(.top, 10)
                     FormCard {
-                        FieldBlock(label: "取货方式", hint: pickup ? nil : "选了自取，再填自取地点") {
+                        FieldBlock(label: String(localized: "取货方式"), hint: pickup ? nil : String(localized: "选了自取，再填自取地点")) {
                             HStack(spacing: 8) {
-                                Chip(text: "自取", on: pickup, act: formAct) { pickup.toggle() }
-                                Chip(text: "可配送", on: deliver, act: formAct) { deliver.toggle() }
+                                Chip(text: String(localized: "自取"), on: pickup, act: formAct) { pickup.toggle() }
+                                Chip(text: String(localized: "可配送"), on: deliver, act: formAct) { deliver.toggle() }
                             }
                         }
                         if deliver {
                             FormDivider()
-                            FieldBlock(label: "配送费") { dollarLine("0，不收就空着", text: $deliveryFee, field: .fee) }
+                            FieldBlock(label: String(localized: "配送费")) { dollarLine(String(localized: "0，不收就空着"), text: $deliveryFee, field: .fee) }
                         }
                         if pickup {
                             FormDivider()
-                            FieldBlock(label: "自取地点") {
-                                inputLine("比如 Monty 楼下", text: $place, field: .place)
+                            FieldBlock(label: String(localized: "自取地点")) {
+                                inputLine(String(localized: "比如 Monty 楼下"), text: $place, field: .place)
                             }
                         }
                         FormDivider()
-                        NavRow(symbol: "calendar", title: "从几号起可取", value: dayText(pickupAfter), empty: pickupAfter == nil) { dateField = .pickupAfter }
+                        NavRow(symbol: "calendar", title: String(localized: "从几号起可取"), value: dayText(pickupAfter), empty: pickupAfter == nil) { dateField = .pickupAfter }
                         FormDivider()
-                        NavRow(symbol: "calendar", title: "几号前取走", value: dayText(pickupBefore), empty: pickupBefore == nil) { dateField = .pickupBefore }
+                        NavRow(symbol: "calendar", title: String(localized: "几号前取走"), value: dayText(pickupBefore), empty: pickupBefore == nil) { dateField = .pickupBefore }
                     }
                     FormCard {
-                        FieldBlock(label: "方便的时间", hint: fromProfile(availTime, "defaultTime") ? "来自我的信息" : nil) {
-                            inputLine("比如 工作日晚上、周末", text: $availTime, field: .time)
+                        FieldBlock(label: String(localized: "方便的时间"), hint: fromProfile(availTime, "defaultTime") ? String(localized: "来自我的信息") : nil) {
+                            inputLine(String(localized: "比如 工作日晚上、周末"), text: $availTime, field: .time)
                         }
                         FormDivider()
-                        FieldBlock(label: "微信号", hint: fromProfile(contact, "contact") ? "来自我的信息，别人能看到" : "填了别人能看到") {
+                        FieldBlock(label: String(localized: "微信号"), hint: fromProfile(contact, "contact") ? String(localized: "来自我的信息，别人能看到") : String(localized: "填了别人能看到")) {
                             contactField
                         }
                         FormDivider()
-                        FieldBlock(label: "备注") {
-                            noteEditor("用了多久、有没有毛病", minHeight: 80)
+                        FieldBlock(label: String(localized: "备注")) {
+                            noteEditor(String(localized: "用了多久、有没有毛病"), minHeight: 80)
                         }
                     }
                     .environment(\.formLarge, true)
@@ -608,7 +608,7 @@ struct PostForm: View {
 
     /// 顶上居中的标题
     private var formTitle: some View {
-        Text(editing != nil && !relist ? (isRent ? "改房子" : "改东西") : (isRent ? "出租房子" : "卖东西"))
+        Text(editing != nil && !relist ? (isRent ? String(localized: "改房子") : String(localized: "改东西")) : (isRent ? String(localized: "出租房子") : String(localized: "卖东西")))
             .font(.system(size: 17, weight: .semibold))
             .foregroundStyle(Theme.ink)
             .frame(maxWidth: .infinity)
@@ -621,9 +621,9 @@ struct PostForm: View {
     }
 
     private func dayText(_ date: Date?) -> String {
-        guard let date else { return "不限" }
+        guard let date else { return String(localized: "不限") }
         let c = Calendar.current.dateComponents([.month, .day], from: date)
-        return "\(c.month ?? 0)月\(c.day ?? 0)日"
+        return String(localized: "\(c.month ?? 0)月\(c.day ?? 0)日")
     }
 
     /// 白底块里的一行输入：17 号字
@@ -738,7 +738,7 @@ struct PostForm: View {
                         Image(systemName: "sparkle").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.onBuy)
                     }
                 }
-                Text(aiLoading ? "AI 正在认\n也可以自己写" : (aiGuessed ? "AI 填好了\n可以改" : "放上照片\nAI 帮你填名字"))
+                Text(aiLoading ? String(localized: "AI 正在认\n也可以自己写") : (aiGuessed ? String(localized: "AI 填好了\n可以改") : String(localized: "放上照片\nAI 帮你填名字")))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.sub)
                     .lineLimit(2)
@@ -753,7 +753,7 @@ struct PostForm: View {
     @ViewBuilder
     private var aiQuota: some View {
         if state.aiDescribe || Demo.isOn, editing == nil, !isRent, let left = state.me?.aiLeft ?? (Demo.scene == "ai-low" ? 6 : (Demo.scene == "ai-out" ? 0 : nil)), left <= 10 {
-            Text(left == 0 ? "这个月的 AI 用完了，下个月 1 号恢复，名字和价格自己填一下。" : "本月 AI 还剩 \(left) 条")
+            Text(left == 0 ? String(localized: "这个月的 AI 用完了，下个月 1 号恢复，名字和价格自己填一下。") : String(localized: "本月 AI 还剩 \(left) 条"))
                 .font(.system(size: 12.5))
                 .foregroundStyle(left == 0 ? Theme.warn : Theme.hint)
                 .fixedSize(horizontal: false, vertical: true)
@@ -761,7 +761,7 @@ struct PostForm: View {
     }
 
     private var priceField: some View {
-        FieldBlock(label: isRent ? "月租" : "价格", hint: tried && missingNames.contains(isRent ? "月租" : "价格") ? "填个价格才能发" : (priceSuggested ? "AI 建议价，可以改" : nil), hintColor: tried && missingNames.contains(isRent ? "月租" : "价格") ? Theme.warn : Theme.tint) {
+        FieldBlock(label: isRent ? String(localized: "月租") : String(localized: "价格"), hint: tried && missingNames.contains(isRent ? String(localized: "月租") : String(localized: "价格")) ? String(localized: "填个价格才能发") : (priceSuggested ? String(localized: "AI 建议价，可以改") : nil), hintColor: tried && missingNames.contains(isRent ? String(localized: "月租") : String(localized: "价格")) ? Theme.warn : Theme.tint) {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 if !price.isEmpty { Text("$") }
                 TextField("$", text: Binding(
@@ -786,8 +786,8 @@ struct PostForm: View {
     }
 
     private var nameField: some View {
-        FieldBlock(label: isRent ? "标题" : "名字", hint: tried && missingNames.contains(isRent ? "标题" : "名字") ? "写一下\(isRent ? "标题" : "卖什么")才能发" : (title.count > 14 ? "名字写短一点，细节放备注" : nil), hintColor: tried && missingNames.contains(isRent ? "标题" : "名字") ? Theme.warn : Theme.hint) {
-            TextField(isRent ? "比如 Monty 旁一室一厅" : "比如 榉木画架", text: Binding(
+        FieldBlock(label: isRent ? String(localized: "标题") : String(localized: "名字"), hint: tried && missingNames.contains(isRent ? String(localized: "标题") : String(localized: "名字")) ? (isRent ? String(localized: "写一下标题才能发") : String(localized: "写一下卖什么才能发")) : (title.count > 14 ? String(localized: "名字写短一点，细节放备注") : nil), hintColor: tried && missingNames.contains(isRent ? String(localized: "标题") : String(localized: "名字")) ? Theme.warn : Theme.hint) {
+            TextField(isRent ? String(localized: "比如 Monty 旁一室一厅") : String(localized: "比如 榉木画架"), text: Binding(
                 get: { title },
                 set: {
                     title = $0
@@ -808,11 +808,11 @@ struct PostForm: View {
     private var statusCard: some View {
         if let editing, editing.status != "hidden", !relist {
             FormCard {
-                FieldBlock(label: "状态") {
+                FieldBlock(label: String(localized: "状态")) {
                     HStack(spacing: 8) {
-                        Chip(text: "在售", on: status == "on", act: formAct) { status = "on" }
-                        Chip(text: "已预订", on: status == "reserved", act: formAct) { status = "reserved" }
-                        Chip(text: isRent ? "已租" : "已卖", on: status == "off", act: formAct) { status = "off" }
+                        Chip(text: String(localized: "在售"), on: status == "on", act: formAct) { status = "on" }
+                        Chip(text: String(localized: "已预订"), on: status == "reserved", act: formAct) { status = "reserved" }
+                        Chip(text: isRent ? String(localized: "已租") : String(localized: "已卖"), on: status == "off", act: formAct) { status = "off" }
                     }
                 }
             }
@@ -821,7 +821,7 @@ struct PostForm: View {
     }
 
     private var contactField: some View {
-        inputLine("微信号", text: $contact, field: .contact)
+        inputLine(String(localized: "微信号"), text: $contact, field: .contact)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .focused($focus, equals: .contact)
@@ -857,11 +857,11 @@ struct PostForm: View {
                 VStack(alignment: .leading, spacing: 12) {
                     formTitle
                     statusCard
-                    GroupHeader(title: "必填", note: "照片、标题、月租、出租、地段、起租、水电")
+                    GroupHeader(title: String(localized: "必填"), note: String(localized: "照片、标题、月租、出租、地段、起租、水电"))
                     FormCard {
                         VStack(alignment: .leading, spacing: 8) {
                             FlowLayout(spacing: 8) { rentPhotos }
-                            lackHint("照片", "放一张照片才能发")
+                            lackHint(String(localized: "照片"), String(localized: "放一张照片才能发"))
                         }
                         .padding(.vertical, 12)
                         FormDivider()
@@ -869,65 +869,65 @@ struct PostForm: View {
                         FormDivider()
                         priceField
                         FormDivider()
-                        FieldBlock(label: "出租") {
+                        FieldBlock(label: String(localized: "出租")) {
                             HStack(spacing: 8) {
-                                Chip(text: "整套", on: unitWhole, act: formAct) { unitWhole.toggle() }
-                                Chip(text: "单间", on: unitRoom, act: formAct) { unitRoom.toggle() }
+                                Chip(text: String(localized: "整套"), on: unitWhole, act: formAct) { unitWhole.toggle() }
+                                Chip(text: String(localized: "单间"), on: unitRoom, act: formAct) { unitRoom.toggle() }
                             }
                         }
                         FormDivider()
-                        FieldBlock(label: "地段") { placeChips(surface: Theme.fill) }
+                        FieldBlock(label: String(localized: "地段")) { placeChips(surface: Theme.fill) }
                         FormDivider()
-                        FieldBlock(label: "什么时候能住") {
+                        FieldBlock(label: String(localized: "什么时候能住")) {
                             HStack(spacing: 10) {
-                                DateTile(label: "起", value: from, empty: "选日期", act: formAct, xun: fromXun) { dateField = .from }
-                                DateTile(label: "止", value: to, empty: "长租", act: formAct, xun: toXun) { dateField = .to }
+                                DateTile(label: String(localized: "起"), value: from, empty: String(localized: "选日期"), act: formAct, xun: fromXun) { dateField = .from }
+                                DateTile(label: String(localized: "止"), value: to, empty: String(localized: "长租"), act: formAct, xun: toXun) { dateField = .to }
                             }
                         }
                         FormDivider()
-                        FieldBlock(label: "水电") {
+                        FieldBlock(label: String(localized: "水电")) {
                             HStack(spacing: 8) {
-                                Chip(text: "包水电", on: utilities == true, act: formAct) { utilities = true }
-                                Chip(text: "不包水电", on: utilities == false, act: formAct) { utilities = false }
+                                Chip(text: String(localized: "包水电"), on: utilities == true, act: formAct) { utilities = true }
+                                Chip(text: String(localized: "不包水电"), on: utilities == false, act: formAct) { utilities = false }
                             }
                         }
                     }
-                    GroupHeader(title: "选填", note: "填了少来回问", large: true).padding(.top, 10)
+                    GroupHeader(title: String(localized: "选填"), note: String(localized: "填了少来回问"), large: true).padding(.top, 10)
                     FormCard {
-                        FieldBlock(label: "微信号", hint: fromProfile(contact, "contact") ? "来自我的信息，别人能看到" : "填了别人能看到") { contactField }
+                        FieldBlock(label: String(localized: "微信号"), hint: fromProfile(contact, "contact") ? String(localized: "来自我的信息，别人能看到") : String(localized: "填了别人能看到")) { contactField }
                         FormDivider()
-                        FieldBlock(label: "方便看房的时间", hint: fromProfile(availTime, "defaultTime") ? "来自我的信息" : nil) {
-                            inputLine("比如 周末下午", text: $availTime, field: .time)
+                        FieldBlock(label: String(localized: "方便看房的时间"), hint: fromProfile(availTime, "defaultTime") ? String(localized: "来自我的信息") : nil) {
+                            inputLine(String(localized: "比如 周末下午"), text: $availTime, field: .time)
                         }
                     }
                     FormCard {
-                        FieldBlock(label: "房型") {
+                        FieldBlock(label: String(localized: "房型")) {
                             VStack(alignment: .leading, spacing: 8) {
-                                oneOf(["1", "2", "3"], $bedrooms, suffix: " 室")
-                                oneOf(["1", "2", "3"], $baths, suffix: " 卫")
+                                oneOf(["1", "2", "3"], $bedrooms, suffix: String(localized: " 室"))
+                                oneOf(["1", "2", "3"], $baths, suffix: String(localized: " 卫"))
                             }
                         }
                         FormDivider()
-                        FieldBlock(label: "家具") { oneOf(["有", "部分有", "没有"], $furniture) }
+                        FieldBlock(label: String(localized: "家具")) { oneOf(["有", "部分有", "没有"], $furniture) }
                         FormDivider()
-                        FieldBlock(label: "独卫") { yesNo("有", "没有", $privateBath) }
+                        FieldBlock(label: String(localized: "独卫")) { yesNo(String(localized: "有"), String(localized: "没有"), $privateBath) }
                     }
                     FormCard {
-                        FieldBlock(label: "网费") { yesNo("包", "不包", $internet) }
+                        FieldBlock(label: String(localized: "网费")) { yesNo(String(localized: "包"), String(localized: "不包"), $internet) }
                         FormDivider()
-                        FieldBlock(label: "押金") { dollarLine("", text: $deposit, field: .deposit) }
+                        FieldBlock(label: String(localized: "押金")) { dollarLine("", text: $deposit, field: .deposit) }
                         FormDivider()
-                        FieldBlock(label: "申请费") { dollarLine("", text: $appFee, field: .appFee) }
+                        FieldBlock(label: String(localized: "申请费")) { dollarLine("", text: $appFee, field: .appFee) }
                     }
                     FormCard {
-                        FieldBlock(label: "室友") { oneOf(Self.roommateCounts, $roommateCount) }
+                        FieldBlock(label: String(localized: "室友")) { oneOf(Self.roommateCounts, $roommateCount) }
                         FormDivider()
-                        FieldBlock(label: "室友情况") { inputLine("比如都是学生", text: $roommateNote, field: .note) }
+                        FieldBlock(label: String(localized: "室友情况")) { inputLine(String(localized: "比如都是学生"), text: $roommateNote, field: .note) }
                         FormDivider()
-                        NavRow(symbol: "calendar", title: "租约到期日", value: dayText(leaseEnd), empty: leaseEnd == nil) { dateField = .leaseEnd }
+                        NavRow(symbol: "calendar", title: String(localized: "租约到期日"), value: dayText(leaseEnd), empty: leaseEnd == nil) { dateField = .leaseEnd }
                     }
                     FormCard {
-                        FieldBlock(label: "描述") { noteEditor("周边、交通、看房时间", minHeight: 110) }
+                        FieldBlock(label: String(localized: "描述")) { noteEditor(String(localized: "周边、交通、看房时间"), minHeight: 110) }
                     }
                     errorLine
                 }
@@ -1001,7 +1001,7 @@ struct PostForm: View {
             } label: {
                 HStack(spacing: 8) {
                     if busy { HoneyLoader(size: 22) }
-                    Text(busy ? "正在发" : (relist ? "重新发布" : (editing == nil ? "发布" : "保存"))).lineLimit(1)
+                    Text(busy ? String(localized: "正在发") : (relist ? String(localized: "重新发布") : (editing == nil ? String(localized: "发布") : String(localized: "保存")))).lineLimit(1)
                 }
             }
             .buttonStyle(PrimaryButtonStyle(act: .ink, dimmed: !requiredFilled))
@@ -1024,9 +1024,9 @@ struct PostForm: View {
     /// 必填里还差哪几样
     private var missingNames: [String] {
         var out: [String] = []
-        if photos.isEmpty { out.append("照片") }
-        if title.trimmingCharacters(in: .whitespaces).isEmpty, !aiLoading { out.append(isRent ? "标题" : "名字") }
-        if Int(price.trimmingCharacters(in: .whitespaces)) == nil { out.append(isRent ? "月租" : "价格") }
+        if photos.isEmpty { out.append(String(localized: "照片")) }
+        if title.trimmingCharacters(in: .whitespaces).isEmpty, !aiLoading { out.append(isRent ? String(localized: "标题") : String(localized: "名字")) }
+        if Int(price.trimmingCharacters(in: .whitespaces)) == nil { out.append(isRent ? String(localized: "月租") : String(localized: "价格")) }
         return out
     }
 
@@ -1054,7 +1054,7 @@ struct PostForm: View {
         }
         for item in items where photos.count < maxPhotos {
             guard let data = try? await item.loadTransferable(type: Data.self) else {
-                state.toast("有张照片打不开")
+                state.toast(String(localized: "有张照片打不开"))
                 continue
             }
             addPhoto(data)
@@ -1064,7 +1064,7 @@ struct PostForm: View {
 
     private func addPhoto(_ data: Data) {
         guard let ready = ImagePrep.prepare(data) else {
-            state.toast("有张照片打不开")
+            state.toast(String(localized: "有张照片打不开"))
             return
         }
         let first = photos.isEmpty
@@ -1109,7 +1109,7 @@ struct PostForm: View {
         do {
             _ = try await API.shared.setStatus(editing.id, "off", soldPrice: price)
             state.changed()
-            state.toast("改好了")
+            state.toast(String(localized: "改好了"))
             dismiss()
         } catch {
             self.error = error.localizedDescription
@@ -1136,26 +1136,26 @@ struct PostForm: View {
         tried = true
         let lack = missingNames
         if !lack.isEmpty {
-            state.toast("还差" + lack.joined(separator: "和"))
+            state.toast(String(localized: "还差") + lack.joined(separator: String(localized: "和")))
             return
         }
-        guard let money = Int(price.trimmingCharacters(in: .whitespaces)), money >= 0 else { error = "价格要填整数。"; return }
+        guard let money = Int(price.trimmingCharacters(in: .whitespaces)), money >= 0 else { error = String(localized: "价格要填整数。"); return }
         if isRent {
-            if money == 0 { error = "租金要大于 0。"; return }
-            if !unitWhole, !unitRoom { error = "选整套或单间，都可以就都选。"; return }
-            if p.isEmpty { error = "选一下地段。"; return }
-            guard let start = from else { error = "选一下起始日期。"; return }
-            if let end = to, start > end { error = "止要晚于起。"; return }
-            if utilities == nil { error = "选一下包不包水电。"; return }
+            if money == 0 { error = String(localized: "租金要大于 0。"); return }
+            if !unitWhole, !unitRoom { error = String(localized: "选整套或单间，都可以就都选。"); return }
+            if p.isEmpty { error = String(localized: "选一下地段。"); return }
+            guard let start = from else { error = String(localized: "选一下起始日期。"); return }
+            if let end = to, start > end { error = String(localized: "止要晚于起。"); return }
+            if utilities == nil { error = String(localized: "选一下包不包水电。"); return }
         } else if editing == nil, !aiConsent {
-            error = "要同意发给 AI 打分才能发布。"
+            error = String(localized: "要同意发给 AI 打分才能发布。")
             return
         }
         let fee = deliveryFee.trimmingCharacters(in: .whitespaces)
         let delivery: String? = pickup && deliver ? "both" : (pickup ? "pickup" : (deliver ? "deliver" : nil))
         let dep = deposit.trimmingCharacters(in: .whitespaces), app = appFee.trimmingCharacters(in: .whitespaces)
-        if !isRent, deliver, !fee.isEmpty, Int(fee) == nil { error = "配送费要填整数。"; return }
-        if isRent, (!dep.isEmpty && Int(dep) == nil) || (!app.isEmpty && Int(app) == nil) { error = "押金和申请费要填整数。"; return }
+        if !isRent, deliver, !fee.isEmpty, Int(fee) == nil { error = String(localized: "配送费要填整数。"); return }
+        if isRent, (!dep.isEmpty && Int(dep) == nil) || (!app.isEmpty && Int(app) == nil) { error = String(localized: "押金和申请费要填整数。"); return }
 
         busy = true
         defer { busy = false }
@@ -1252,7 +1252,7 @@ struct PostForm: View {
                 hive.append(cover)
                 posted = true
             } else {
-                state.toast(editing == nil ? "发好了" : "改好了")
+                state.toast(editing == nil ? String(localized: "发好了") : String(localized: "改好了"))
                 dismiss()
             }
         } catch {
@@ -1306,9 +1306,9 @@ private struct DateRow: View {
     @Environment(\.formLarge) private var large
 
     private var text: String {
-        guard let value else { return "不限" }
+        guard let value else { return String(localized: "不限") }
         let c = Calendar.current.dateComponents([.month, .day], from: value)
-        return "\(c.month ?? 0) 月 \(c.day ?? 0) 日"
+        return String(localized: "\(c.month ?? 0) 月 \(c.day ?? 0) 日")
     }
 
     var body: some View {
@@ -1342,8 +1342,8 @@ private struct DateTile: View {
     private var text: String {
         guard let value else { return empty }
         let c = Calendar.current.dateComponents([.month, .day], from: value)
-        if xun { return "\(c.month ?? 0) 月" + Listing.xunName(c.day ?? 1) }
-        return "\(c.month ?? 0) 月 \(c.day ?? 0) 日"
+        if xun { return String(localized: "\(c.month ?? 0) 月") + Listing.xunName(c.day ?? 1) }
+        return String(localized: "\(c.month ?? 0) 月 \(c.day ?? 0) 日")
     }
 
     var body: some View {
@@ -1389,7 +1389,7 @@ private struct CalendarSheet: View {
     @State private var contentHeight: CGFloat = 0
     @State private var boxHeight: CGFloat = 0
 
-    private static let xuns = [(1, "上旬"), (11, "中旬"), (21, "下旬")]
+    private static let xuns = [(1, String(localized: "上旬")), (11, String(localized: "中旬")), (21, String(localized: "下旬"))]
 
     private var lastDayOfMonth: Int {
         calendar.range(of: .day, in: .month, for: month)?.count ?? 30
@@ -1427,14 +1427,14 @@ private struct CalendarSheet: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                arrow("chevron.left", "上个月", -1)
+                arrow("chevron.left", String(localized: "上个月"), -1)
                 Spacer()
                 Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink)
                 Text("· \(calendar.component(.month, from: month)) 月")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Theme.sub)
                 Spacer()
-                arrow("chevron.right", "下个月", 1)
+                arrow("chevron.right", String(localized: "下个月"), 1)
             }
             if allowXun {
                 // 上中下旬三块放在日历顶上，写清是几号到几号
@@ -1444,7 +1444,7 @@ private struct CalendarSheet: View {
                         Button { pickXun(first) } label: {
                             VStack(spacing: 2) {
                                 Text(name).font(.system(size: 17, weight: .bold)).lineLimit(1)
-                                Text(first == 21 ? "21–\(lastDayOfMonth) 号" : "\(first)–\(first + 9) 号").font(.system(size: 13)).lineLimit(1).minimumScaleFactor(0.8)
+                                Text(first == 21 ? String(localized: "21–\(lastDayOfMonth) 号") : String(localized: "\(first)–\(first + 9) 号")).font(.system(size: 13)).lineLimit(1).minimumScaleFactor(0.8)
                                     .foregroundStyle(on ? Theme.onBuy.opacity(0.75) : Theme.sub)
                             }
                             .foregroundStyle(on ? Theme.onBuy : Theme.ink)
@@ -1458,7 +1458,7 @@ private struct CalendarSheet: View {
                 Text("选一旬，或者点某一天").font(.system(size: 13)).foregroundStyle(Theme.hint).frame(maxWidth: .infinity)
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 2) {
-                ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { d in
+                ForEach([String(localized: "日"), String(localized: "一"), String(localized: "二"), String(localized: "三"), String(localized: "四"), String(localized: "五"), String(localized: "六")], id: \.self) { d in
                     Text(d).font(.system(size: 13)).foregroundStyle(Theme.sub).frame(height: 26)
                 }
                 ForEach(Array(days.enumerated()), id: \.offset) { _, day in

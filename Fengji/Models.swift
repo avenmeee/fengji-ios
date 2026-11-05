@@ -2,15 +2,15 @@ import Foundation
 
 typealias Option = (key: String, label: String)
 
-let CATS: [Option] = [("furn", "家具"), ("elec", "电子"), ("kitchen", "厨具"), ("art", "画材")]  // 后端还有 other，界面不显示
-let ALL_OPTION: Option = ("all", "全部")
+let CATS: [Option] = [("furn", String(localized: "家具")), ("elec", String(localized: "电子")), ("kitchen", String(localized: "厨具")), ("art", String(localized: "画材"))]  // 后端还有 other，界面不显示
+let ALL_OPTION: Option = ("all", String(localized: "全部"))
 
 func plainOptions(_ list: [String]) -> [Option] {
     list.map { (key: $0, label: $0) }
 }
 
 let CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"]
-let UNIT_OPTIONS: [Option] = [("whole", "整套"), ("room", "单间")]
+let UNIT_OPTIONS: [Option] = [("whole", String(localized: "整套")), ("room", String(localized: "单间"))]
 
 /// 热门地点，卖东西和房子都用；选了存文字
 let PLACES = ["Monty", "TP", "Mark", "大中超"]
@@ -94,36 +94,36 @@ struct Listing: Codable, Identifiable, Hashable {
     var isGroup: Bool { sourceType == "group" }
     /// 没认领的群帖子：只能去群里找
     var findInGroup: Bool { isGroup }
-    var sellerLabel: String { sellerName ?? sourcePoster ?? "同学" }
+    var sellerLabel: String { sellerName ?? sourcePoster ?? String(localized: "同学") }
     /// “3 天前发在群里”里的前半句
     var groupAge: String {
         guard let t = sourcePostedAt else { return "" }
         let days = Int((Date().timeIntervalSince1970 * 1000 - Double(t)) / 86_400_000)
-        return days < 1 ? "今天" : "\(days) 天前"
+        return days < 1 ? String(localized: "今天") : String(localized: "\(days) 天前")
     }
     var shareURL: String { "\(Config.base)/l/\(id)" }
 
     var priceText: String {
-        price == 0 ? "免费" : "$" + price.formatted(.number.grouping(.automatic).locale(Locale(identifier: "en_US")))
+        price == 0 ? String(localized: "免费") : "$" + price.formatted(.number.grouping(.automatic).locale(Locale(identifier: "en_US")))
     }
 
     var catLabel: String { CATS.first { $0.key == cat }?.label ?? "" }
 
     var statusText: String {
         switch status {
-        case "on": return "在售"
-        case "reserved": return "已预订"
-        case "hidden": return "被举报，审核中"
-        default: return isRent ? "已租出" : "已卖出"
+        case "on": return String(localized: "在售")
+        case "reserved": return String(localized: "已预订")
+        case "hidden": return String(localized: "被举报，审核中")
+        default: return isRent ? String(localized: "已租出") : String(localized: "已卖出")
         }
     }
 
     var period: String {
         let a = Self.day(from, fromPrec), b = Self.day(to, toPrec)
-        if longTerm == true, let a { return "\(a) 起，长租" }
+        if longTerm == true, let a { return String(localized: "\(a) 起，长租") }
         if let a, let b { return "\(a) – \(b)" }
-        if let a { return "\(a) 起" }
-        if let b { return "到 \(b)" }
+        if let a { return String(localized: "\(a) 起") }
+        if let b { return String(localized: "到 \(b)") }
         return ""
     }
 
@@ -131,97 +131,97 @@ struct Listing: Codable, Identifiable, Hashable {
     var pickupText: String {
         var parts: [String] = []
         switch delivery {
-        case "deliver": parts.append("可配送")
-        case "both": parts.append("自取或配送")
-        case "pickup": parts.append("自取")
+        case "deliver": parts.append(String(localized: "可配送"))
+        case "both": parts.append(String(localized: "自取或配送"))
+        case "pickup": parts.append(String(localized: "自取"))
         default: break
         }
-        if let fee = deliveryFee, delivery != "pickup" { parts.append(fee == 0 ? "免配送费" : "配送费 $\(fee)") }
-        if let d = Self.day(pickupBefore) { parts.append("\(d)前取走") }
-        if let d = Self.day(pickupAfter) { parts.append("\(d)后可取") }
+        if let fee = deliveryFee, delivery != "pickup" { parts.append(fee == 0 ? String(localized: "免配送费") : String(localized: "配送费 $\(String(fee))")) }
+        if let d = Self.day(pickupBefore) { parts.append(String(localized: "\(d)前取走")) }
+        if let d = Self.day(pickupAfter) { parts.append(String(localized: "\(d)后可取")) }
         return parts.joined(separator: " · ")
     }
 
     /// 租房的条件：包水电、独卫、租约到期
     var rentFacts: String {
         var parts: [String] = []
-        if unitType == "whole" { parts.append("整套") }
-        if unitType == "room" { parts.append("单间") }
-        if unitType == "both" { parts.append("可整套可单间") }
+        if unitType == "whole" { parts.append(String(localized: "整套")) }
+        if unitType == "room" { parts.append(String(localized: "单间")) }
+        if unitType == "both" { parts.append(String(localized: "可整套可单间")) }
         if let roomType { parts.append(roomType) }
-        if let utilities { parts.append(utilities ? "包水电" : "不包水电") }
-        if let internet { parts.append(internet ? "包网" : "不包网") }
-        if let furniture { parts.append("家具：\(furniture)") }
-        if let privateBath { parts.append(privateBath ? "独卫" : "没有独卫") }
-        if let end = Self.day(leaseEnd) { parts.append("租约到 \(end)") }
-        if let deposit { parts.append("押金 $\(deposit)") }
-        if let appFee { parts.append("申请费 $\(appFee)") }
-        if let roommates { parts.append("室友：\(roommates)") }
+        if let utilities { parts.append(utilities ? String(localized: "包水电") : String(localized: "不包水电")) }
+        if let internet { parts.append(internet ? String(localized: "包网") : String(localized: "不包网")) }
+        if let furniture { parts.append(String(localized: "家具：\(furniture)")) }
+        if let privateBath { parts.append(privateBath ? String(localized: "独卫") : String(localized: "没有独卫")) }
+        if let end = Self.day(leaseEnd) { parts.append(String(localized: "租约到 \(end)")) }
+        if let deposit { parts.append(String(localized: "押金 $\(String(deposit))")) }
+        if let appFee { parts.append(String(localized: "申请费 $\(String(appFee))")) }
+        if let roommates { parts.append(String(localized: "室友：\(roommates)")) }
         return parts.joined(separator: " · ")
     }
 
     /// 卡片上用的短日期：1/5–5/20
     var shortPeriod: String {
         let a = Self.slash(from, fromPrec), b = Self.slash(to, toPrec)
-        if longTerm == true, let a { return "\(a) 起长租" }
+        if longTerm == true, let a { return String(localized: "\(a) 起长租") }
         if let a, let b { return "\(a)–\(b)" }
         return a ?? b ?? ""
     }
 
     private static func slash(_ iso: String?, _ prec: String? = nil) -> String? {
         guard let parts = iso?.split(separator: "-"), parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]) else { return nil }
-        if prec == "xun" { return "\(m)月" + xunName(d) }
+        if prec == "xun" { return String(localized: "\(m)月") + xunName(d) }
         return "\(m)/\(d)"
     }
 
     var ago: String {
         let minutes = Int((Date().timeIntervalSince1970 * 1000 - Double(createdAt)) / 60000)
-        if minutes < 1 { return "刚刚" }
-        if minutes < 60 { return "\(minutes) 分钟前" }
+        if minutes < 1 { return String(localized: "刚刚") }
+        if minutes < 60 { return String(localized: "\(minutes) 分钟前") }
         let hours = minutes / 60
-        if hours < 24 { return "\(hours) 小时前" }
+        if hours < 24 { return String(localized: "\(hours) 小时前") }
         let days = hours / 24
-        return days < 30 ? "\(days) 天前" : "\(days / 30) 个月前"
+        return days < 30 ? String(localized: "\(days) 天前") : String(localized: "\(days / 30) 个月前")
     }
 
     /// 1～10 上旬，11～20 中旬，其余下旬
-    static func xunName(_ day: Int) -> String { day <= 10 ? "上旬" : (day <= 20 ? "中旬" : "下旬") }
+    static func xunName(_ day: Int) -> String { day <= 10 ? String(localized: "上旬") : (day <= 20 ? String(localized: "中旬") : String(localized: "下旬")) }
 
     /// 详情的信息块：一行一项（图标、标签、内容）。房子：类型、地段、可住、房间、其他；东西：自取或地点、日期、送货
     var infoRows: [(icon: String, label: String, value: String)] {
         var rows: [(icon: String, label: String, value: String)] = []
         if isRent {
-            let unit = unitType == "whole" ? "整套" : (unitType == "room" ? "单间" : (unitType == "both" ? "整套或单间" : ""))
+            let unit = unitType == "whole" ? String(localized: "整套") : (unitType == "room" ? String(localized: "单间") : (unitType == "both" ? String(localized: "整套或单间") : ""))
             var other: [String] = []
-            if let utilities { other.append(utilities ? "包水电" : "不包水电") }
-            if let internet { other.append(internet ? "包网" : "不包网") }
-            if let furniture { other.append("家具：\(furniture)") }
-            if let privateBath { other.append(privateBath ? "独卫" : "没有独卫") }
-            if let end = Self.day(leaseEnd) { other.append("租约到 \(end)") }
-            if let deposit { other.append("押金 $\(deposit)") }
-            if let appFee { other.append("申请费 $\(appFee)") }
-            rows = [("house", "类型", unit), ("mappin", "地段", place), ("calendar", "可住", period),
-                    ("bed.double", "房间", roomType ?? ""), ("clock", "看房", availTime ?? ""), ("info.circle", "其他", other.joined(separator: " · "))]
+            if let utilities { other.append(utilities ? String(localized: "包水电") : String(localized: "不包水电")) }
+            if let internet { other.append(internet ? String(localized: "包网") : String(localized: "不包网")) }
+            if let furniture { other.append(String(localized: "家具：\(furniture)")) }
+            if let privateBath { other.append(privateBath ? String(localized: "独卫") : String(localized: "没有独卫")) }
+            if let end = Self.day(leaseEnd) { other.append(String(localized: "租约到 \(end)")) }
+            if let deposit { other.append(String(localized: "押金 $\(String(deposit))")) }
+            if let appFee { other.append(String(localized: "申请费 $\(String(appFee))")) }
+            rows = [("house", String(localized: "类型"), unit), ("mappin", String(localized: "地段"), place), ("calendar", String(localized: "可住"), period),
+                    ("bed.double", String(localized: "房间"), roomType ?? ""), ("clock", String(localized: "看房"), availTime ?? ""), ("info.circle", String(localized: "其他"), other.joined(separator: " · "))]
         } else {
             var dates: [String] = []
-            if let d = Self.day(pickupBefore) { dates.append("\(d)前") }
-            if let d = Self.day(pickupAfter) { dates.append("\(d)后可取") }
+            if let d = Self.day(pickupBefore) { dates.append(String(localized: "\(d)前")) }
+            if let d = Self.day(pickupAfter) { dates.append(String(localized: "\(d)后可取")) }
             var send = ""
             if delivery == "deliver" || delivery == "both" {
-                send = deliveryFee == nil ? "可以送" : (deliveryFee == 0 ? "可以送，免配送费" : "可以送，配送费 $\(deliveryFee ?? 0)")
+                send = deliveryFee == nil ? String(localized: "可以送") : (deliveryFee == 0 ? String(localized: "可以送，免配送费") : String(localized: "可以送，配送费 $\(String(deliveryFee ?? 0))"))
             }
-            rows = [("mappin", delivery == "deliver" ? "地点" : "自取", place), ("calendar", "日期", dates.joined(separator: " · ")),
-                    ("clock", "时间", availTime ?? ""), ("box.truck", "送货", send)]
+            rows = [("mappin", delivery == "deliver" ? String(localized: "地点") : String(localized: "自取"), place), ("calendar", String(localized: "日期"), dates.joined(separator: " · ")),
+                    ("clock", String(localized: "时间"), availTime ?? ""), ("box.truck", String(localized: "送货"), send)]
         }
         return rows.filter { !$0.value.isEmpty }
     }
 
     private static func day(_ iso: String?, _ prec: String? = nil) -> String? {
         if prec == "xun", let parts = iso?.split(separator: "-"), parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]) {
-            return "\(m)月" + xunName(d)
+            return String(localized: "\(m)月") + xunName(d)
         }
         guard let parts = iso?.split(separator: "-"), parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]) else { return nil }
-        return "\(m)月\(d)日"
+        return String(localized: "\(m)月\(d)日")
     }
 }
 

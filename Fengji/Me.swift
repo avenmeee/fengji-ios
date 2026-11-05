@@ -105,7 +105,7 @@ struct MeView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("我的信息，现在是 " + (state.me?.name ?? ""))
+                .accessibilityLabel(String(localized: "我的信息，现在是 ") + (state.me?.name ?? ""))
                 Spacer()
             } else {
                 SignInBlock()
@@ -125,7 +125,7 @@ struct MeView: View {
     /// 在卖几件、卖完几件
     private var mineCounts: String {
         let live = visible.filter { !$0.isSold }.count, sold = visible.filter(\.isSold).count
-        return ["在卖 \(live)", sold > 0 ? "卖完 \(sold)" : ""].filter { !$0.isEmpty }.joined(separator: " · ")
+        return [String(localized: "在卖 \(live)"), sold > 0 ? String(localized: "卖完 \(sold)") : ""].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private func listRow<V: View>(_ v: V) -> some View {
@@ -151,7 +151,7 @@ struct MeView: View {
                         if i > 0 { FormDivider() }
                         WantRow(want: want, copy: {
                             UIPasteboard.general.string = want.contact
-                            state.toast("已复制")
+                            state.toast(String(localized: "已复制"))
                         }, remove: { Task { await deleteWant(want) } }, report: { reportingWant = want }, block: { blockingWant = want })
                     }
                 })
@@ -166,7 +166,7 @@ struct MeView: View {
             if visible.isEmpty {
                 listRow(Group {
                     if phase == .ok {
-                        EmptyCard(symbol: "shippingbox", title: "还没发过", note: "点下面的加号也能发", action: ("发第一件", { state.plusAction(.goods) }))
+                        EmptyCard(symbol: "shippingbox", title: String(localized: "还没发过"), note: String(localized: "点下面的加号也能发"), action: (String(localized: "发第一件"), { state.plusAction(.goods) }))
                     } else {
                         PhaseBlock(phase: phase)
                     }
@@ -181,14 +181,14 @@ struct MeView: View {
                             Button { run(.status("on"), item) } label: { Label("重新上架", systemImage: "arrow.uturn.up") }
                                 .tint(Theme.sub)
                         } else if item.status != "hidden" {
-                            Button { run(.status("off"), item) } label: { Label(item.isRent ? "租出去了" : "卖完了", systemImage: "tag") }
+                            Button { run(.status("off"), item) } label: { Label(item.isRent ? String(localized: "租出去了") : String(localized: "卖完了"), systemImage: "tag") }
                                 .tint(Theme.sub)
                         }
                     }
             }
             if recordCount > 0 {
                 listRow(Button { path.append("records") } label: {
-                    SettingRow(symbol: "archivebox", title: "记录") {
+                    SettingRow(symbol: "archivebox", title: String(localized: "记录")) {
                         HStack(spacing: 6) {
                             Text("删掉的 \(recordCount) 件").font(.system(size: 15)).foregroundStyle(Theme.sub)
                             Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.hint)
@@ -239,7 +239,7 @@ struct MeView: View {
         do {
             try await API.shared.reportWant(want.id, reason: reason)
             wants.removeAll { $0.id == want.id }
-            state.toast("收到了，会尽快处理")
+            state.toast(String(localized: "收到了，会尽快处理"))
         } catch {
             state.toast(error.localizedDescription)
         }
@@ -249,7 +249,7 @@ struct MeView: View {
         do {
             try await API.shared.blockWant(want.id)
             state.changed()
-            state.toast("已屏蔽")
+            state.toast(String(localized: "已屏蔽"))
         } catch {
             state.toast(error.localizedDescription)
         }
@@ -281,13 +281,13 @@ struct MeView: View {
 
     private func savePrice(_ item: Listing) async {
         guard let price = Int(newPrice.trimmingCharacters(in: .whitespaces)), price >= 0 else {
-            state.toast("价格要填整数")
+            state.toast(String(localized: "价格要填整数"))
             return
         }
         do {
             try await API.shared.setPrice(item.id, price)
             state.changed()
-            state.toast("改好了")
+            state.toast(String(localized: "改好了"))
         } catch {
             state.toast(error.localizedDescription)
         }
@@ -297,7 +297,7 @@ struct MeView: View {
         do {
             try await API.shared.bump(item.id)
             state.changed()
-            state.toast("擦亮了")
+            state.toast(String(localized: "擦亮了"))
         } catch {
             state.toast(error.localizedDescription)
         }
@@ -314,10 +314,10 @@ struct WantRow: View {
 
     private var when: String {
         let s = max(0, Date().timeIntervalSince1970 - Double(want.createdAt) / 1000)
-        if s < 3600 { return "刚刚" }
-        if s < 86400 { return "\(Int(s / 3600)) 小时前" }
-        if s < 2 * 86400 { return "昨天" }
-        return "\(Int(s / 86400)) 天前"
+        if s < 3600 { return String(localized: "刚刚") }
+        if s < 86400 { return String(localized: "\(Int(s / 3600)) 小时前") }
+        if s < 2 * 86400 { return String(localized: "昨天") }
+        return String(localized: "\(Int(s / 86400)) 天前")
     }
 
     var body: some View {
@@ -348,7 +348,7 @@ struct WantRow: View {
                     .background(Theme.fill, in: RoundedRectangle(cornerRadius: 10))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("复制联系方式 " + want.contact)
+                .accessibilityLabel(String(localized: "复制联系方式 ") + want.contact)
             }
             Spacer(minLength: 0)
             Menu {
@@ -439,12 +439,12 @@ struct MineActions: View {
             FormDivider()
             // 改价、已预订在编辑页里；卖完了的只能重新上架或删除
             if item.isSold {
-                PanelRow(symbol: "arrow.uturn.up", title: "重新上架") { pick(.status("on")) }
+                PanelRow(symbol: "arrow.uturn.up", title: String(localized: "重新上架")) { pick(.status("on")) }
             } else if item.status != "hidden" {
-                PanelRow(symbol: "pencil", title: "编辑") { pick(.edit) }
-                PanelRow(symbol: "tag", title: item.isRent ? "租出去了" : "卖完了") { pick(.status("off")) }
+                PanelRow(symbol: "pencil", title: String(localized: "编辑")) { pick(.edit) }
+                PanelRow(symbol: "tag", title: item.isRent ? String(localized: "租出去了") : String(localized: "卖完了")) { pick(.status("off")) }
             }
-            PanelRow(symbol: "trash", title: "删除", color: Theme.warn) { pick(.delete) }
+            PanelRow(symbol: "trash", title: String(localized: "删除"), color: Theme.warn) { pick(.delete) }
         }
     }
 }
@@ -501,7 +501,7 @@ struct SignInBlock: View {
         } catch let e as ASAuthorizationError where e.code == .canceled {
             return
         } catch {
-            self.error = (error as? APIError)?.errorDescription ?? "登录没成功，再试一次。"
+            self.error = (error as? APIError)?.errorDescription ?? String(localized: "登录没成功，再试一次。")
         }
     }
 }
