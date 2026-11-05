@@ -294,6 +294,16 @@ ok("自己发的不能被要求下架", r.status === 404, r);
 // 超过 10 天
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, sourceId: "old-" + stamp, title: "旧帖", postedAt: Date.now() - 11 * 86400000 } });
 ok("超过 10 天不导入", r.status === 422 && r.data.error === "too_old", r);
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, sourceId: "old2-" + stamp, title: "旧帖", backfill: "true", postedAt: Date.now() - 11 * 86400000 } });
+ok("backfill 不是 true 照旧 10 天", r.status === 422 && r.data.error === "too_old", r);
+r = await call("POST", "/v1/admin/import", { body: { ...imp, sourceId: "bf0-" + stamp, title: "补录旧帖" + stamp, backfill: true, postedAt: Date.now() - 44 * 86400000 } });
+ok("补录要管理员", r.status === 403, r);
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, sourceId: "bf1-" + stamp, title: "补录旧帖" + stamp, backfill: true, postedAt: Date.now() - 44 * 86400000 } });
+ok("补录放宽到 45 天", r.status === 201, r);
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, sourceId: "bf2-" + stamp, title: "太旧的帖" + stamp, backfill: true, postedAt: Date.now() - 46 * 86400000 } });
+ok("补录超过 45 天也不收", r.status === 422 && r.data.error === "too_old", r);
+r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { sourceId: "bf3-" + stamp, kind: "goods", place: "monty", group: "二手群 1", poster: "补录人" + stamp, backfill: true, postedAt: Date.now() - 20 * 86400000, items: [{ title: "补录一" + stamp, price: 3, cat: "furn" }, { title: "补录二" + stamp, price: 4, cat: "furn" }] } });
+ok("补录一条拆多件也行", r.status === 200 && r.data.results.length === 2 && r.data.results.every(x => x.id), r);
 r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, sourceId: "nodate-" + stamp, title: "没时间", postedAt: undefined } });
 ok("要发帖时间", r.status === 400, r);
 

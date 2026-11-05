@@ -19,6 +19,7 @@ const MAX_GROUP_PHOTOS = 30, MAX_GROUP_PHOTO_BYTES = 400_000;
 const MAX_LIVE_LISTINGS = 50;
 const PAGE = 40;
 const GROUP_MAX_AGE = 10 * 86400 * 1000;  // 群里发了超过 10 天的不导入：旧帖多半卖掉了。导进来的不再过期，靠排序自然沉下去
+const GROUP_BACKFILL_MAX_AGE = 45 * 86400 * 1000;  // 补录：导入接口带 backfill: true 时放宽，只有 ADMIN_TOKEN 进得来
 const SOLD_SHOWN = 7 * 86400000;
 const DELETED_KEEP = 30 * 86400000;  // 删掉的帖子照片留 30 天，在“记录”里能一步重新上架  // 卖完的在买、租列表里再留 7 天
 const GROUP_UID = "0".repeat(32);  // 群里搬来的条目挂在这个编号下，不对应真人
@@ -1452,7 +1453,7 @@ async function importOne(env, b) {
   if (!title || !group || !poster) throw new Fail(400, "need_fields");
   if (!Number.isInteger(price) || price < 0 || price > 1_000_000) throw new Fail(400, "bad_price");
   if (!Number.isFinite(postedAt) || postedAt <= 0 || postedAt > now + 3600 * 1000) throw new Fail(400, "bad_posted_at");
-  if (now - postedAt > GROUP_MAX_AGE) throw new Fail(422, "too_old");
+  if (now - postedAt > (b.backfill === true ? GROUP_BACKFILL_MAX_AGE : GROUP_MAX_AGE)) throw new Fail(422, "too_old");
   const text = [title, place, descr].join(" ");
   if (BANNED.some(r => r.test(text))) throw new Fail(422, "not_allowed");
   if (CONTACT_PATTERNS.some(r => r.test(text))) throw new Fail(422, "has_contact");
