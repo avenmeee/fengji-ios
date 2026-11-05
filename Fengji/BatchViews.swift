@@ -262,7 +262,7 @@ struct BatchFlow: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text(batch.aiGrouped ? String(localized: "认出 \(batch.items.count) 件") : String(localized: "\(batch.items.count) 件"))
+                Text(batch.aiGrouped ? "认出 \(batch.items.count) 件" : "\(batch.items.count) 件")
                     .font(.system(size: 28, weight: .bold)).foregroundStyle(Theme.ink)
                 Spacer()
                 Button("不发了") { askExit = true }
@@ -270,7 +270,7 @@ struct BatchFlow: View {
                     .foregroundStyle(Theme.sub)
                     .frame(minHeight: 44)
             }
-            Text(batch.notice != nil ? String(localized: "点照片可以挪到别的件") : String(localized: "名字、价格是 AI 填的，都能直接改。点照片可以挪到别的件"))
+            Text(batch.notice != nil ? "点照片可以挪到别的件" : "名字、价格是 AI 填的，都能直接改。点照片可以挪到别的件")
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.sub)
                 .lineLimit(2)
@@ -379,7 +379,7 @@ struct BatchFlow: View {
         let lack = tried && BatchModel.noTitle(item)
         let loading = batch.describing.contains(item.id) && item.title.isEmpty
         HStack(spacing: 6) {
-            TextField(loading ? String(localized: "AI 正在认") : String(localized: "名字"), text: titleBinding(item.id))
+            TextField(loading ? "AI 正在认" : "名字", text: titleBinding(item.id))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Theme.ink)
                 .lineLimit(1)
@@ -461,7 +461,7 @@ struct BatchFlow: View {
             } label: {
                 HStack(spacing: 8) {
                     if batch.publishing { HoneyLoader(size: 22) }
-                    Text(batch.publishing ? String(localized: "正在发") : String(localized: "发布 \(batch.items.count) 件")).lineLimit(1)
+                    Text(batch.publishing ? "正在发" : "发布 \(batch.items.count) 件").lineLimit(1)
                 }
             }
             .buttonStyle(PrimaryButtonStyle(act: .ink, dimmed: !batch.missing.isEmpty))
@@ -500,7 +500,7 @@ struct BatchFlow: View {
     private var blackBar: some View {
         if let r = batch.removed {
             HStack(spacing: 14) {
-                Text(r.item.title.isEmpty ? String(localized: "删掉了一件") : String(localized: "删掉了“\(r.item.title)”")).lineLimit(1)
+                Text(r.item.title.isEmpty ? "删掉了一件" : "删掉了“\(r.item.title)”").lineLimit(1)
                 Button("撤销") {
                     batch.undoRemove()
                     bannerTask?.cancel()
@@ -576,7 +576,7 @@ struct BatchFlow: View {
                                 .frame(width: 40)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("单独成一件").font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.ink)
-                                    Text(aiOn ? String(localized: "AI 再认一下名字和价格") : String(localized: "名字和价格自己填")).font(.system(size: 13)).foregroundStyle(Theme.hint)
+                                    Text(aiOn ? "AI 再认一下名字和价格" : "名字和价格自己填").font(.system(size: 13)).foregroundStyle(Theme.hint)
                                 }
                                 Spacer(minLength: 0)
                             }
@@ -613,7 +613,7 @@ struct BatchFlow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(it.title.isEmpty ? String(localized: "还没名字") : it.title).font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
-                    Text(current ? String(localized: "现在在这一件") : String(localized: "\(it.shots.count) 张照片")).font(.system(size: 13)).foregroundStyle(Theme.hint)
+                    Text(current ? "现在在这一件" : "\(it.shots.count) 张照片").font(.system(size: 13)).foregroundStyle(Theme.hint)
                 }
                 Spacer(minLength: 4)
                 if !current {

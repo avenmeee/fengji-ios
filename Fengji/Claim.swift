@@ -147,7 +147,7 @@ struct ClaimView: View {
                 }
             }
             .padding(.top, 6)
-            Button(saving ? String(localized: "正在存…") : String(localized: "保存")) { Task { await save() } }
+            Button(saving ? "正在存…" : "保存") { Task { await save() } }
                 .buttonStyle(PrimaryButtonStyle(act: .ink))
                 .disabled(saving)
         }

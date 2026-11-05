@@ -76,7 +76,7 @@ struct HivePostedView: View {
         VStack(spacing: 12) {
             VStack(spacing: 6) {
                 Text("发好了").font(.system(size: 28, weight: .bold)).foregroundStyle(Theme.ink)
-                Text(items.count == 1 ? String(localized: "首页已经能看到") : String(localized: "这次发了 \(items.count) 件，首页已经能看到"))
+                Text(items.count == 1 ? "首页已经能看到" : "这次发了 \(items.count) 件，首页已经能看到")
                     .font(.system(size: 15))
                     .foregroundStyle(Theme.sub)
             }

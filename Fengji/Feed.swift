@@ -477,7 +477,7 @@ struct PriceTag: View {
     var body: some View {
         Group {
             if item.isSold {
-                Text(item.isRent ? String(localized: "已租出") : String(localized: "已卖出"))
+                Text(item.isRent ? "已租出" : "已卖出")
                     .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
                     .fixedSize()

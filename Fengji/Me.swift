@@ -181,7 +181,7 @@ struct MeView: View {
                             Button { run(.status("on"), item) } label: { Label("重新上架", systemImage: "arrow.uturn.up") }
                                 .tint(Theme.sub)
                         } else if item.status != "hidden" {
-                            Button { run(.status("off"), item) } label: { Label(item.isRent ? String(localized: "租出去了") : String(localized: "卖完了"), systemImage: "tag") }
+                            Button { run(.status("off"), item) } label: { Label(item.isRent ? "租出去了" : "卖完了", systemImage: "tag") }
                                 .tint(Theme.sub)
                         }
                     }

@@ -608,7 +608,7 @@ struct PostForm: View {
 
     /// 顶上居中的标题
     private var formTitle: some View {
-        Text(editing != nil && !relist ? (isRent ? String(localized: "改房子") : String(localized: "改东西")) : (isRent ? String(localized: "出租房子") : String(localized: "卖东西")))
+        Text(editing != nil && !relist ? (isRent ? "改房子" : "改东西") : (isRent ? "出租房子" : "卖东西"))
             .font(.system(size: 17, weight: .semibold))
             .foregroundStyle(Theme.ink)
             .frame(maxWidth: .infinity)
@@ -738,7 +738,7 @@ struct PostForm: View {
                         Image(systemName: "sparkle").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.onBuy)
                     }
                 }
-                Text(aiLoading ? String(localized: "AI 正在认\n也可以自己写") : (aiGuessed ? String(localized: "AI 填好了\n可以改") : String(localized: "放上照片\nAI 帮你填名字")))
+                Text(aiLoading ? "AI 正在认\n也可以自己写" : (aiGuessed ? "AI 填好了\n可以改" : "放上照片\nAI 帮你填名字"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.sub)
                     .lineLimit(2)
@@ -753,7 +753,7 @@ struct PostForm: View {
     @ViewBuilder
     private var aiQuota: some View {
         if state.aiDescribe || Demo.isOn, editing == nil, !isRent, let left = state.me?.aiLeft ?? (Demo.scene == "ai-low" ? 6 : (Demo.scene == "ai-out" ? 0 : nil)), left <= 10 {
-            Text(left == 0 ? String(localized: "这个月的 AI 用完了，下个月 1 号恢复，名字和价格自己填一下。") : String(localized: "本月 AI 还剩 \(left) 条"))
+            Text(left == 0 ? "这个月的 AI 用完了，下个月 1 号恢复，名字和价格自己填一下。" : "本月 AI 还剩 \(left) 条")
                 .font(.system(size: 12.5))
                 .foregroundStyle(left == 0 ? Theme.warn : Theme.hint)
                 .fixedSize(horizontal: false, vertical: true)
@@ -787,7 +787,7 @@ struct PostForm: View {
 
     private var nameField: some View {
         FieldBlock(label: isRent ? String(localized: "标题") : String(localized: "名字"), hint: tried && missingNames.contains(isRent ? String(localized: "标题") : String(localized: "名字")) ? (isRent ? String(localized: "写一下标题才能发") : String(localized: "写一下卖什么才能发")) : (title.count > 14 ? String(localized: "名字写短一点，细节放备注") : nil), hintColor: tried && missingNames.contains(isRent ? String(localized: "标题") : String(localized: "名字")) ? Theme.warn : Theme.hint) {
-            TextField(isRent ? String(localized: "比如 Monty 旁一室一厅") : String(localized: "比如 榉木画架"), text: Binding(
+            TextField(isRent ? "比如 Monty 旁一室一厅" : "比如 榉木画架", text: Binding(
                 get: { title },
                 set: {
                     title = $0
@@ -1001,7 +1001,7 @@ struct PostForm: View {
             } label: {
                 HStack(spacing: 8) {
                     if busy { HoneyLoader(size: 22) }
-                    Text(busy ? String(localized: "正在发") : (relist ? String(localized: "重新发布") : (editing == nil ? String(localized: "发布") : String(localized: "保存")))).lineLimit(1)
+                    Text(busy ? "正在发" : (relist ? "重新发布" : (editing == nil ? "发布" : "保存"))).lineLimit(1)
                 }
             }
             .buttonStyle(PrimaryButtonStyle(act: .ink, dimmed: !requiredFilled))
@@ -1444,7 +1444,7 @@ private struct CalendarSheet: View {
                         Button { pickXun(first) } label: {
                             VStack(spacing: 2) {
                                 Text(name).font(.system(size: 17, weight: .bold)).lineLimit(1)
-                                Text(first == 21 ? String(localized: "21–\(lastDayOfMonth) 号") : String(localized: "\(first)–\(first + 9) 号")).font(.system(size: 13)).lineLimit(1).minimumScaleFactor(0.8)
+                                Text(first == 21 ? "21–\(lastDayOfMonth) 号" : "\(first)–\(first + 9) 号").font(.system(size: 13)).lineLimit(1).minimumScaleFactor(0.8)
                                     .foregroundStyle(on ? Theme.onBuy.opacity(0.75) : Theme.sub)
                             }
                             .foregroundStyle(on ? Theme.onBuy : Theme.ink)

@@ -148,7 +148,7 @@ struct DetailView: View {
     }
 
     private var soldTag: some View {
-        Text(item.isRent ? String(localized: "已租出") : String(localized: "已卖出"))
+        Text(item.isRent ? "已租出" : "已卖出")
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(Theme.bg)
             .padding(.horizontal, 10)
@@ -306,7 +306,7 @@ struct DetailView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "exclamationmark.shield").font(.system(size: 13))
-                    Text(item.isRent ? String(localized: "先看房再交钱，到 leasing office 核实房东，看房前别交押金或申请费。") : String(localized: "当面验货再付款，别提前转账。"))
+                    Text(item.isRent ? "先看房再交钱，到 leasing office 核实房东，看房前别交押金或申请费。" : "当面验货再付款，别提前转账。")
                         .font(.system(size: 13))
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 4)
@@ -325,7 +325,7 @@ struct DetailView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 4)
-        .accessibilityHint(tipOpen ? String(localized: "收起") : String(localized: "展开看怎么防骗"))
+        .accessibilityHint(tipOpen ? "收起" : "展开看怎么防骗")
     }
 
     /// 像抖音左滑进作者主页：手指从右往左，横着滑够远才算。自己的帖子没反应。
@@ -563,7 +563,7 @@ struct DetailView: View {
                 copied = label
                 state.toast(String(localized: "已复制"))
             } label: {
-                Label(copied == label ? String(localized: "已复制") : String(localized: "复制"), systemImage: copied == label ? "checkmark" : "doc.on.doc")
+                Label(copied == label ? "已复制" : "复制", systemImage: copied == label ? "checkmark" : "doc.on.doc")
                     .lineLimit(1)
                     .fixedSize()
                     .font(.system(size: 15, weight: .semibold))
@@ -733,7 +733,7 @@ struct WantSheet: View {
             } label: {
                 HStack(spacing: 8) {
                     if busy { HoneyLoader(size: 22) }
-                    Text(busy ? String(localized: "正在发") : String(localized: "发给卖家"))
+                    Text(busy ? "正在发" : "发给卖家")
                 }
             }
             .buttonStyle(PrimaryButtonStyle(act: .ink, dimmed: missing))
@@ -885,7 +885,7 @@ struct ScoreInfo: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("蜜蜂价格分").font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.ink)
-            Text(score == nil ? String(localized: "这件还没打分，通常半天内会有。") : String(localized: "由 AI 打分，仅供参考。"))
+            Text(score == nil ? "这件还没打分，通常半天内会有。" : "由 AI 打分，仅供参考。")
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.sub)
             VStack(spacing: 4) {

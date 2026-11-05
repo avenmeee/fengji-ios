@@ -286,7 +286,7 @@ struct FloatingBar: View {
         )
         .accessibilityElement()
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(state.plusOpen ? String(localized: "收起") : String(localized: "发布和我"))
+        .accessibilityLabel(state.plusOpen ? "收起" : "发布和我")
         .accessibilityAction { state.plusOpen.toggle() }
     }
 
