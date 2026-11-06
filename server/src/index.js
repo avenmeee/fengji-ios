@@ -355,7 +355,7 @@ async function similarListings(req, env, url, id) {
     args.push(viewer.id, viewer.id);
   }
   const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY l.bumped_at DESC, l.id DESC LIMIT ?`).bind(...args, SIMILAR_POOL).all()).results;
-  const minSim = Number(env.SIMILAR_MIN_SIM || (env.AI_MOCK === "1" ? 0.5 : 0.6));
+  const minSim = Number(env.SIMILAR_MIN_SIM || (env.AI_MOCK === "1" ? 0.5 : 0.65));  // 11-06 拿线上 24 件量的，用户定 0.65
   // 调阈值用：管理员带 debug=1，不卡阈值，能看到每条的分
   const debug = url.searchParams.get("debug") === "1" && await isStaff(req, env);
   const scored = rows.map(r => ({ r, sim: cosine(vector, fromBlob(r.embedding)) }))
