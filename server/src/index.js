@@ -3,6 +3,7 @@ import { describePhoto, groupPhotos, tagWords } from "./ai.js";
 import { exchangeCode, fetchAppleKeys, revokeToken, verifyIdentityToken } from "./apple.js";
 import { listingPage, privacyPage, rulesPage, supportPage } from "./pages.js";
 import { pushToUser } from "./push.js";
+import { decodeNext, encodeNext, floorMinute, newSeed, rankFeed } from "./rank.js";
 
 const CATS = ["furn", "elec", "kitchen", "art", "other"];
 const CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"];
@@ -245,42 +246,8 @@ function view(row, origin, viewer) {
   };
 }
 
-// 首页排序（10-31 用户定）：
-// 1. 发布 6 小时内的放最前，按时间新的在前；
-// 2. 其余按 划算系数 × 新鲜度，新鲜度每 2.5 天减半（擦亮、重新上架会刷新 bumped_at）；
-// 3. 同一个卖家最多连着 2 件，第 3 件往后挪；
-// 4. 卖完的（7 天内）放在全部在卖的后面，按卖出时间。
-// 分数随时间变，所以第一页记下 now，编进 next 里，后面几页用同一个 now 算，翻页不错位。
-const FRESH_TOP = 6 * 3600000, HALF_LIFE_HOURS = 60, FEED_POOL = 300;
-const DEAL = { 4: 1.6, 3: 1.3, 2: 1.0, 1: 0.7 };
-// next = 分钟数 × 10000 + 偏移；老版本 App 只认数字，这样也能用
-const encodeNext = (nowMs, offset) => Math.floor(nowMs / 60000) * 10000 + offset;
-const decodeNext = n => n >= 10000 ? { now: Math.floor(n / 10000) * 60000, offset: n % 10000 } : { now: null, offset: n };
-const sellerKey = r => r.source_type === "group" ? "g:" + (r.sender_hash || (r.source_poster || "") + "\u0000" + (r.source_group || "")) : "u:" + r.user_id;
-
-// 同一个卖家最多连着 2 件：第 3 件起往后挪，插到别人的后面
-function spreadSellers(list) {
-  const out = [], rest = list.slice();
-  while (rest.length) {
-    const n = out.length;
-    const blocked = n >= 2 && sellerKey(out[n - 1]) === sellerKey(out[n - 2]) ? sellerKey(out[n - 1]) : null;
-    let k = blocked === null ? 0 : rest.findIndex(x => sellerKey(x) !== blocked);
-    if (k < 0) k = 0;  // 剩下的都是同一个人，只好接着放
-    out.push(rest.splice(k, 1)[0]);
-  }
-  return out;
-}
-
-function rankFeed(rows, now) {
-  const byNewest = (a, b) => b.bumped_at - a.bumped_at || (a.id < b.id ? 1 : -1);
-  const live = rows.filter(r => r.status !== "off"), sold = rows.filter(r => r.status === "off");
-  const fresh = live.filter(r => now - r.bumped_at < FRESH_TOP).sort(byNewest);
-  const score = r => (DEAL[r.score] ?? 1.0) * Math.pow(0.5, Math.max(0, now - r.bumped_at) / 3600000 / HALF_LIFE_HOURS);
-  const older = live.filter(r => now - r.bumped_at >= FRESH_TOP).map(r => ({ r, s: score(r) }))
-    .sort((a, b) => b.s - a.s || (a.r.id < b.r.id ? 1 : -1)).map(x => x.r);
-  sold.sort((a, b) => (b.sold_at || 0) - (a.sold_at || 0) || (a.id < b.id ? 1 : -1));
-  return [...spreadSellers([...fresh, ...older]), ...sold];
-}
+// 首页排序在 rank.js
+const FEED_POOL = 300;
 
 // ---- 搜索（11-01）：查询词变形 + 同义词表 + 帖子的 AI 搜索标签 ----
 // 同义词表兜底：一组里搜哪个都算。零结果词从 event-stats 里看，再往这里补
@@ -451,7 +418,9 @@ async function feed(req, env, url) {
   const viewer = await currentUser(req, env);
   const p = url.searchParams, kind = p.get("kind") === "rent" ? "rent" : "goods";
   const paged = decodeNext(Math.max(0, Math.floor(Number(p.get("offset")) || 0)));
-  const now = paged.now ?? Date.now(), offset = paged.offset;
+  const now = paged.now ?? floorMinute(Date.now()), offset = paged.offset;
+  // 第一页换种子，后面几页从 next 里取；老格式翻到一半的照老算法排完
+  const seed = paged.seed ?? (paged.now === null && offset === 0 ? newSeed() : null);
   // 每页几条：默认 40；测试可以传小一点的
   const size = Math.min(PAGE, Math.max(5, Math.floor(Number(p.get("n")) || PAGE)));
   // 卖完的照样显示 7 天
@@ -484,7 +453,7 @@ async function feed(req, env, url) {
     const sold = [1, 2, 3].flatMap(t => layer(hit.filter(r => r.status === "off" && tierOf.get(r.id).tier === t), t));
     ranked = [...live, ...sold];
   } else {
-    ranked = rankFeed(rows, now);
+    ranked = rankFeed(rows, now, seed);
   }
   const pageRows = ranked.slice(offset, offset + size);
   const more = offset + size < ranked.length;
@@ -492,7 +461,7 @@ async function feed(req, env, url) {
   const debug = q && p.get("debug") === "1" && await isStaff(req, env);
   return json({
     items: pageRows.map(r => debug ? { ...view(r, url.origin, viewer), tier: tierOf.get(r.id).tier, sim: tierOf.get(r.id).sim } : view(r, url.origin, viewer)),
-    next: more ? encodeNext(now, offset + size) : null
+    next: more ? encodeNext(now, seed, offset + size) : null
   });
 }
 

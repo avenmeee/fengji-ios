@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --local --port 8799 --test-scheduled",
-    "test": "node --test test/apple.test.js",
+    "test": "node --test test/apple.test.js test/rank.test.mjs",
     "deploy": "wrangler deploy"
   },
   "dependencies": {
