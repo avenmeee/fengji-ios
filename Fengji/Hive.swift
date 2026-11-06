@@ -257,8 +257,6 @@ struct BeeIcon: View {
     var wing: Double = 0
     var lift: Double = 0
     var scale: Double = 1
-    /// 画布四周多留这么多，捡漏转了 14 度，翅膀尖才不被切；占的位置还是 size
-    var bleed: CGFloat = 0
 
     private func hex(_ cx: CGFloat, _ cy: CGFloat, _ r: CGFloat) -> Path {
         var p = Path()
@@ -276,6 +274,9 @@ struct BeeIcon: View {
         let t = CGAffineTransform(translationX: cx, y: cy).rotated(by: degrees * .pi / 180).translatedBy(x: -cx, y: -cy)
         return Path(ellipseIn: rect).applying(t)
     }
+
+    /// 画布四周多留的：捡漏转了 14 度，扇翅膀时还会放大，翅膀尖会超出 size。占的位置还是 size，旁边的字不动。取整，蜜蜂才落在原来的像素上
+    private var bleed: CGFloat { (size * 0.2).rounded(.up) }
 
     private var stroke: Color { Theme.ink }
     private let round = StrokeStyle(lineWidth: 5, lineJoin: .round)
