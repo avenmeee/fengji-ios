@@ -23,6 +23,10 @@ on:
         description: "sim 时再用 6.9 寸截商店图（线上真实页面）"
         type: boolean
         default: false
+      max69:
+        description: "sim 时截图用 6.9 寸（默认 6.3 寸）"
+        type: boolean
+        default: false
       pulltest:
         description: "sim 时真拉一下列表，录屏放 shots/（看下拉刷新）"
         type: boolean
@@ -107,7 +111,7 @@ jobs:
         env:
           ONLY: ${{ inputs.only }}
         run: |
-          UDID=$(python3 tools/pick-sim.py)
+          UDID=$(python3 tools/pick-sim.py ${{ inputs.max69 && 'max' || '' }})
           defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false  # 要弹软键盘才看得到挡不挡
           xcrun simctl boot "$UDID" || true  # pulltest 可能已经开着了
           xcrun simctl bootstatus "$UDID" -b > /dev/null
@@ -208,6 +212,8 @@ jobs:
           shot "72-连不上" feed-offline light
           shot "76-性价比筛选" score-filter light
           shot "76b-性价比筛选-深" score-filter dark
+          shot "76c-性价比筛选-未选" buy light
+          shot "76d-性价比筛选-未选-深" buy dark
           shot "77-这一档没有" score-empty light
           shot "78-相似的东西" detail-similar light
           shot "78b-相似的东西-深" detail-similar dark

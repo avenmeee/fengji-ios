@@ -512,38 +512,47 @@ struct CategoryBar: View {
     }
 }
 
-/// 性价比四档：点一档只看这一档，再点取消。样式是选项胶囊，选中蜂蜜底加勾
+/// 性价比四档，蜜蜂尺：从左到右 4、3、2、1，一个字都不写。点一只只看这一档，再点取消。
+/// 选中时蜜蜂变大，后面垫浅蜂蜜色六边形（蜂蜜实底上看不清蜜蜂）。
 private struct ScoreFilterBar: View {
     @Binding var selected: Int?
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 0) {
             ForEach([4, 3, 2, 1], id: \.self) { level in
                 let on = selected == level
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     withAnimation(.snappy(duration: 0.2)) { selected = on ? nil : level }
                 } label: {
-                    HStack(spacing: 4) {
+                    ZStack {
+                        Theme.bg.frame(width: 36, height: 36)  // 把后面的线断开，蜜蜂两边留空
                         if on {
-                            Image(systemName: "checkmark").font(.system(size: 12, weight: .bold))
-                        } else {
-                            BeeIcon(level: level, size: 16)
+                            ZStack {
+                                Hexagon().fill(Theme.accentSoft)
+                                Hexagon().stroke(Theme.accentSoft, style: StrokeStyle(lineWidth: 3, lineJoin: .round))
+                            }
+                            .frame(width: 32, height: 32)
+                            .transition(.scale(scale: 0.6).combined(with: .opacity))
                         }
-                        Text(scoreLabel(level))
-                            .font(.system(size: 14, weight: on ? .semibold : .regular))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
+                        BeeIcon(level: level, size: 28).scaleEffect(on ? 1 : 24.0 / 28)
                     }
-                    .foregroundStyle(on ? Theme.onBuy : Theme.ink)
-                    .frame(maxWidth: .infinity, minHeight: 36)
-                    .background(on ? Theme.buy : Theme.fill, in: RoundedRectangle(cornerRadius: 10))
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(scoreLabel(level))
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
+        }
+        .background {
+            GeometryReader { g in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Theme.line)
+                    .frame(width: g.size.width * 0.75, height: 2)  // 从第一列中心连到最后一列中心
+                    .position(x: g.size.width / 2, y: g.size.height / 2)
+            }
+            .accessibilityHidden(true)
         }
     }
 }
@@ -583,7 +592,7 @@ struct BuyView: View {
                         VStack(spacing: 22) {
                             Color.clear.frame(height: 0).id("top")
                             if !model.items.isEmpty || model.score != nil {
-                                ScoreFilterBar(selected: $model.score).padding(.bottom, -8)
+                                ScoreFilterBar(selected: $model.score).padding(.top, -22).padding(.bottom, -16)
                             }
                             if model.phase == .failed, !model.items.isEmpty {
                                 OfflineBanner { Task { await model.load() } }
