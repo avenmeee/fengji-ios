@@ -8,6 +8,8 @@ final class FeedModel: ObservableObject {
     let kind: String
     @Published var q = ""
     @Published var filter = "all"
+    /// 性价比档，只有买东西用；空就是全部
+    @Published var score: Int? = Demo.scene == "score-filter" ? 4 : (Demo.scene == "score-empty" ? 1 : nil)
     @Published private(set) var items: [Listing] = []
     @Published private(set) var phase: Phase = .loading
     private var next: Int?
@@ -19,19 +21,23 @@ final class FeedModel: ObservableObject {
         self.kind = kind
     }
 
-    var isFiltered: Bool { !q.isEmpty || filter != "all" }
+    var isFiltered: Bool { !q.isEmpty || filter != "all" || score != nil }
     /// 全部翻完了：没有下一页
     var isAtEnd: Bool { next == nil && !items.isEmpty }
 
     func load() async {
+        // 下拉刷新不会被取消：查的时候换了筛选，旧结果不要
+        let askedFilter = filter, askedQ = q, askedScore = score
         do {
-            let page = try await API.shared.feed(kind: kind, filter: filter, q: q.trimmingCharacters(in: .whitespaces), offset: nil)
+            let page = try await API.shared.feed(kind: kind, filter: askedFilter, q: askedQ.trimmingCharacters(in: .whitespaces), score: askedScore, offset: nil)
+            guard askedFilter == filter, askedQ == q, askedScore == score else { return }
             items = page.items
             next = page.next
             phase = .ok
             logSearch(results: page.items.count)
         } catch {
             if isCancel(error) { return }
+            guard askedFilter == filter, askedQ == q, askedScore == score else { return }
             phase = .failed  // 有旧内容时顶上出“没连上”那一条
         }
     }
@@ -53,9 +59,9 @@ final class FeedModel: ObservableObject {
         guard item.id == items.last?.id, let offset = next, !loadingMore else { return }
         loadingMore = true
         defer { loadingMore = false }
-        let askedFilter = filter, askedQ = q
-        if let page = try? await API.shared.feed(kind: kind, filter: askedFilter, q: askedQ.trimmingCharacters(in: .whitespaces), offset: offset) {
-            guard askedFilter == filter, askedQ == q else { return }
+        let askedFilter = filter, askedQ = q, askedScore = score
+        if let page = try? await API.shared.feed(kind: kind, filter: askedFilter, q: askedQ.trimmingCharacters(in: .whitespaces), score: askedScore, offset: offset) {
+            guard askedFilter == filter, askedQ == q, askedScore == score else { return }
             // 翻页时排序可能挪动，已有的不再加
             let seen = Set(items.map(\.id))
             items += page.items.filter { !seen.contains($0.id) }
@@ -72,6 +78,7 @@ final class FeedModel: ObservableObject {
 private struct FeedKey: Hashable {
     let q: String
     let filter: String
+    let score: Int?
     let version: Int
 }
 
@@ -95,7 +102,7 @@ private struct FeedReload: ViewModifier {
     @State private var loaded: FeedKey?
 
     func body(content: Content) -> some View {
-        let key = FeedKey(q: model.q, filter: model.filter, version: version)
+        let key = FeedKey(q: model.q, filter: model.filter, score: model.score, version: version)
         return content.task(id: key) {
             // 列表页重新出现（往回滑一开始就会）也会走到这里，内容没变就别重新查，免得滑动时整页重绘
             if key == loaded, model.phase == .ok { return }
@@ -511,6 +518,42 @@ struct CategoryBar: View {
     }
 }
 
+/// 性价比四档：点一档只看这一档，再点取消。样式是选项胶囊，选中蜂蜜底加勾
+private struct ScoreFilterBar: View {
+    @Binding var selected: Int?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach([4, 3, 2, 1], id: \.self) { level in
+                let on = selected == level
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.snappy(duration: 0.2)) { selected = on ? nil : level }
+                } label: {
+                    HStack(spacing: 4) {
+                        if on {
+                            Image(systemName: "checkmark").font(.system(size: 12, weight: .bold))
+                        } else {
+                            BeeIcon(level: level, size: 16)
+                        }
+                        Text(scoreLabel(level))
+                            .font(.system(size: 14, weight: on ? .semibold : .regular))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                    }
+                    .foregroundStyle(on ? Theme.onBuy : Theme.ink)
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .background(on ? Theme.buy : Theme.fill, in: RoundedRectangle(cornerRadius: 10))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(scoreLabel(level))
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+    }
+}
+
 // MARK: - 买东西
 
 /// 一行两个，一样大；单数时最后一个靠左
@@ -545,6 +588,9 @@ struct BuyView: View {
                     ScrollView {
                         VStack(spacing: 22) {
                             Color.clear.frame(height: 0).id("top")
+                            if !model.items.isEmpty || model.score != nil {
+                                ScoreFilterBar(selected: $model.score).padding(.bottom, -8)
+                            }
                             if model.phase == .failed, !model.items.isEmpty {
                                 OfflineBanner { Task { await model.load() } }
                             }
@@ -640,7 +686,9 @@ struct BuyView: View {
     /// 没内容：搜索没找到给清空，没人发给发第一件
     @ViewBuilder
     private var emptyCard: some View {
-        if !model.q.isEmpty {
+        if model.score != nil {
+            EmptyCard(symbol: "square.grid.2x2", title: String(localized: "这一档还没有"), note: String(localized: "看看全部"), action: (String(localized: "看全部"), { model.score = nil }))
+        } else if !model.q.isEmpty {
             EmptyCard(symbol: "magnifyingglass", title: String(localized: "没找到“\(model.q)”"), note: String(localized: "换个词，或者看看全部"), action: (String(localized: "清空搜索"), { model.q = "" }))
         } else if model.filter != "all" {
             EmptyCard(symbol: "square.grid.2x2", title: String(localized: "这一类还没有"), note: String(localized: "看看全部"), action: (String(localized: "看全部"), { model.filter = "all" }))

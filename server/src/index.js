@@ -461,6 +461,12 @@ async function feed(req, env, url) {
   if (kind === "rent" && (unit === "whole" || unit === "room")) { where.push("l.unit_type IN (?, 'both')"); args.push(unit); }
   const q = clean(p.get("q"), 40);
   if (viewer) { where.push("l.user_id NOT IN (SELECT blocked_id FROM blocks WHERE user_id = ?)"); args.push(viewer.id); }
+  // 按性价比档筛：在这里筛，再取候选，老帖才不会漏。没打分的不算；卖完的不算；自己的也不算（卖家看不到自己的分）
+  const score = Number(p.get("score"));
+  if (kind === "goods" && [1, 2, 3, 4].includes(score)) {
+    where.push("l.score = ?", "l.status IN ('on', 'reserved')"); args.push(score);
+    if (viewer) { where.push("l.user_id != ?"); args.push(viewer.id); }
+  }
   // 候选先取最近的 300 条，在这里算分、打散、切页；量大了再搬进数据库。只有搜索才带向量
   const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY l.bumped_at DESC, l.id DESC LIMIT ?`).bind(...args, FEED_POOL).all()).results;
   let ranked, tierOf = null;

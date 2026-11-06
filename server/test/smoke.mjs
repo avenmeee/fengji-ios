@@ -242,6 +242,26 @@ r = await call("GET", "/v1/admin/unscored", { token: ADMIN });
 ok("打过分不再取", !r.data.items.some(x => x.id === scored.id));
 r = await call("GET", "/v1/listings?kind=goods");
 ok("买家看到分、排最前", r.data.items[0].id === scored.id && r.data.items[0].score === 4, r.data.items[0]);
+r = await call("GET", "/v1/listings?kind=goods&score=4");
+ok("按档筛：只有这一档", r.data.items.some(x => x.id === scored.id) && r.data.items.every(x => x.score === 4), r.data.items.length);
+r = await call("GET", "/v1/listings?kind=goods&score=2");
+ok("按档筛：别的档没有它，没打分的也不算", !r.data.items.some(x => x.id === scored.id) && r.data.items.every(x => x.score === 2), r.data.items.length);
+r = await call("GET", `/v1/listings?kind=goods&score=4&cat=${goods.cat}`);
+ok("按档筛能和分类叠加", r.data.items.some(x => x.id === scored.id));
+r = await call("GET", `/v1/listings?kind=goods&score=4&cat=${goods.cat === "art" ? "furn" : "art"}`);
+ok("分类不对就没有", !r.data.items.some(x => x.id === scored.id));
+r = await call("GET", "/v1/listings?kind=goods&score=4&q=" + encodeURIComponent("打分样品"));
+ok("按档筛能和搜索叠加", r.data.items.some(x => x.id === scored.id));
+r = await call("GET", "/v1/listings?kind=goods&score=4", { token: c.token });
+ok("按档筛不含自己的", !r.data.items.some(x => x.id === scored.id));
+{
+  const all = await call("GET", "/v1/listings?kind=goods");
+  r = await call("GET", "/v1/listings?kind=goods&score=9");
+  ok("不认识的档当没传", r.data.items.length === all.data.items.length, r.data.items.length);
+  ok("不传档时没打分的照样有", all.data.items.some(x => x.score === null));
+}
+r = await call("GET", "/v1/listings?kind=rent&score=4");
+ok("房子不按档筛", r.status === 200 && r.data.items.every(x => x.kind === "rent"), r.status);
 r = await call("GET", "/v1/listings/" + scored.id, { token: c.token });
 ok("卖家看不到自己的分", r.data.score === null, r);
 await call("POST", `/v1/listings/${scored.id}/price`, { token: c.token, body: { price: 3 } });

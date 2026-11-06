@@ -206,6 +206,9 @@ jobs:
           shot "70-搜索没找到" search-none light
           shot "71-首页没人发" feed-empty light
           shot "72-连不上" feed-offline light
+          shot "76-性价比筛选" score-filter light
+          shot "76b-性价比筛选-深" score-filter dark
+          shot "77-这一档没有" score-empty light
           shot "73-帖子没有了" detail-gone light
           shot "74-我还没发过" me-empty light
           shot "75-发布缺必填" form-missing light

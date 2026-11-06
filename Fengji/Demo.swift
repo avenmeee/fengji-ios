@@ -193,6 +193,7 @@ enum DemoServer {
             if let c = param("cat") { list = list.filter { $0.cat == c } }
             if let u = param("unit") { list = list.filter { $0.unitType == u || $0.unitType == "both" } }
             if let q = param("q") { list = list.filter { $0.title.contains(q) || $0.place.contains(q) } }
+            if let s = param("score") { list = list.filter { $0.score == Int(s) } }
             if Demo.scene == "refresh-new", feedHits > 1 { list.reverse() }
             return (200, encode(ListingPage(items: list, next: nil)), json)
         }

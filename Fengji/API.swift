@@ -105,10 +105,11 @@ final class API: @unchecked Sendable {
     func deleteAccount() async throws { try await act("DELETE", "/v1/me") }
 
     // 条目
-    func feed(kind: String, filter: String, q: String, offset: Int?) async throws -> ListingPage {
+    func feed(kind: String, filter: String, q: String, score: Int? = nil, offset: Int?) async throws -> ListingPage {
         var items = [URLQueryItem(name: "kind", value: kind)]
         if filter != "all" { items.append(URLQueryItem(name: kind == "rent" ? "unit" : "cat", value: filter)) }
         if !q.isEmpty { items.append(URLQueryItem(name: "q", value: q)) }
+        if let score { items.append(URLQueryItem(name: "score", value: String(score))) }
         if let offset { items.append(URLQueryItem(name: "offset", value: String(offset))) }
         var c = URLComponents()
         c.queryItems = items
