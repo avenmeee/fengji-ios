@@ -53,9 +53,8 @@ export function privacyPage(env) {
   <p>成交价：标记已卖时可以选填卖了多少钱。只用于同类比价和汇总，不公开显示。重新上架、删帖或删号时一起删除。</p>
   <p>“想要”留言：你留的一句话和联系方式只有卖家能看到。删帖或删号时一起删除。</p>
   <p>推送：同意通知后，我们保存设备的推送令牌，只用来告诉你有人想要。退出登录或删号时删除。</p>
-  <p>部分条目来自微信群，由运营者从群里搬进来，不是发帖人自己在蜂集发的，包括物品信息、群名、群昵称和群里发的照片。群名和群昵称所有人都能看到。不公开微信号和电话，房源不写门牌，有人脸、二维码、微信截图、订单或小票、门牌的图不用。原帖人想删除，在 App 的详情页点“…”→“我是原帖人，想删除”，能看到我们的微信和邮箱；也可以直接发邮件。说一下是哪条，我们 24 小时内删除，照片一起删除，只留一条记录防止再搬进来。</p>
+  <p>部分条目由运营者转自微信群，会显示群名、群昵称和照片。原帖人可以认领，或在 App 详情页“…”里、或发邮件要求删除，我们 24 小时内删除。蜂集的服务器不存微信 ID 明文。</p>
   <p>发布、浏览、成交的每日总数，只是数字，不关联到个人。</p>
-  <p>认领：把 App 给的代码用自己的微信发给我们的微信，核对发送者后，这个人名下的条目一次转到你的账号。蜂集的服务器只存发送者编号的带密钥哈希用来匹配，不存也不显示微信 ID 明文。认领后你填的微信号才会公开。</p>
   <p>我们记录匿名的使用情况，比如打开了哪类页面、停留多久、搜了什么词，用来改进 App。这些记录不跟你的账号关联，90 天后删除。</p>
   <p>AI：放上照片后，照片会发给 AI（Anthropic 的 Claude）自动生成名字、分类和成色，不保存到我们这里，直到你发布。东西的名字、价格、分类、成色、地点和第一张照片也会发给 AI 打分。帖子的名字、备注和分类也会发给 AI，生成搜索用的关键词。第一次发布东西前会征得你的同意。来自微信群的条目同样会发给 AI 打分和生成关键词；群里的文字和照片在搬进来之前，也会发给同一个 AI 整理和筛选。</p>
   <h2>不做什么</h2>
@@ -67,7 +66,7 @@ export function privacyPage(env) {
   <h2>联系</h2>
   <p>${contactLine(env)}</p>
   <h2 lang="en">In English</h2>
-  <p lang="en">Fengji only needs sign-in to post, using Sign in with Apple; we receive an anonymous identifier, not your name or email. What you post (photos, text, location, WeChat ID if you add one) is public. A "want" message and the contact you leave are visible only to the seller. If you allow notifications we store a device push token, removed on sign-out or account deletion. We keep daily totals of posts, views and sales that are not linked to anyone. We keep anonymous usage records, such as which kinds of pages were opened, for how long and what was searched, to improve the app; they are not linked to your account and are deleted after 90 days. We do not track you, show ads or sell data. Some listings are copied from WeChat groups by the operator, not posted on Fengji by the original posters themselves, including group names, nicknames and photos; group names and nicknames are public. Original posters can find our WeChat and email in the app (on the listing, tap … and choose the original-poster option, which is labeled in Chinese) or email us, and we remove the listing and its photos within 24 hours, keeping only a record so it is not copied again; or they can claim their listings. Listing details and the first photo are sent to AI (Anthropic's Claude) to produce a rating, and a listing's title, notes and category are sent to it to generate search keywords; you are asked to agree before posting. Listings from WeChat groups go through the same rating and keywords, and text and photos from those groups are also sent to the same AI to be sorted and screened before they are copied. Delete your account any time in the app (+ → Me → Settings → Delete account); your posts and photos are deleted immediately. Data is stored on Cloudflare.</p>`);
+  <p lang="en">Fengji only needs sign-in to post, using Sign in with Apple; we receive an anonymous identifier, not your name or email. What you post (photos, text, location, WeChat ID if you add one) is public. A "want" message and the contact you leave are visible only to the seller. If you allow notifications we store a device push token, removed on sign-out or account deletion. We keep daily totals of posts, views and sales that are not linked to anyone. We keep anonymous usage records, such as which kinds of pages were opened, for how long and what was searched, to improve the app; they are not linked to your account and are deleted after 90 days. We do not track you, show ads or sell data. Some listings are copied by the operator from WeChat groups and show the group name, nickname and photos; original posters can claim them, or ask for removal in the app (on the listing, tap …) or by email, and we remove them within 24 hours; Fengji's servers do not store WeChat IDs in plain text. Listing details and the first photo are sent to AI (Anthropic's Claude) to produce a rating, and a listing's title, notes and category are sent to it to generate search keywords; you are asked to agree before posting. Listings from WeChat groups go through the same rating and keywords, and text and photos from those groups are also sent to the same AI to be sorted and screened before they are copied. Delete your account any time in the app (+ → Me → Settings → Delete account); your posts and photos are deleted immediately. Data is stored on Cloudflare.</p>`);
 }
 
 // 点开才显示邮箱：字在页面里，不开 JS 也能点开、能选中；开了 JS 多一个复制按钮
@@ -87,7 +86,6 @@ export function supportPage(env) {
   return page("蜂集帮助", `<h1>蜂集帮助</h1>
   <h2>怎么联系卖家</h2><p>卖家留了微信号：复制后去微信加对方。没留：点“想要”，写一句话和你的联系方式，只有卖家能看到。当面看过再付，看房前别转押金。</p>
   <h2>怎么举报</h2><p>详情页右上角“…”→ 举报。24 小时内处理。也可以屏蔽对方。</p>
-  <h2>群里搬来的帖子想删除</h2><p>如果你是原帖人，在 App 的详情页点“…”→“我是原帖人，想删除”，能看到我们的微信和邮箱；也可以直接发邮件到下面的地址。说一下是哪条，我们 24 小时内删除。</p>
   <h2>删掉的帖子还能找回吗</h2><p>删除后 30 天内可以在“我 → 记录”里恢复，之后彻底删除；也可以在记录里立即永久删除。</p>
   <h2>怎么删除账号</h2><p>加号 → 我 → 设置 → 删除账号。内容和照片一起马上删除。</p>
   <h2>联系我们 Contact</h2>${revealedContact(env)}`);

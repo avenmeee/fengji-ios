@@ -77,10 +77,10 @@ ok("分享页", r.status === 200 && Buffer.from(r.data).toString().includes("宜
 ok("分享页能在蜂集里打开", Buffer.from(r.data).toString().includes("fengji://l/" + id));
 r = await call("GET", "/privacy");
 ok("隐私政策页", r.status === 200 && Buffer.from(r.data).toString().includes("隐私"), r.status);
-for (const w of ["部分条目来自微信群", "不存也不显示微信 ID 明文", "群里的文字和照片在搬进来之前", "copied from WeChat groups"]) ok("隐私政策有群帖段落：" + w, Buffer.from(r.data).toString().includes(w));
+for (const w of ["部分条目由运营者转自微信群", "不存微信 ID 明文", "群里的文字和照片在搬进来之前", "from WeChat groups"]) ok("隐私政策有群帖段落：" + w, Buffer.from(r.data).toString().includes(w));
 ok("隐私政策不说已获授权", !/已获授权|已经授权|已授权/.test(Buffer.from(r.data).toString()));
 r = await call("GET", "/support");
-ok("支持页", r.status === 200 && Buffer.from(r.data).toString().includes("群里搬来的帖子想删除"), r.status);
+ok("支持页", r.status === 200 && !Buffer.from(r.data).toString().includes("群里搬来的帖子想删除"), r.status);
 r = await call("GET", "/v1/listings?kind=goods&cat=art");
 ok("分类过滤", !r.data.items.some(x => x.id === id));
 r = await call("GET", "/v1/listings?kind=goods&q=" + encodeURIComponent("%"));
