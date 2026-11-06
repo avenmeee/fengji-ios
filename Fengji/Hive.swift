@@ -257,6 +257,8 @@ struct BeeIcon: View {
     var wing: Double = 0
     var lift: Double = 0
     var scale: Double = 1
+    /// 画布四周多留这么多，捡漏转了 14 度，翅膀尖才不被切；占的位置还是 size
+    var bleed: CGFloat = 0
 
     private func hex(_ cx: CGFloat, _ cy: CGFloat, _ r: CGFloat) -> Path {
         var p = Path()
@@ -280,7 +282,8 @@ struct BeeIcon: View {
 
     var body: some View {
         Canvas { ctx, canvas in
-            ctx.scaleBy(x: canvas.width / 64, y: canvas.height / 64)
+            ctx.translateBy(x: bleed, y: bleed)
+            ctx.scaleBy(x: size / 64, y: size / 64)
             switch level {
             case ...1:
                 ctx.drawLayer { l in
@@ -305,7 +308,8 @@ struct BeeIcon: View {
                 }
             }
         }
-        .frame(width: size, height: size)
+        .frame(width: size + bleed * 2, height: size + bleed * 2)
+        .padding(-bleed)
         .accessibilityHidden(true)
     }
 

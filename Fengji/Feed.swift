@@ -535,7 +535,7 @@ private struct ScoreFilterBar: View {
                             .frame(width: 32, height: 32)
                             .transition(.scale(scale: 0.6).combined(with: .opacity))
                         }
-                        BeeIcon(level: level, size: 28).scaleEffect(on ? 1 : 24.0 / 28)
+                        BeeIcon(level: level, size: 28, bleed: 4).scaleEffect(on ? 1 : 24.0 / 28)
                     }
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(Rectangle())
