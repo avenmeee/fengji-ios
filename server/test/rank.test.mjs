@@ -46,18 +46,28 @@ test("老帖有机会露面", () => {
   assert.ok([...seen].some(id => NOW - rows.find(r => r.id === id).bumped_at > 20 * DAY));
 });
 
-test("6 小时内的在最前、按时间，卖完的在最后", () => {
+test("新帖不再置前，没打分的不被压到最后，卖完的在最后", () => {
   const rows = supply();
   rows.push({ id: "n1", user_id: "x1", status: "on", source_type: "self", bumped_at: NOW - H, score: 1 });
-  rows.push({ id: "n2", user_id: "x2", status: "reserved", source_type: "self", bumped_at: NOW - 5 * H, score: null });
+  rows.push({ id: "n2", user_id: "x2", status: "reserved", source_type: "self", bumped_at: NOW - H, score: null });
   rows.push({ id: "s1", user_id: "x3", status: "off", source_type: "self", bumped_at: NOW - H, sold_at: NOW - H, score: 4 });
   rows.push({ id: "s2", user_id: "x4", status: "off", source_type: "self", bumped_at: NOW - H, sold_at: NOW - 2 * H, score: 4 });
-  for (let s = 0; s < 50; s++) {
+  let firstNew = 0, sumN2 = 0, N = 300;
+  for (let s = 0; s < N; s++) {
     const out = rankFeed(rows, NOW, s);
-    assert.deepEqual(ids(out.slice(0, 2)), ["n1", "n2"]);
+    if (["n1", "n2"].includes(out[0].id)) firstNew++;
+    sumN2 += ids(out).indexOf("n2");
     assert.deepEqual(ids(out.slice(-2)), ["s1", "s2"]);
-    assert.ok(out.slice(0, 2).every(r => NOW - r.bumped_at < FRESH_TOP));
   }
+  assert.ok(firstNew < N, "新帖不能每次都在第一");
+  assert.ok(sumN2 / N < rows.length / 4, "没打分的新帖平均名次 " + sumN2 / N);
+});
+
+test("搜索（不传种子）里 6 小时内的还在前面", () => {
+  const rows = supply();
+  rows.push({ id: "n1", user_id: "x1", status: "on", source_type: "self", bumped_at: NOW - H, score: 1 });
+  assert.equal(rankFeed(rows, NOW)[0].id, "n1");
+  assert.ok(rows.some(r => NOW - r.bumped_at >= FRESH_TOP));
 });
 
 test("同一卖家最多连 2 件", () => {

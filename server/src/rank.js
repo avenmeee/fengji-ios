@@ -1,10 +1,9 @@
-// 首页排序（10-31 用户定，11-06 加随机）：
-// 1. 发布 6 小时内的放最前，按时间新的在前；
-// 2. 其余按 划算系数 × 新鲜度 × 随机系数；
-// 3. 同一个卖家最多连着 2 件，第 3 件往后挪；
-// 4. 卖完的（7 天内）放在全部在卖的后面，按卖出时间。
+// 首页排序（10-31 用户定，11-06 改）：
+// 1. 所有在卖的都按 划算系数 × 新鲜度 × 随机系数 排，新帖不单独置前，靠新鲜度自然靠前；没打分的算 1.0；
+// 2. 同一个卖家最多连着 2 件，第 3 件往后挪；
+// 3. 卖完的（7 天内）放在全部在卖的后面，按卖出时间。
 // 分数随时间变，每次刷新换一个种子，所以第一页记下 now 和种子，编进 next，后面几页照用，翻页不错位。
-// 搜索不传种子：不随机，新鲜度也照旧。
+// 搜索不传种子：照旧，不随机，同一层里 6 小时内的在前。
 export const FRESH_TOP = 6 * 3600000, HALF_LIFE_HOURS = 60;
 export const DEAL = { 4: 1.6, 3: 1.3, 2: 1.0, 1: 0.7 };
 // 拿线上 287 条试的（11-06）：新鲜度每 4 天减半、不低于 0.25，随机 0.5～2。模拟结果记在 进度.md
@@ -59,14 +58,15 @@ export function unit(seed, id) {
 export function rankFeed(rows, now, seed = null, shuffle = SHUFFLE) {
   const byNewest = (a, b) => b.bumped_at - a.bumped_at || (a.id < b.id ? 1 : -1);
   const live = rows.filter(r => r.status !== "off"), sold = rows.filter(r => r.status === "off");
-  const fresh = live.filter(r => now - r.bumped_at < FRESH_TOP).sort(byNewest);
+  // 有种子（首页）：全部进同一个排序；没种子（搜索）：6 小时内的还是在前
+  const fresh = seed === null ? live.filter(r => now - r.bumped_at < FRESH_TOP).sort(byNewest) : [];
   const hours = r => Math.max(0, now - r.bumped_at) / 3600000;
   const score = seed === null
     ? r => (DEAL[r.score] ?? 1.0) * Math.pow(0.5, hours(r) / HALF_LIFE_HOURS)
     : r => (DEAL[r.score] ?? 1.0)
       * Math.max(shuffle.floor, Math.pow(0.5, hours(r) / shuffle.halfLifeHours))
       * (shuffle.low + (shuffle.high - shuffle.low) * unit(seed, r.id));
-  const older = live.filter(r => now - r.bumped_at >= FRESH_TOP).map(r => ({ r, s: score(r) }))
+  const older = live.filter(r => seed !== null || now - r.bumped_at >= FRESH_TOP).map(r => ({ r, s: score(r) }))
     .sort((a, b) => b.s - a.s || (a.r.id < b.r.id ? 1 : -1)).map(x => x.r);
   sold.sort((a, b) => (b.sold_at || 0) - (a.sold_at || 0) || (a.id < b.id ? 1 : -1));
   return [...spreadSellers([...fresh, ...older]), ...sold];
