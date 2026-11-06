@@ -22,7 +22,7 @@ enum Demo {
 
     /// 开场就推到“我”的截图
     static var opensMe: Bool {
-        ["me", "guest-me", "mine-actions", "undo", "settings", "settings-contact", "claim", "wants", "profile", "sold-ask", "myinfo", "myinfo-edit", "myinfo-dark", "records", "rules", "blocked", "terms", "admin", "claim-done", "me-empty"].contains(scene ?? "")
+        ["me", "me-refresh-fail", "guest-me", "mine-actions", "undo", "settings", "settings-contact", "claim", "wants", "profile", "sold-ask", "myinfo", "myinfo-edit", "myinfo-dark", "records", "rules", "blocked", "terms", "admin", "claim-done", "me-empty"].contains(scene ?? "")
     }
 
     static var initialPosting: PostKind? {
@@ -152,6 +152,8 @@ enum DemoServer {
         (try? JSONEncoder().encode(value)) ?? Data()
     }
 
+    private static var feedHits = 0, meHits = 0
+
     static func respond(url: URL, method: String) -> (Int, Data, String) {
         let path = url.path, json = "application/json"
         if path.hasPrefix("/p/") { return (200, jpeg(url.deletingPathExtension().lastPathComponent), "image/jpeg") }
@@ -161,7 +163,12 @@ enum DemoServer {
 
         if method == "GET", path == "/v1/me" { return (200, encode(Me(id: "me", isAdmin: false, agreed: true, name: "同学 3F7", color: 0, named: false)), json) }
         if method == "GET", path == "/v1/me/listings", Demo.scene == "me-empty" { return (200, encode(ListingList(items: [])), json) }
-        if method == "GET", path == "/v1/me/listings" { return (200, encode(ListingList(items: mineList)), json) }
+        if method == "GET", path == "/v1/me/listings" {
+            // 下拉刷新验证：第二次起连不上
+            meHits += 1
+            if Demo.scene == "me-refresh-fail", meHits > 1 { return (503, encode(["error": "down"]), json) }
+            return (200, encode(ListingList(items: mineList)), json)
+        }
         if method == "GET", path == "/v1/admin/stats" { return (200, encode(Stats(posts: 12, views: 340, sold: 5, copies: 40, groupClicks: 18)), json) }
         if method == "GET", path == "/v1/me/wants" {
             let sample = Demo.scene == "wants" ? [Want(id: "w1", listingId: "g11", title: "显示器支架", photo: photo("e1").url, message: "还在吗？今晚能拿吗", contact: "wx_buyer", createdAt: now)] : []
@@ -179,10 +186,14 @@ enum DemoServer {
             // 截图：没人发、连不上
             if Demo.scene == "feed-empty" { return (200, encode(ListingPage(items: [], next: nil)), json) }
             if Demo.scene == "feed-offline" { return (503, encode(["error": "down"]), json) }
+            // 下拉刷新验证：第二次起连不上，或者换了排序
+            feedHits += 1
+            if Demo.scene == "refresh-fail", feedHits > 1 { return (503, encode(["error": "down"]), json) }
             var list = param("kind") == "rent" ? rentList : (Demo.scene == "group" || Demo.scene == "seller-group" ? [groupItem] + goodsList : goodsList)
             if let c = param("cat") { list = list.filter { $0.cat == c } }
             if let u = param("unit") { list = list.filter { $0.unitType == u || $0.unitType == "both" } }
             if let q = param("q") { list = list.filter { $0.title.contains(q) || $0.place.contains(q) } }
+            if Demo.scene == "refresh-new", feedHits > 1 { list.reverse() }
             return (200, encode(ListingPage(items: list, next: nil)), json)
         }
         if method == "GET", path.hasPrefix("/v1/listings/"), path.hasSuffix("/poster") {

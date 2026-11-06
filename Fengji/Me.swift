@@ -203,7 +203,7 @@ struct MeView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .safeAreaInset(edge: .bottom, spacing: 0) { Color.clear.frame(height: Theme.barSpace) }
-        .honeyRefresh { await load() }
+        .honeyRefresh { await load(manual: true) }
     }
 
     private struct LoadKey: Hashable {
@@ -211,7 +211,7 @@ struct MeView: View {
         let loggedIn: Bool
     }
 
-    private func load() async {
+    private func load(manual: Bool = false) async {
         guard state.isLoggedIn else {
             items = []
             return
@@ -222,7 +222,7 @@ struct MeView: View {
             phase = .ok
         } catch {
             if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
-            if items.isEmpty { phase = .failed }
+            if items.isEmpty { phase = .failed } else if manual { state.toast(String(localized: "没连上，下拉也能再试")) }
         }
     }
 

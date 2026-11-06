@@ -23,6 +23,10 @@ on:
         description: "sim 时再用 6.9 寸截商店图（线上真实页面）"
         type: boolean
         default: false
+      pulltest:
+        description: "sim 时真拉一下列表，录屏放 shots/（看下拉刷新）"
+        type: boolean
+        default: false
 
 concurrency:
   group: ios-${{ github.ref_name }}
@@ -73,6 +77,26 @@ jobs:
           xargs xcrun xcstringstool sync shots/Localizable.xcstrings --stringsdata < stringsdata.txt || { xcrun xcstringstool sync --help; exit 1; }
           python3 -c "import json; a=json.load(open('Fengji/Localizable.xcstrings'))['strings']; b=json.load(open('shots/Localizable.xcstrings'))['strings']; print('目录里', len(a), '条；代码里', len(b), '条；没进目录', len(set(b)-set(a)), '条')"
           ls build/Build/Products/Debug-iphonesimulator/Fengji.app | grep -i lproj || echo "没有 lproj"
+
+      - name: 模拟器里真拉一下列表并录屏
+        if: inputs.mode == 'sim' && inputs.pulltest
+        run: |
+          UDID=$(python3 tools/pick-sim.py)
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b > /dev/null
+          xcrun simctl ui "$UDID" appearance light
+          mkdir -p shots
+          xcrun simctl io "$UDID" recordVideo --codec=h264 --force shots/下拉刷新.mp4 &
+          REC=$!
+          sleep 2
+          set +e
+          xcodebuild -project Fengji.xcodeproj -scheme FengjiUITests -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build-ui ARCHS=arm64 CODE_SIGNING_ALLOWED=NO test > shots/uitest.log 2>&1
+          CODE=$?
+          set -e
+          kill -INT "$REC"; wait "$REC" || true
+          grep -E "Test Case|error:|TEST (SUCCEEDED|FAILED)|\*\* " shots/uitest.log | tail -30 || true
+          exit $CODE
 
       - name: 模拟器里截图
         if: inputs.mode == 'sim' && inputs.shots

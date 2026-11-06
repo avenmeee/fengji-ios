@@ -30,7 +30,7 @@ final class FeedModel: ObservableObject {
             logSearch(results: page.items.count)
         } catch {
             if isCancel(error) { return }
-            if items.isEmpty { phase = .failed }
+            phase = .failed  // 有旧内容时顶上出“没连上”那一条
         }
     }
 
@@ -109,7 +109,7 @@ private struct FeedReload: ViewModifier {
 }
 
 extension View {
-    /// 下拉刷新：藏掉系统转圈，顶上放蜂蜜动画
+    /// 下拉刷新：藏掉系统转圈，顶上放蜂蜜。拉的时候跟手灌满，到位轻触一下，刷新时动，至少显示 0.6 秒
     func honeyRefresh(_ action: @escaping () async -> Void) -> some View {
         modifier(HoneyRefresh(action: action))
     }
@@ -118,20 +118,134 @@ extension View {
 private struct HoneyRefresh: ViewModifier {
     let action: () async -> Void
     @State private var refreshing = false
+    @StateObject private var tracker = PullTracker()
 
     func body(content: Content) -> some View {
         content
-            .refreshable {
-                refreshing = true
-                await action()
-                refreshing = false
-            }
+            .refreshable { await refresh() }
+            .background(PullHook(tracker: tracker))
             .overlay(alignment: .top) {
-                if refreshing {
-                    HoneyLoader(size: 26).padding(.top, 10).allowsHitTesting(false)
-                }
+                PullIndicator(tracker: tracker, refreshing: refreshing)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
     }
+
+    /// 系统下拉到位时调这里。放进独立的 Task：列表重绘时 SwiftUI 可能取消 refreshable，不能让它把请求也取消了
+    @MainActor
+    private func refresh() async {
+        refreshing = true
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        let work = Task { @MainActor in
+            let started = ContinuousClock.now
+            await action()
+            let left = Duration.milliseconds(600) - started.duration(to: .now)
+            if left > .zero { try? await Task.sleep(for: left) }
+        }
+        await work.value
+        refreshing = false
+    }
+}
+
+/// 列表顶部被拉开了多少。只给 PullIndicator 用，拉动时不重绘列表
+private final class PullTracker: ObservableObject {
+    @Published var pull: CGFloat = 0
+}
+
+/// 系统差不多拉到这么多触发刷新，蜂蜜这时灌满
+private let pullFull: CGFloat = 110
+
+private struct PullIndicator: View {
+    @ObservedObject var tracker: PullTracker
+    let refreshing: Bool
+    private let size: CGFloat = 26
+
+    var body: some View {
+        let pull = max(0, tracker.pull)
+        ZStack {
+            if refreshing {
+                HoneyLoader(size: size).padding(.top, 17 + pull / 2)
+            } else if pull > 4 {
+                let progress = min(1, pull / pullFull)
+                ZStack {
+                    Hexagon().fill(Theme.buy.opacity(0.2))
+                    Rectangle()
+                        .fill(Theme.buy)
+                        .frame(height: size * progress)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                        .clipShape(Hexagon())
+                }
+                .frame(width: size, height: size)
+                .scaleEffect(0.6 + 0.4 * progress)
+                .opacity(min(1, pull / 40))
+                .padding(.top, max(6, (pull - size) / 2))
+            }
+            if Demo.scene == "refresh-new" {
+                Text(verbatim: "pull \(Int(tracker.pull)) \(refreshing ? "refreshing" : "-")")
+                    .font(.system(size: 14, weight: .bold).monospacedDigit())
+                    .foregroundStyle(.white).padding(4).background(.black)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+}
+
+/// 找到旁边那个带下拉刷新的 UIScrollView，看它拉开了多少。SwiftUI 在 iOS 17 上拿不到这个数
+private struct PullHook: UIViewRepresentable {
+    let tracker: PullTracker
+
+    final class HookView: UIView {
+        var tracker: PullTracker?
+        private var watch: NSKeyValueObservation?
+        private weak var target: UIScrollView?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            attach(tries: 15)
+        }
+
+        private func attach(tries: Int) {
+            guard window != nil, target == nil else { return }
+            if let found = findScrollView() {
+                target = found
+                watch = found.observe(\.contentOffset, options: [.initial, .new]) { [weak self] s, _ in
+                    let pull = -(s.contentOffset.y + s.adjustedContentInset.top)
+                    if self?.tracker?.pull != pull { self?.tracker?.pull = pull }
+                }
+            } else if tries > 0 {
+                // refreshable 挂上去比这个视图进窗口晚一点
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.attach(tries: tries - 1) }
+            }
+        }
+
+        /// 从近到远往外找，只要和自己盖住同一块地方的
+        private func findScrollView() -> UIScrollView? {
+            let mine = convert(bounds, to: nil)
+            var level = superview
+            while let cur = level {
+                if let hit = search(cur, near: mine) { return hit }
+                level = cur.superview
+            }
+            return nil
+        }
+
+        private func search(_ view: UIView, near rect: CGRect) -> UIScrollView? {
+            if let s = view as? UIScrollView, s.refreshControl != nil, s.convert(s.bounds, to: nil).intersects(rect) { return s }
+            for sub in view.subviews where sub !== self {
+                if let hit = search(sub, near: rect) { return hit }
+            }
+            return nil
+        }
+    }
+
+    func makeUIView(context: Context) -> HookView {
+        let view = HookView()
+        view.isUserInteractionEnabled = false
+        view.tracker = tracker
+        return view
+    }
+
+    func updateUIView(_ uiView: HookView, context: Context) {}
 }
 
 struct PhaseBlock: View {

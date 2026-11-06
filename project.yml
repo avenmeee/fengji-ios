@@ -37,6 +37,19 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: Apple Distribution
           PROVISIONING_PROFILE_SPECIFIER: Fengji AppStore
+  # 模拟器里真拉一下列表，录屏看效果（不进 App，只有 CI 的 pulltest 用）
+  FengjiUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: FengjiUITests
+    dependencies:
+      - target: Fengji
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.avenmeee.fengji.uitests
+        TARGETED_DEVICE_FAMILY: "1"
 schemes:
   Fengji:
     build:
@@ -46,3 +59,11 @@ schemes:
       config: Debug
     archive:
       config: Release
+  FengjiUITests:
+    build:
+      targets:
+        FengjiUITests: all
+    test:
+      config: Debug
+      targets:
+        - FengjiUITests
