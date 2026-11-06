@@ -20,6 +20,8 @@ final class FeedModel: ObservableObject {
     }
 
     var isFiltered: Bool { !q.isEmpty || filter != "all" }
+    /// 全部翻完了：没有下一页
+    var isAtEnd: Bool { next == nil && !items.isEmpty }
 
     func load() async {
         do {
@@ -110,22 +112,32 @@ private struct FeedReload: ViewModifier {
 
 extension View {
     /// 下拉刷新：藏掉系统转圈，顶上放蜂蜜。拉的时候跟手灌满，到位轻触一下，刷新时动，至少显示 0.6 秒
-    func honeyRefresh(_ action: @escaping () async -> Void) -> some View {
-        modifier(HoneyRefresh(action: action))
+    /// atEnd：全部看完了。这时到底再往上拉，也刷新一次并回到顶部
+    func honeyRefresh(atEnd: Bool = false, _ action: @escaping () async -> Void) -> some View {
+        modifier(HoneyRefresh(atEnd: atEnd, action: action))
     }
 }
 
 private struct HoneyRefresh: ViewModifier {
+    let atEnd: Bool
     let action: () async -> Void
     @State private var refreshing = false
+    @State private var endRefreshing = false
     @StateObject private var tracker = PullTracker()
 
     func body(content: Content) -> some View {
         content
             .refreshable { await refresh() }
-            .background(PullHook(tracker: tracker))
+            .background(PullHook(tracker: tracker, atEnd: atEnd && !refreshing && !endRefreshing) {
+                Task { await refreshFromEnd() }
+            })
             .overlay(alignment: .top) {
                 PullIndicator(tracker: tracker, refreshing: refreshing)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            .overlay(alignment: .bottom) {
+                EndIndicator(tracker: tracker, refreshing: endRefreshing)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
@@ -136,6 +148,21 @@ private struct HoneyRefresh: ViewModifier {
     private func refresh() async {
         refreshing = true
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        await runAction()
+        refreshing = false
+    }
+
+    /// 看完了继续上拉，松手后到这里：刷新完回到顶部
+    @MainActor
+    private func refreshFromEnd() async {
+        endRefreshing = true
+        await runAction()
+        tracker.scrollToTop?()
+        endRefreshing = false
+    }
+
+    @MainActor
+    private func runAction() async {
         let work = Task { @MainActor in
             let started = ContinuousClock.now
             await action()
@@ -143,17 +170,21 @@ private struct HoneyRefresh: ViewModifier {
             if left > .zero { try? await Task.sleep(for: left) }
         }
         await work.value
-        refreshing = false
     }
 }
 
 /// 列表顶部被拉开了多少。只给 PullIndicator 用，拉动时不重绘列表
 private final class PullTracker: ObservableObject {
     @Published var pull: CGFloat = 0
+    /// 看完以后，底部被往上拉开了多少
+    @Published var end: CGFloat = 0
+    var scrollToTop: (() -> Void)?
 }
 
 /// 系统差不多拉到这么多触发刷新，蜂蜜这时灌满
 private let pullFull: CGFloat = 110
+/// 底部往上拉这么多算到位，松手刷新
+private let endFull: CGFloat = 70
 
 private struct PullIndicator: View {
     @ObservedObject var tracker: PullTracker
@@ -166,22 +197,12 @@ private struct PullIndicator: View {
             if refreshing {
                 HoneyLoader(size: size).padding(.top, 17 + pull / 2)
             } else if pull > 4 {
-                let progress = min(1, pull / pullFull)
-                ZStack {
-                    Hexagon().fill(Theme.buy.opacity(0.2))
-                    Rectangle()
-                        .fill(Theme.buy)
-                        .frame(height: size * progress)
-                        .frame(maxHeight: .infinity, alignment: .bottom)
-                        .clipShape(Hexagon())
-                }
-                .frame(width: size, height: size)
-                .scaleEffect(0.6 + 0.4 * progress)
-                .opacity(min(1, pull / 40))
-                .padding(.top, max(6, (pull - size) / 2))
+                HoneyFill(progress: pull / pullFull, size: size)
+                    .opacity(min(1, pull / 40))
+                    .padding(.top, max(6, (pull - size) / 2))
             }
             if Demo.scene == "refresh-new" {
-                Text(verbatim: "pull \(Int(tracker.pull)) \(refreshing ? "refreshing" : "-")")
+                Text(verbatim: "pull \(Int(tracker.pull)) end \(Int(tracker.end)) \(refreshing ? "refreshing" : "-")")
                     .font(.system(size: 14, weight: .bold).monospacedDigit())
                     .foregroundStyle(.white).padding(4).background(.black)
                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -190,14 +211,62 @@ private struct PullIndicator: View {
     }
 }
 
+/// 随手灌满的蜂蜜六边形
+private struct HoneyFill: View {
+    let progress: CGFloat
+    let size: CGFloat
+
+    var body: some View {
+        let p = min(1, max(0, progress))
+        ZStack {
+            Hexagon().fill(Theme.buy.opacity(0.2))
+            Rectangle()
+                .fill(Theme.buy)
+                .frame(height: size * p)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .clipShape(Hexagon())
+        }
+        .frame(width: size, height: size)
+        .scaleEffect(0.6 + 0.4 * p)
+    }
+}
+
+/// 看完以后到底再往上拉：蜂蜜在最后一件下面、底栏上面
+private struct EndIndicator: View {
+    @ObservedObject var tracker: PullTracker
+    let refreshing: Bool
+    private let size: CGFloat = 26
+
+    var body: some View {
+        let end = max(0, tracker.end)
+        Group {
+            if refreshing {
+                HoneyLoader(size: size)
+                    .padding(6)
+                    .background(Theme.bg, in: Circle())
+                    .padding(.bottom, Theme.barSpace)
+            } else if end > 4 {
+                HoneyFill(progress: end / endFull, size: size)
+                    .opacity(min(1, end / 30))
+                    .padding(.bottom, Theme.barSpace + max(0, (end - size) / 2))
+            }
+        }
+    }
+}
+
 /// 找到旁边那个带下拉刷新的 UIScrollView，看它拉开了多少。SwiftUI 在 iOS 17 上拿不到这个数
 private struct PullHook: UIViewRepresentable {
     let tracker: PullTracker
+    let atEnd: Bool
+    let onEnd: () -> Void
 
     final class HookView: UIView {
         var tracker: PullTracker?
+        var atEnd = false
+        var onEnd: (() -> Void)?
         private var watch: NSKeyValueObservation?
         private weak var target: UIScrollView?
+        private var armed = false
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
@@ -208,13 +277,45 @@ private struct PullHook: UIViewRepresentable {
             guard window != nil, target == nil else { return }
             if let found = findScrollView() {
                 target = found
+                tracker?.scrollToTop = { [weak found] in
+                    guard let found else { return }
+                    found.setContentOffset(CGPoint(x: 0, y: -found.adjustedContentInset.top), animated: true)
+                }
                 watch = found.observe(\.contentOffset, options: [.initial, .new]) { [weak self] s, _ in
-                    let pull = -(s.contentOffset.y + s.adjustedContentInset.top)
-                    if self?.tracker?.pull != pull { self?.tracker?.pull = pull }
+                    self?.moved(s)
                 }
             } else if tries > 0 {
                 // refreshable 挂上去比这个视图进窗口晚一点
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.attach(tries: tries - 1) }
+            }
+        }
+
+        private func moved(_ s: UIScrollView) {
+            guard let tracker else { return }
+            let inset = s.adjustedContentInset
+            let pull = -(s.contentOffset.y + inset.top)
+            if tracker.pull != pull { tracker.pull = pull }
+
+            // 内容比屏幕短时，也从屏幕底算起
+            let visible = s.bounds.height - inset.top - inset.bottom
+            let over = s.contentOffset.y + inset.top + visible - max(s.contentSize.height, visible)
+            let end = atEnd ? max(0, over) : 0
+            if tracker.end != end { tracker.end = end }
+            guard atEnd else {
+                armed = false
+                return
+            }
+            if s.isTracking {
+                // 到位轻触一下；拉回去就不算了
+                if over >= endFull {
+                    if !armed { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+                    armed = true
+                } else {
+                    armed = false
+                }
+            } else if armed {
+                armed = false
+                onEnd?()
             }
         }
 
@@ -245,7 +346,10 @@ private struct PullHook: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: HookView, context: Context) {}
+    func updateUIView(_ uiView: HookView, context: Context) {
+        uiView.atEnd = atEnd
+        uiView.onEnd = onEnd
+    }
 }
 
 struct PhaseBlock: View {
@@ -471,7 +575,7 @@ struct BuyView: View {
                         .onTapGesture { hideKeyboard() }
                     }
                     .scrollDismissesKeyboard(.immediately)
-                    .honeyRefresh { await model.load() }
+                    .honeyRefresh(atEnd: model.isAtEnd) { await model.load() }
                     .onChange(of: state.topTicks[.buy] ?? 0) { _, _ in
                         withAnimation(.snappy) { proxy.scrollTo("top", anchor: .top) }
                     }
@@ -669,7 +773,7 @@ struct RentView: View {
                         .onTapGesture { hideKeyboard() }
                     }
                     .scrollDismissesKeyboard(.immediately)
-                    .honeyRefresh { await model.load() }
+                    .honeyRefresh(atEnd: model.isAtEnd) { await model.load() }
                     .onChange(of: state.topTicks[.rent] ?? 0) { _, _ in
                         withAnimation(.snappy) { proxy.scrollTo("top", anchor: .top) }
                     }

@@ -86,12 +86,16 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b > /dev/null
           xcrun simctl ui "$UDID" appearance light
           mkdir -p shots
+          # 先编译好再录，录屏里只有测试
+          xcodebuild -project Fengji.xcodeproj -scheme FengjiUITests -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build-ui ARCHS=arm64 CODE_SIGNING_ALLOWED=NO build-for-testing > shots/uibuild.log 2>&1 \
+            || { grep -E "error:" shots/uibuild.log | sort -u | head -40; exit 1; }
           xcrun simctl io "$UDID" recordVideo --codec=h264 --force shots/下拉刷新.mp4 &
           REC=$!
           sleep 2
           set +e
           xcodebuild -project Fengji.xcodeproj -scheme FengjiUITests -configuration Debug \
-            -destination "id=$UDID" -derivedDataPath build-ui ARCHS=arm64 CODE_SIGNING_ALLOWED=NO test > shots/uitest.log 2>&1
+            -destination "id=$UDID" -derivedDataPath build-ui ARCHS=arm64 CODE_SIGNING_ALLOWED=NO test-without-building > shots/uitest.log 2>&1
           CODE=$?
           set -e
           kill -INT "$REC"; wait "$REC" || true

@@ -36,4 +36,19 @@ final class PullRefreshUITests: XCTestCase {
         let app = launch("me-refresh-fail")
         pull(app)
     }
+
+    /// 滑到底，先拉一点松手（不该刷新），再拉够（该刷新并回到顶部）
+    private func pullAtEnd(_ app: XCUIApplication) {
+        for _ in 0..<6 { app.swipeUp(velocity: .fast); usleep(400_000) }
+        sleep(2)
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -50)), withVelocity: .init(60), thenHoldForDuration: 1)
+        sleep(2)
+        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -300)), withVelocity: .init(120), thenHoldForDuration: 1)
+        sleep(4)
+    }
+
+    func test6EndNewOrder() { pullAtEnd(launch("refresh-new")) }
+
+    func test7EndRent() { pullAtEnd(launch("rent")) }
 }
