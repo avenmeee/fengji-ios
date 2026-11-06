@@ -837,6 +837,53 @@ for (let i = 0; i < 50; i++) {
 }
 ok("翻页不重复不漏", pages.length === new Set(pages).size && pages.length === all.length && pages.every(id => all.includes(id)), { pages: pages.length, all: all.length });
 
+// 相似的东西（本机是假向量：字像就近）
+const simA = await login("simA"), simB = await login("simB"), simC = await login("simC");
+for (const u of [simA, simB, simC]) await call("POST", "/v1/me/agree", { token: u.token });
+const simPost = async (u, title, extra = {}) => (await call("POST", "/v1/listings", { token: u.token, body: { ...goods, title, desc: "", ...extra, photos: [(await call("POST", "/v1/photos", { token: u.token, raw: jpeg })).data.key] } })).data;
+await call("POST", "/v1/admin/tags/backfill?n=50", { token: ADMIN });
+const simT = await simPost(simA, "人体素描木头画架大号");
+const simB1 = await simPost(simB, "人体素描木头画架中号");
+const simB2 = await simPost(simB, "人体素描木头画架小号");
+const simB3 = await simPost(simB, "人体素描木头画架迷你");
+const simC1 = await simPost(simC, "人体素描木头画架二手");
+const simMine = await simPost(simA, "人体素描木头画架全新");
+const simFar = await simPost(simC, "qqqq zzzz xxxx");
+for (let i = 0; i < 6; i++) {
+  r = await call("POST", "/v1/admin/tags/backfill?n=50", { token: ADMIN });
+  if (!r.data.left) break;
+}
+r = await call("GET", `/v1/listings/${simT.id}/similar`);
+{
+  const got = r.data.items.map(x => x.id);
+  ok("相似：有结果，不含自己", got.includes(simC1.id) && !got.includes(simT.id), got);
+  ok("相似：不够像的不出现", !got.includes(simFar.id), got);
+  ok("相似：同一卖家最多 2 件", [simB1, simB2, simB3].filter(x => got.includes(x.id)).length === 2, got);
+  ok("相似：最多 10 条，只有在卖的", got.length <= 10 && r.data.items.every(x => ["on", "reserved"].includes(x.status)));
+}
+r = await call("GET", `/v1/listings/${simT.id}/similar`, { token: simA.token });
+ok("相似：不推自己的", !r.data.items.some(x => x.id === simMine.id), r.data.items.map(x => x.id));
+r = await call("GET", `/v1/listings/${simT.id}/similar`, { token: simA.token });
+ok("相似：屏蔽之前有他", r.data.items.some(x => x.id === simC1.id), r.data.items.map(x => x.id));
+await call("POST", `/v1/blocks/${simC.me.id}`, { token: simA.token });
+r = await call("GET", `/v1/listings/${simT.id}/similar`, { token: simA.token });
+ok("相似：屏蔽的人不出现", !r.data.items.some(x => x.id === simC1.id), r.data.items.map(x => x.id));
+await call("POST", `/v1/listings/${simC1.id}/status`, { token: simC.token, body: { status: "off" } });
+r = await call("GET", `/v1/listings/${simT.id}/similar`);
+ok("相似：卖完的不出现", !r.data.items.some(x => x.id === simC1.id));
+r = await call("GET", `/v1/listings/${simFar.id}/similar`);
+ok("相似：不够 2 件就返回空", Array.isArray(r.data.items) && r.data.items.length === 0, r.data.items.length);
+r = await call("GET", "/v1/listings/00000000/similar");
+ok("相似：没有这条就返回空", r.status === 200 && r.data.items.length === 0, r);
+{
+  const rentBody = await call("GET", `/v1/listings/${simT.id}/similar`);
+  ok("相似：东西和房子分开", rentBody.data.items.every(x => x.kind === "goods"));
+  const dbg = await call("GET", `/v1/listings/${simT.id}/similar?debug=1`);
+  ok("相似：普通人带 debug 看不到分", dbg.data.items.every(x => x.sim === undefined));
+  const dbg2 = await call("GET", `/v1/listings/${simT.id}/similar?debug=1`, { token: ADMIN });
+  ok("相似：管理员能看到分", dbg2.data.items.every(x => typeof x.sim === "number"));
+}
+
 // 原帖人申请删除：进举报列表，不自动隐藏
 const ownerAsk = (await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...imp, sourceId: "ask-" + stamp, title: "原帖人要删的" + stamp } })).data;
 for (const u of [o1, o2, s1]) await call("POST", `/v1/listings/${ownerAsk.id}/report`, { token: u.token, body: { reason: "原帖人申请删除" } });
@@ -974,6 +1021,9 @@ r = await ev(inst, [
 ]);
 ok("不用登录也能记，只记有效的", r.status === 200 && r.data.kept === 15, r);
 await ev(inst2, [{ name: "detail_view", listing: lid, kind: "rent", tier: 3, seconds: 10 }]);
+r = await ev(inst, [{ name: "similar_show", listing: lid, kind: "goods", results: 6 }, { name: "similar_click", listing: lid, kind: "goods", cat: "furn", tier: 3 }, { name: "similar_click" }]);
+r = await call("GET", "/v1/admin/event-stats?days=30", { token: ADMIN });
+ok("相似推荐显示和点击记得下", r.data.similar.shows >= 1 && r.data.similar.clicks === 1 && r.data.similar.clickDevices === 1, r.data.similar);
 r = await call("GET", "/v1/admin/event-stats", {});
 ok("统计要管理员", r.status === 401 || r.status === 403, r);
 r = await call("GET", "/v1/admin/event-stats?days=30", { token: ADMIN });

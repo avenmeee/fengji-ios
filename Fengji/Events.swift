@@ -68,6 +68,15 @@ final class Events {
         log(Event(name: "detail_view", listing: item.id, kind: item.kind, cat: item.cat, tier: item.tier, seconds: min(600, Int(seconds))))
     }
 
+    /// 相似的东西：滑到这一块算显示一次
+    func similarShown(_ item: Listing, count: Int) {
+        log(Event(name: "similar_show", listing: item.id, kind: item.kind, results: count))
+    }
+
+    func similarClicked(_ item: Listing) {
+        log(Event(name: "similar_click", listing: item.id, kind: item.kind, cat: item.cat, tier: item.tier))
+    }
+
     func contact(_ item: Listing, method: String) {
         log(Event(name: "contact", listing: item.id, kind: item.kind, cat: item.cat, tier: item.tier, method: method))
     }

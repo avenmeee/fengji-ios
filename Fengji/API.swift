@@ -118,6 +118,11 @@ final class API: @unchecked Sendable {
     func listing(_ id: String) async throws -> Listing { try await get("/v1/listings/\(id)") }
     /// 这条帖子的发帖人主页
     func poster(_ id: String) async throws -> SellerPage { try await get("/v1/listings/\(id)/poster") }
+    /// 相似的东西：没有就是空
+    func similar(_ id: String) async throws -> [Listing] {
+        let r: ListingList = try await get("/v1/listings/\(id)/similar")
+        return r.items
+    }
     func mine() async throws -> [Listing] {
         let r: ListingList = try await get("/v1/me/listings")
         return r.items

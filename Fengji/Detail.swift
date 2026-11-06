@@ -20,6 +20,8 @@ struct DetailView: View {
     @State private var tipOpen = false
     /// 原帖人弹层里刚复制的是哪一行
     @State private var copied: String?
+    /// 相似的东西：没有就不显示这一块
+    @State private var similar: [Listing] = []
     /// 点价签：讲清楚蜜蜂分怎么来的
     @State private var scoreInfo = Demo.scene == "detail-score"
     // 停留多久：切到后台不算
@@ -54,6 +56,7 @@ struct DetailView: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
+            ScrollViewReader { proxy in
             ScrollView {
                 if gone {
                     EmptyCard(symbol: "tag", title: String(localized: "这条已经没有了"), note: String(localized: "可能卖掉了，或者卖家删了"), action: (String(localized: "回首页"), { dismiss() }))
@@ -70,7 +73,15 @@ struct DetailView: View {
                 .padding(.bottom, 16)
                 .contentShape(Rectangle())
                 .simultaneousGesture(swipeToSeller())
+                similarSection
                 }
+            }
+            .onChange(of: similar.count) { _, n in
+                // 截图用：直接滑到这一块
+                if n > 0, Demo.scene?.hasSuffix("-similar") == true {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { proxy.scrollTo("similar", anchor: .top) }
+                }
+            }
             }
         }
         .background(Theme.bg)
@@ -116,6 +127,10 @@ struct DetailView: View {
         .task {
             if !item.mine { try? await API.shared.countView(item.id) }
         }
+        .task(id: item.id) {
+            guard !item.mine else { return }
+            similar = (try? await API.shared.similar(item.id)) ?? []
+        }
         .sheet(item: $shareImage) { ShareSheet(image: $0.image) }
         .sheet(isPresented: $editing) {
             PostForm(kind: item.kind, editing: item) { item = $0 }
@@ -125,6 +140,35 @@ struct DetailView: View {
         .overlay { BottomPanel(shown: $scoreInfo) { ScoreInfo(score: item.score) } }
         .fullScreenCover(item: $viewing) { start in
             PhotoViewer(item: item, start: start.index)
+        }
+    }
+
+    /// 详情页最下面：相似的东西。卡片和首页一样，东西一行两个，房子一行一个
+    @ViewBuilder
+    private var similarSection: some View {
+        if !similar.isEmpty {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                GroupHeader(title: String(localized: "相似的东西")).id("similar")
+                    .onAppear { Events.shared.similarShown(item, count: similar.count) }
+                if item.isRent {
+                    ForEach(similar) { other in
+                        NavigationLink(value: other) { RentRow(item: other) }
+                            .buttonStyle(.plain)
+                            .simultaneousGesture(TapGesture().onEnded { Events.shared.similarClicked(other) })
+                    }
+                } else {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12, alignment: .top), GridItem(.flexible(), alignment: .top)], spacing: 14) {
+                        ForEach(similar) { other in
+                            NavigationLink(value: other) { GoodsCard(item: other) }
+                                .buttonStyle(.plain)
+                                .simultaneousGesture(TapGesture().onEnded { Events.shared.similarClicked(other) })
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
         }
     }
 

@@ -51,4 +51,12 @@ final class PullRefreshUITests: XCTestCase {
     func test6EndNewOrder() { pullAtEnd(launch("refresh-new")) }
 
     func test7EndRent() { pullAtEnd(launch("rent")) }
+
+    /// 详情页最下面的相似卡片，点进去是新的详情页
+    func test8Similar() {
+        let app = launch("detail-similar")
+        sleep(2)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.4)).tap()
+        sleep(3)
+    }
 }

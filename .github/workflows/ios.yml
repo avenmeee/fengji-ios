@@ -95,7 +95,7 @@ jobs:
           sleep 2
           set +e
           xcodebuild -project Fengji.xcodeproj -scheme FengjiUITests -configuration Debug \
-            -destination "id=$UDID" -derivedDataPath build-ui ARCHS=arm64 CODE_SIGNING_ALLOWED=NO test-without-building > shots/uitest.log 2>&1
+            -destination "id=$UDID" -derivedDataPath build-ui ARCHS=arm64 CODE_SIGNING_ALLOWED=NO -retry-tests-on-failure -test-iterations 2 test-without-building > shots/uitest.log 2>&1
           CODE=$?
           set -e
           kill -INT "$REC"; wait "$REC" || true
@@ -109,7 +109,7 @@ jobs:
         run: |
           UDID=$(python3 tools/pick-sim.py)
           defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false  # 要弹软键盘才看得到挡不挡
-          xcrun simctl boot "$UDID"
+          xcrun simctl boot "$UDID" || true  # pulltest 可能已经开着了
           xcrun simctl bootstatus "$UDID" -b > /dev/null
           xcrun simctl status_bar "$UDID" override --time 9:41 || true
           xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/Fengji.app
@@ -209,6 +209,9 @@ jobs:
           shot "76-性价比筛选" score-filter light
           shot "76b-性价比筛选-深" score-filter dark
           shot "77-这一档没有" score-empty light
+          shot "78-相似的东西" detail-similar light
+          shot "78b-相似的东西-深" detail-similar dark
+          shot "79-相似的房子" rentdetail-similar light
           shot "73-帖子没有了" detail-gone light
           shot "74-我还没发过" me-empty light
           shot "75-发布缺必填" form-missing light

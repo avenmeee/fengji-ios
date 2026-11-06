@@ -3,7 +3,7 @@ import { describePhoto, groupPhotos, tagWords } from "./ai.js";
 import { exchangeCode, fetchAppleKeys, revokeToken, verifyIdentityToken } from "./apple.js";
 import { listingPage, privacyPage, rulesPage, supportPage } from "./pages.js";
 import { pushToUser } from "./push.js";
-import { decodeNext, encodeNext, floorMinute, newSeed, rankFeed } from "./rank.js";
+import { decodeNext, encodeNext, floorMinute, newSeed, rankFeed, sellerKey } from "./rank.js";
 
 const CATS = ["furn", "elec", "kitchen", "art", "other"];
 const CONDS = ["全新", "几乎全新", "有使用痕迹", "有点旧"];
@@ -339,6 +339,38 @@ async function queryVector(env, q) {
     console.error("embed q", e && e.message);
     return null;
   }
+}
+
+// 相似的东西：只用存好的向量算，不调 AI，不会多发任何东西出去。没向量或不够 2 件就返回空，App 不显示这一块
+const SIMILAR_MAX = 10, SIMILAR_MIN_COUNT = 2, SIMILAR_PER_SELLER = 2, SIMILAR_POOL = 300;
+async function similarListings(req, env, url, id) {
+  const target = await env.DB.prepare("SELECT kind, embedding FROM listings WHERE id = ? AND status IN ('on', 'reserved', 'off')").bind(id).first();
+  const vector = target && fromBlob(target.embedding);
+  if (!vector) return json({ items: [] });
+  const viewer = await currentUser(req, env);
+  const where = ["l.kind = ?", "l.status IN ('on', 'reserved')", "l.id != ?", "l.embedding IS NOT NULL"], args = [target.kind, id];
+  // 自己的不推给自己
+  if (viewer) {
+    where.push("l.user_id != ?", "l.user_id NOT IN (SELECT blocked_id FROM blocks WHERE user_id = ?)");
+    args.push(viewer.id, viewer.id);
+  }
+  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY l.bumped_at DESC, l.id DESC LIMIT ?`).bind(...args, SIMILAR_POOL).all()).results;
+  const minSim = Number(env.SIMILAR_MIN_SIM || (env.AI_MOCK === "1" ? 0.5 : 0.6));
+  // 调阈值用：管理员带 debug=1，不卡阈值，能看到每条的分
+  const debug = url.searchParams.get("debug") === "1" && await isStaff(req, env);
+  const scored = rows.map(r => ({ r, sim: cosine(vector, fromBlob(r.embedding)) }))
+    .filter(x => debug || x.sim >= minSim)
+    .sort((a, b) => b.sim - a.sim || (a.r.id < b.r.id ? 1 : -1));
+  const perSeller = new Map(), picked = [];
+  for (const x of scored) {
+    const key = sellerKey(x.r), n = perSeller.get(key) || 0;
+    if (n >= SIMILAR_PER_SELLER) continue;
+    perSeller.set(key, n + 1);
+    picked.push(x);
+    if (picked.length >= SIMILAR_MAX) break;
+  }
+  if (picked.length < SIMILAR_MIN_COUNT) return json({ items: [] });
+  return json({ items: picked.map(x => debug ? { ...view(x.r, url.origin, viewer), sim: x.sim } : view(x.r, url.origin, viewer)) });
 }
 
 async function embedListing(env, id) {
@@ -933,6 +965,14 @@ function cleanEvent(e) {
       r.q = scrubText(e.q).toLowerCase();
       if (!r.q) return null;
       return { ...r, kind: eventKind(e.kind), results: eventInt(e.results, 0, 100000) ?? 0 };
+    case "similar_show":
+      r.listing = eventId(e.listing);
+      if (!r.listing) return null;
+      return { ...r, kind: eventKind(e.kind), results: eventInt(e.results, 0, 100) ?? 0 };
+    case "similar_click":
+      r.listing = eventId(e.listing);
+      if (!r.listing) return null;
+      return { ...r, kind: eventKind(e.kind), cat: eventCat(e.cat), tier: eventInt(e.tier, 1, 4) };
     case "contact":
       r.listing = eventId(e.listing);
       r.method = eventOneOf(e.method, EVENT_METHODS);
@@ -1050,6 +1090,10 @@ async function eventStats(req, env, url) {
   // 复制微信算到每条帖子
   const contactsByListing = await all("SELECT listing, method, COUNT(*) AS n FROM events WHERE name = 'contact' AND at >= ? GROUP BY listing, method ORDER BY n DESC LIMIT 50", since);
 
+  // 相似的东西：显示几次、点了几次
+  const similarRows = await all("SELECT name, COUNT(*) AS n, COUNT(DISTINCT install) AS devices FROM events WHERE name IN ('similar_show', 'similar_click') AND at >= ? GROUP BY name", since);
+  const similarOf = n => similarRows.find(r => r.name === n) || { n: 0, devices: 0 };
+
   // 9 举报
   const reports = await all("SELECT status, created_at, done_at FROM reports WHERE created_at >= ?", since);
   const handled = reports.filter(r => r.done_at);
@@ -1064,6 +1108,7 @@ async function eventStats(req, env, url) {
     ai: { total: ai.length, nameEditedRate: ratio(named.filter(r => r.name_edited).length, named.length), priceEditedRate: ratio(priced.filter(r => r.price_edited).length, priced.length), medianPriceDiff: median(ai.map(r => r.price_diff)) },
     staySeconds: Object.entries(stayBy).map(([key, list]) => ({ key, views: list.length, medianSeconds: median(list) })),
     contactsByListing,
+    similar: { shows: similarOf("similar_show").n, clicks: similarOf("similar_click").n, clickDevices: similarOf("similar_click").devices, clickRate: ratio(similarOf("similar_click").n, similarOf("similar_show").n) },
     reports: { total: reports.length, done: reports.filter(r => r.status === "done").length, medianHandleHours: hoursOf(median(handled.map(r => Math.max(0, r.done_at - r.created_at)))) }
   });
 }
@@ -1673,6 +1718,7 @@ async function route(req, env) {
   if (method === "GET" && path === "/v1/listings") return feed(req, env, url);
   if (method === "GET" && (m = /^\/v1\/users\/([0-9a-f]+)\/listings$/.exec(path))) return sellerPage(req, env, url, m[1]);
   if (method === "GET" && (m = /^\/v1\/listings\/([0-9a-f]+)\/poster$/.exec(path))) return posterPage(req, env, url, m[1]);
+  if (method === "GET" && (m = /^\/v1\/listings\/([0-9a-f]+)\/similar$/.exec(path))) return similarListings(req, env, url, m[1]);
   if (method === "POST" && path === "/v1/listings") return createListing(req, env, url);
   if ((m = /^\/v1\/listings\/([0-9a-f]+)$/.exec(path))) {
     if (method === "GET") return oneListing(req, env, url, m[1]);

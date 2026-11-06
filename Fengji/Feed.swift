@@ -647,7 +647,7 @@ struct BuyView: View {
             .reloads(model, version: state.version)
             .onAppear { if !Self.demoQuery.isEmpty, model.q.isEmpty { model.q = Self.demoQuery } }
             .onChange(of: model.items) { _, items in
-                if Demo.scene == "detail" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "want-detail" || Demo.scene == "pop-check" || Demo.scene == "live-detail" || Demo.scene == "detail-panel" || Demo.scene == "detail-report" || Demo.scene == "detail-score" || Demo.scene == "want-sheet" || Demo.scene == "want-empty", !demoOpened, let first = items.first {
+                if Demo.scene == "detail" || Demo.scene == "detail-similar" || Demo.scene == "guest-detail" || Demo.scene == "group" || Demo.scene == "want-detail" || Demo.scene == "pop-check" || Demo.scene == "live-detail" || Demo.scene == "detail-panel" || Demo.scene == "detail-report" || Demo.scene == "detail-score" || Demo.scene == "want-sheet" || Demo.scene == "want-empty", !demoOpened, let first = items.first {
                     demoOpened = true
                     path.append(first)
                 }
@@ -846,7 +846,7 @@ struct RentView: View {
             }
             .reloads(model, version: state.version)
             .onChange(of: model.items) { _, items in
-                if Demo.scene == "rentdetail" || Demo.scene == "live-rentdetail", !demoOpened, let first = items.first {
+                if Demo.scene == "rentdetail" || Demo.scene == "rentdetail-similar" || Demo.scene == "live-rentdetail", !demoOpened, let first = items.first {
                     demoOpened = true
                     path.append(first)
                 }

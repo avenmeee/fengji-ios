@@ -15,7 +15,7 @@ enum Demo {
 
     static var initialTab: AppTab {
         switch scene {
-        case "rent", "rentdetail", "live-rent", "live-rentdetail": return .rent
+        case "rent", "rentdetail", "rentdetail-similar", "live-rent", "live-rentdetail": return .rent
         default: return .buy
         }
     }
@@ -196,6 +196,12 @@ enum DemoServer {
             if let s = param("score") { list = list.filter { $0.score == Int(s) } }
             if Demo.scene == "refresh-new", feedHits > 1 { list.reverse() }
             return (200, encode(ListingPage(items: list, next: nil)), json)
+        }
+        if method == "GET", path.hasPrefix("/v1/listings/"), path.hasSuffix("/similar") {
+            let id = url.deletingLastPathComponent().lastPathComponent
+            guard Demo.scene?.hasSuffix("-similar") == true else { return (200, encode(ListingList(items: [])), json) }
+            let pool = rentList.contains { $0.id == id } ? rentList : goodsList
+            return (200, encode(ListingList(items: Array(pool.filter { $0.id != id }.prefix(6)))), json)
         }
         if method == "GET", path.hasPrefix("/v1/listings/"), path.hasSuffix("/poster") {
             let id = url.deletingLastPathComponent().lastPathComponent
