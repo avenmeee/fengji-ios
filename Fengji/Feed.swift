@@ -208,12 +208,6 @@ private struct PullIndicator: View {
                     .opacity(min(1, pull / 40))
                     .padding(.top, max(6, (pull - size) / 2))
             }
-            if Demo.scene == "refresh-new" {
-                Text(verbatim: "pull \(Int(tracker.pull)) end \(Int(tracker.end)) \(refreshing ? "refreshing" : "-")")
-                    .font(.system(size: 14, weight: .bold).monospacedDigit())
-                    .foregroundStyle(.white).padding(4).background(.black)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
         }
     }
 }
