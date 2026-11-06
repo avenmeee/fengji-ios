@@ -101,6 +101,23 @@ test("翻页不重复不漏：同一个种子切页和整排一样", () => {
   }
 });
 
+test("候选池 2000 条：翻到底不重复不漏，编码不出错", () => {
+  const rows = [];
+  for (let i = 0; i < 2000; i++) rows.push({ id: "p" + i, user_id: "u" + (i % 97), status: i % 50 === 0 ? "off" : "on", source_type: "self", bumped_at: NOW - i * H / 3, sold_at: NOW - i, score: (i % 4) + 1 });
+  const seed = SEEDS - 1, got = [];
+  let cursor = 0, now = NOW, s = seed;
+  while (cursor < rows.length) {
+    got.push(...ids(rankFeed(rows, now, s).slice(cursor, cursor + 40)));
+    const next = encodeNext(now, s, cursor + 40);
+    assert.ok(Number.isSafeInteger(next));
+    const d = decodeNext(next);
+    assert.deepEqual([d.now, d.seed, d.offset], [now, s, cursor + 40]);
+    cursor = d.offset; now = d.now; s = d.seed;
+  }
+  assert.equal(new Set(got).size, 2000);
+  assert.equal(got.length, 2000);
+});
+
 test("next 编码：新格式在安全整数内，老格式和纯偏移还认", () => {
   const big = encodeNext(NOW, SEEDS - 1, 9999);
   assert.ok(Number.isSafeInteger(big));

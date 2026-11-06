@@ -139,6 +139,10 @@ function clean(s, max) { return String(s ?? "").trim().slice(0, max); }
 // 选填的是否：没填 0，是 1，否 2；没填的详情不显示
 const triOf = v => (v === true ? 1 : v === false ? 2 : 0);
 const triView = v => (v === 1 ? true : v === 2 ? false : null);
+// 群帖没说过的不显示：这几列在库里默认是 0，分不清“没说”和“不是”。UTILITIES_UNSET：认领来的，本人还没选
+const UTILITIES_UNSET = -1;
+const utilitiesView = row => row.utilities === UTILITIES_UNSET || (row.source_type === "group" && !row.utilities) ? null : !!row.utilities;
+const groupFlag = (row, v) => (row.source_type === "group" && !v ? null : !!v);
 
 function dayOf(v) {
   if (v === "" || v == null) return null;
@@ -229,7 +233,7 @@ function view(row, origin, viewer) {
     cat: row.cat, cond: row.cond, from: row.from_date, fromPrec: row.from_prec || null, toPrec: row.to_prec || null,
     roomType: row.room_type || null, unitType: row.unit_type || null, internet: triView(row.internet), furniture: row.furniture || null, deposit: row.deposit ?? null, appFee: row.app_fee ?? null,
     parking: row.parking || null, pets: row.pets || null, roommates: row.roommates || null, to: row.to_date,
-    leaseEnd: row.lease_end, utilities: !!row.utilities, privateBath: triView(row.private_bath), delivery: row.delivery,
+    leaseEnd: row.lease_end, utilities: utilitiesView(row), privateBath: triView(row.private_bath), delivery: row.delivery,
     place: row.place, desc: row.descr, status: row.status, availTime: row.avail_time || null,
     contact: group || !row.contact || (row.status === "off" && !mine) ? null : row.contact,
     soldAt: row.status === "off" ? (row.sold_at ?? null) : null,
@@ -240,14 +244,18 @@ function view(row, origin, viewer) {
     sourceType: row.source_type || "self", sourceGroup: row.source_group || null, sourcePoster: row.source_poster || null, sourcePostedAt: row.source_posted_at ?? null,
     score: mine ? null : (row.score ?? null),  // 卖家看不到自己的分
     deliveryFee: row.delivery_fee ?? null, pickupBefore: row.pickup_before || null, pickupAfter: row.pickup_after || null,
-    longTerm: !!row.long_term, furnished: !!row.furnished,
+    longTerm: groupFlag(row, row.long_term), furnished: groupFlag(row, row.furnished),
     photos: JSON.parse(row.photos).map(k => ({ key: k, url: `${origin}/p/${k}` })),
     createdAt: row.created_at, bumpedAt: row.bumped_at, mine
   };
 }
 
 // 首页排序在 rank.js
-const FEED_POOL = 300;
+const FEED_POOL = 2000;
+// 候选池很大，所以分两步：先只取排序要的几列排好，再取这一页的完整内容。向量只有搜索才要，用 hex 取：
+// D1 把 BLOB 当数字数组传，2000 条要占很多内存
+const RANK_COLUMNS = "l.id, l.user_id, l.status, l.score, l.bumped_at, l.sold_at, l.source_type, l.source_poster, l.source_group, l.sender_hash";
+const SEARCH_COLUMNS = ", l.title, l.descr, l.place, l.tags, hex(l.embedding) AS embedding_hex";
 
 // ---- 搜索（11-01）：查询词变形 + 同义词表 + 帖子的 AI 搜索标签 ----
 // 同义词表兜底：一组里搜哪个都算。零结果词从 event-stats 里看，再往这里补
@@ -327,6 +335,15 @@ const fromBlob = b => {
   return new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >> 2);
 };
 
+const HEX_VALUE = new Int8Array(128).fill(-1);
+for (let i = 0; i < 16; i++) HEX_VALUE["0123456789ABCDEF".charCodeAt(i)] = i;
+const fromHex = h => {
+  if (!h) return null;
+  const bytes = new Uint8Array(h.length >> 1);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = HEX_VALUE[h.charCodeAt(2 * i)] << 4 | HEX_VALUE[h.charCodeAt(2 * i + 1)];
+  return new Float32Array(bytes.buffer);
+};
+
 async function queryVector(env, q) {
   const key = q.toLowerCase();
   if (EMBED_CACHE.has(key)) return EMBED_CACHE.get(key);
@@ -392,7 +409,7 @@ function searchTier(row, direct, expanded, qv, minSim) {
   if (direct.some(t => hasTerm(title, t))) return { tier: 1, sim: null };
   const rest = [title, row.descr, row.place, row.tags].map(x => (x || "").toLowerCase());
   if (expanded.some(t => rest.some(x => hasTerm(x, t)))) return { tier: 2, sim: null };
-  const sim = qv ? cosine(qv, fromBlob(row.embedding)) : 0;
+  const sim = qv ? cosine(qv, fromHex(row.embedding_hex)) : 0;
   return sim >= minSim ? { tier: 3, sim } : { tier: 0, sim };
 }
 
@@ -468,8 +485,8 @@ async function feed(req, env, url) {
     where.push("l.score = ?", "l.status IN ('on', 'reserved')"); args.push(score);
     if (viewer) { where.push("l.user_id != ?"); args.push(viewer.id); }
   }
-  // 候选先取最近的 300 条，在这里算分、打散、切页；量大了再搬进数据库。只有搜索才带向量
-  const rows = (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE ${where.join(" AND ")} ORDER BY l.bumped_at DESC, l.id DESC LIMIT ?`).bind(...args, FEED_POOL).all()).results;
+  // 候选先取最近的 FEED_POOL 条，在这里算分、打散、切页；量大了再搬进数据库
+  const rows = (await env.DB.prepare(`SELECT ${RANK_COLUMNS}${q ? SEARCH_COLUMNS : ""} FROM listings l WHERE ${where.join(" AND ")} ORDER BY l.bumped_at DESC, l.id DESC LIMIT ?`).bind(...args, FEED_POOL).all()).results;
   let ranked, tierOf = null;
   if (q) {
     // 分层：一层排完再排下一层，同一层里照旧按综合分；卖完的都放最后
@@ -487,8 +504,11 @@ async function feed(req, env, url) {
   } else {
     ranked = rankFeed(rows, now, seed);
   }
-  const pageRows = ranked.slice(offset, offset + size);
+  const pageIds = ranked.slice(offset, offset + size).map(r => r.id);
   const more = offset + size < ranked.length;
+  const full = pageIds.length ? (await env.DB.prepare(`SELECT l.*, ${SELLER_COLUMNS} FROM listings l WHERE l.id IN (${pageIds.map(() => "?").join(",")})`).bind(...pageIds).all()).results : [];
+  const byId = new Map(full.map(r => [r.id, r]));
+  const pageRows = pageIds.map(id => byId.get(id)).filter(Boolean);
   // 调阈值用：管理员带 debug=1 能看到每条在第几层、相似度多少
   const debug = q && p.get("debug") === "1" && await isStaff(req, env);
   return json({
@@ -1484,11 +1504,22 @@ async function importOne(env, b) {
   const mergeKey = mergeKeyOf(senderHash || poster, title);
   const dead = await env.DB.prepare("SELECT 1 AS x FROM import_tombstones WHERE source_id IN (?, ?, ?)").bind(sourceId, "key:" + mergeKey, "sender:" + senderHash).first();
   if (dead) return { status: 200, data: { skipped: "taken_down" } };
+  // 整套还是单间：带了才改；已认领的归本人管，不改
+  const unitType = kind === "rent" && ["whole", "room", "both"].includes(b.unitType) ? b.unitType : null;
+  const setUnit = async id => {
+    if (unitType) await env.DB.prepare("UPDATE listings SET unit_type = ? WHERE id = ? AND kind = 'rent' AND source_type = 'group'").bind(unitType, id).run();
+  };
   const dup = await env.DB.prepare("SELECT id FROM listings WHERE source_id = ?").bind(sourceId).first();
-  if (dup) return { status: 200, data: { id: dup.id, duplicate: true } };
+  if (dup) {
+    await setUnit(dup.id);
+    return { status: 200, data: { id: dup.id, duplicate: true } };
+  }
   const same = await env.DB.prepare("SELECT * FROM listings WHERE merge_key = ? AND source_type IN ('group', 'claimed')").bind(mergeKey).first();
   // 已认领的条目归本人管，群里再发也不改
-  if (same && (same.source_type === "claimed" || postedAt <= same.source_posted_at)) return { status: 200, data: { id: same.id, merged: true, stale: true } };
+  if (same && (same.source_type === "claimed" || postedAt <= same.source_posted_at)) {
+    await setUnit(same.id);
+    return { status: 200, data: { id: same.id, merged: true, stale: true } };
+  }
   // 这个人已经认领过：新帖直接进他账号
   const owner = senderHash ? await env.DB.prepare("SELECT id, contact, banned FROM users WHERE sender_hash = ?").bind(senderHash).first() : null;
   if (owner && owner.banned) return { status: 200, data: { skipped: "banned" } };
@@ -1507,6 +1538,7 @@ async function importOne(env, b) {
   // 同一人又发了同一件：留最新的价和时间；新帖没带照片就用旧照片
   if (same) {
     const photos = keys.length ? keys : JSON.parse(same.photos);
+    await setUnit(same.id);
     await env.DB.prepare("UPDATE listings SET price=?, place=?, descr=?, source_group=?, source_id=?, source_posted_at=?, bumped_at=?, photos=?, updated_at=? WHERE id=?")
       .bind(price, place || same.place, descr || same.descr, group, sourceId, postedAt, postedAt, JSON.stringify(photos), now, same.id).run();
     if (keys.length) await removePhotos(env, JSON.parse(same.photos));
@@ -1515,8 +1547,8 @@ async function importOne(env, b) {
   }
 
   const id = newId();
-  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, unit_type, place, descr, contact, photos, status, created_at, updated_at, bumped_at, source_type, source_id, source_group, source_poster, source_posted_at, merge_key, sender_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, owner ? owner.id : GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, kind === "rent" && ["whole", "room", "both"].includes(b.unitType) ? b.unitType : null, place, descr, owner?.contact || "", JSON.stringify(keys), now, now, postedAt, owner ? "claimed" : "group", sourceId, group, poster, postedAt, mergeKey, senderHash).run();
+  await env.DB.prepare("INSERT INTO listings (id, user_id, kind, title, price, cat, unit_type, place, descr, contact, photos, status, created_at, updated_at, bumped_at, source_type, source_id, source_group, source_poster, source_posted_at, merge_key, sender_hash, utilities) VALUES (?,?,?,?,?,?,?,?,?,?,?, 'on', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, owner ? owner.id : GROUP_UID, kind, title, price, kind === "goods" ? b.cat : null, kind === "rent" && ["whole", "room", "both"].includes(b.unitType) ? b.unitType : null, place, descr, owner?.contact || "", JSON.stringify(keys), now, now, postedAt, owner ? "claimed" : "group", sourceId, group, poster, postedAt, mergeKey, senderHash, owner && kind === "rent" ? UTILITIES_UNSET : 0).run();
   return { status: 201, data: { id } };
 }
 
@@ -1660,7 +1692,8 @@ async function verifyClaim(req, env) {
   const done = await env.DB.batch([
     env.DB.prepare("UPDATE users SET sender_hash = ? WHERE id = ?").bind(senderHash, u.id),
     // 过期的不转，等定时清理
-    env.DB.prepare("UPDATE listings SET user_id = ?, contact = ?, source_type = 'claimed', updated_at = ? WHERE sender_hash = ? AND source_type = 'group'").bind(u.id, u.contact || "", now, senderHash),
+    // 群帖的水电是没说过，认领后也不算“不包”，等本人自己选
+    env.DB.prepare(`UPDATE listings SET user_id = ?, contact = ?, source_type = 'claimed', updated_at = ?, utilities = CASE WHEN kind = 'rent' AND utilities = 0 THEN ${UTILITIES_UNSET} ELSE utilities END WHERE sender_hash = ? AND source_type = 'group'`).bind(u.id, u.contact || "", now, senderHash),
     // 认领好了，他手里别的码都没用了
     env.DB.prepare("DELETE FROM claim_codes WHERE user_id = ?").bind(u.id)
   ]);

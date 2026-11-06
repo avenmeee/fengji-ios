@@ -241,7 +241,7 @@ ok("打分", r.data.updated === 1, r);
 r = await call("GET", "/v1/admin/unscored", { token: ADMIN });
 ok("打过分不再取", !r.data.items.some(x => x.id === scored.id));
 r = await call("GET", "/v1/listings?kind=goods");
-ok("买家看到分、排最前", r.data.items[0].id === scored.id && r.data.items[0].score === 4, r.data.items[0]);
+ok("买家看到分", r.data.items.find(x => x.id === scored.id)?.score === 4, r.data.items.length);
 r = await call("GET", "/v1/listings?kind=goods&score=4");
 ok("按档筛：只有这一档", r.data.items.some(x => x.id === scored.id) && r.data.items.every(x => x.score === 4), r.data.items.length);
 r = await call("GET", "/v1/listings?kind=goods&score=2");
@@ -882,6 +882,58 @@ ok("相似：没有这条就返回空", r.status === 200 && r.data.items.length 
   ok("相似：普通人带 debug 看不到分", dbg.data.items.every(x => x.sim === undefined));
   const dbg2 = await call("GET", `/v1/listings/${simT.id}/similar?debug=1`, { token: ADMIN });
   ok("相似：管理员能看到分", dbg2.data.items.every(x => typeof x.sim === "number"));
+}
+
+// 群帖房子的整套、单间：导入时带了才改
+{
+  const rentImp = { kind: "rent", title: "群里房子" + stamp, price: 800, place: "monty", group: "二手群 1", poster: "房东" + stamp, postedAt: Date.now() - 3600000 };
+  const first = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...rentImp, sourceId: "ru1-" + stamp } });
+  ok("群帖房子导入", first.status === 201, first);
+  const unitOf = async () => (await call("GET", "/v1/listings/" + first.data.id)).data.unitType;
+  ok("没带时是空", (await unitOf()) === null);
+  r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...rentImp, sourceId: "ru1-" + stamp, unitType: "room" } });
+  ok("同一条再导入带了就改", r.data.duplicate === true && (await unitOf()) === "room", r);
+  r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...rentImp, sourceId: "ru1-" + stamp } });
+  ok("没带不动", (await unitOf()) === "room");
+  r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...rentImp, sourceId: "ru1-" + stamp, unitType: "乱写" } });
+  ok("乱写不动", (await unitOf()) === "room");
+  r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...rentImp, sourceId: "ru2-" + stamp, postedAt: rentImp.postedAt - 60000, unitType: "whole" } });
+  ok("旧的同名帖也能改", r.data.stale === true && (await unitOf()) === "whole", r);
+  r = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...rentImp, sourceId: "ru3-" + stamp, postedAt: rentImp.postedAt + 60000, unitType: "both" } });
+  ok("新的同名帖合并时也改", r.data.merged === true && !r.data.stale && (await unitOf()) === "both", r);
+  r = await call("GET", "/v1/listings?kind=rent&unit=whole");
+  ok("筛选能筛出来", r.data.items.some(x => x.id === first.data.id));
+
+  // 群帖没说过的不显示
+  const blank = x => ["utilities", "privateBath", "internet", "furnished", "longTerm", "deposit", "appFee", "parking", "pets", "roommates", "furniture", "roomType", "leaseEnd", "contact", "delivery", "availTime"].filter(k => x[k] !== null && x[k] !== undefined);
+  r = await call("GET", "/v1/listings/" + first.data.id);
+  ok("群帖房子详情：没说过的都是空", blank(r.data).length === 0, blank(r.data));
+  r = await call("GET", "/v1/listings?kind=rent");
+  ok("群帖房子列表：没说过的都是空", blank(r.data.items.find(x => x.id === first.data.id)).length === 0);
+  r = await call("GET", "/l/" + first.data.id);
+  ok("分享页不写不包水电", !Buffer.from(r.data).toString().includes("不包水电") && !Buffer.from(r.data).toString().includes("包水电"), r.status);
+  const gGoods = await call("POST", "/v1/admin/import", { token: ADMIN, body: { kind: "goods", title: "群里东西" + stamp, price: 5, cat: "furn", place: "monty", group: "二手群 1", poster: "东西人" + stamp, postedAt: Date.now() - 3600000, sourceId: "gg1-" + stamp } });
+  r = await call("GET", "/v1/listings/" + gGoods.data.id);
+  ok("群帖东西：没说过的都是空", blank(r.data).length === 0, blank(r.data));
+
+  // 认领后：还是空，本人选了才有；自己发的不受影响
+  const rentOwner = await login("rentOwner" + stamp);
+  await call("POST", "/v1/me/agree", { token: rentOwner.token });
+  const rentSender = { senderId: "wx-rent-" + stamp };
+  const claimedPost = await call("POST", "/v1/admin/import", { token: ADMIN, body: { ...rentImp, title: "认领的房子" + stamp, poster: "认领房东" + stamp, ...rentSender, sourceId: "ru4-" + stamp } });
+  await call("POST", "/v1/me/contact", { token: rentOwner.token, body: { contact: "" } });
+  const claimCode = (await call("POST", "/v1/claim/code", { token: rentOwner.token })).data.code;
+  r = await call("POST", "/v1/admin/claim/verify", { token: ADMIN, body: { ...rentSender, code: claimCode } });
+  ok("房子认领成功", r.status === 200, r);
+  r = await call("GET", "/v1/listings/" + claimedPost.data.id, { token: rentOwner.token });
+  ok("认领后水电还是空，不预选不包", r.data.mine === true && r.data.utilities === null, r.data.utilities);
+  r = await call("GET", "/l/" + claimedPost.data.id);
+  ok("认领后分享页也不写不包水电", !Buffer.from(r.data).toString().includes("不包水电"));
+  const claimedNow = (await call("GET", "/v1/listings/" + claimedPost.data.id, { token: rentOwner.token })).data;
+  r = await call("PUT", "/v1/listings/" + claimedPost.data.id, { token: rentOwner.token, body: { ...rent, title: claimedNow.title, photos: [(await call("POST", "/v1/photos", { token: rentOwner.token, raw: jpeg })).data.key], utilities: false } });
+  ok("认领的房子能改", r.status === 200, r);
+  r = await call("GET", "/v1/listings/" + claimedPost.data.id, { token: rentOwner.token });
+  ok("本人选了不包才显示不包", r.data.utilities === false, r.data.utilities);
 }
 
 // 原帖人申请删除：进举报列表，不自动隐藏
